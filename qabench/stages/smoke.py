@@ -58,10 +58,8 @@ def main(cfg: Bench, argv: list[str]) -> int:
 
     # 3. the refusal is real
     try:
-        fields = cfg.login.fields
         email, _ = core.credentials(cfg, cfg.roles[0])
-        with httpx.Client(base_url=cfg.origin, follow_redirects=False, timeout=30) as h:
-            bad = h.post(cfg.login.path, data={fields["email"]: email, fields["password"]: "definitely-not-the-password-" + "x" * 8})
+        bad = core.post_login(cfg, email, "definitely-not-the-password-" + "x" * 8)
         primary = cfg.login.cookies[0] if cfg.login.cookies else None
         got_session = bool(bad.cookies.get(primary)) if primary else bad.status_code in (302, 303)
         L.check("a wrong password is refused", not got_session, f"HTTP {bad.status_code}")

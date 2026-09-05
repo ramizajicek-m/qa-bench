@@ -31,6 +31,10 @@ class Login:
     fields: dict[str, str] = field(default_factory=lambda: {"email": "email", "password": "password"})
     cookies: list[str] = field(default_factory=list)   # first one is the session; empty = any Set-Cookie
     csrf_cookie: str | None = None
+    #: A login form protected by a CSRF pair: the kit GETs `path` first, takes
+    #: `csrf_cookie` from the response, and posts it back in this form field
+    #: (tharros: cookie tharros_csrf, field _csrf). None = the form has no CSRF.
+    csrf_field: str | None = None
 
 
 @dataclass

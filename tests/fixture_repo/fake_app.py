@@ -44,11 +44,16 @@ def health():
 
 @app.get("/login", response_class=HTMLResponse)
 def login_form():
-    return "<form method=post><input name=email><input name=password type=password><button type=submit>in</button></form>"
+    resp = HTMLResponse("<form method=post><input name=email><input name=password type=password><input type=hidden name=_csrf><button type=submit>in</button></form>")
+    if os.environ.get("FAKE_CSRF") == "1":
+        resp.set_cookie("csrf_token", "csrf-pair-1", path="/")   # the pair a protected form demands back
+    return resp
 
 
 @app.post("/login")
-def login(email: str = Form(...), password: str = Form(...)):
+def login(request: Request, email: str = Form(...), password: str = Form(...), csrf: str = Form("", alias="_csrf")):
+    if os.environ.get("FAKE_CSRF") == "1" and csrf != request.cookies.get("csrf_token"):
+        return HTMLResponse("<h1>bad csrf</h1>", status_code=403)   # reads exactly like a wrong password
     u = USERS.get(email.lower())
     if not u or u[0] != password:
         return HTMLResponse("<form>wrong</form>", status_code=401)

@@ -16,7 +16,7 @@ Exit codes everywhere: `0` proven · `1` failed · `3` nothing failed but someth
 ## Install
 
 ```
-pip install "git+https://github.com/ramizajicek-m/qa-bench@v0.1.0"
+pip install "git+https://github.com/ramizajicek-m/qa-bench@v0.1.1"
 python -m playwright install --with-deps chromium
 ```
 
@@ -24,7 +24,7 @@ python -m playwright install --with-deps chromium
 
 ```yaml
 bench:
-  version: 0.1.0                         # asserted against the installed kit
+  version: 0.1.1                         # asserted against the installed kit
   origin_env: QA_BASE_URL                # the staging URL; production hosts are refused
   health: /health                        # must return JSON with `commit`
   roles: [owner, staff]
@@ -32,7 +32,7 @@ bench:
     password_env: "QA_{ROLE}_PASSWORD"   # {ROLE} upper, {role} lower
     email_env: "QA_{ROLE}_EMAIL"         # or email_template: "qa-{role}@example.com"
     keychain_service: "myapp-qa-{role}"  # laptop fallback, optional
-  login: { path: /login, fields: {email: email, password: password}, cookies: [session, csrf_token], csrf_cookie: csrf_token }
+  login: { path: /login, fields: {email: email, password: password}, cookies: [session, csrf_token], csrf_cookie: csrf_token, csrf_field: _csrf }   # csrf_field only when the form is CSRF-protected
   viewports: [[1440, 900], [390, 844]]
   pages: { include_prefixes: ["/admin"], exclude_prefixes: ["/admin/api/"] }
   api:   { include_prefixes: ["/api/"], exclude_paths: ["/api/stream"], portal_roles: [customer], portal_prefixes: ["/api/portal"] }

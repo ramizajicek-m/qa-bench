@@ -43,6 +43,29 @@ def test_smoke_refuses_a_build_other_than_the_one_asked_about(bench_env, server_
     assert any("SHA this run was asked about" in label for label, _ in led["failed"])
 
 
+def test_smoke_signs_in_through_a_csrf_protected_form(bench_env, server_factory, tmp_path, monkeypatch):
+    """A protected form refuses a bare POST with 403 — indistinguishable from a
+    wrong password. With `login.csrf_field` set the kit fetches the pair first."""
+    server_factory(FAKE_CSRF="1")
+    m = tmp_path / "qa" / "manifest.yml"
+    m.parent.mkdir()
+    m.write_text(open("qa/manifest.yml").read().replace("csrf_cookie: csrf_token", "csrf_cookie: csrf_token\n    csrf_field: _csrf"))
+    monkeypatch.syspath_prepend(str(bench_env.parent.parent.parent / "fixture_repo")) if False else None
+    assert cli.main(["stage", "smoke", "--manifest", str(m)]) == 0
+    led = _ledger(bench_env, "smoke")
+    assert led["failed"] == [] and led["not_run"] == []
+
+
+def test_smoke_reports_a_csrf_form_it_was_not_told_about(bench_env, server_factory):
+    """The same server, the manifest WITHOUT csrf_field: every login fails 403.
+    The stage must go red (not skip) — a form the manifest describes wrongly is
+    a finding about the manifest, and the ledger says 403."""
+    server_factory(FAKE_CSRF="1")
+    assert cli.main(["stage", "smoke"]) == 1
+    led = _ledger(bench_env, "smoke")
+    assert any("signs in" in label and "403" in detail for label, detail in led["failed"]), led["failed"]
+
+
 # ── pages_by_role ────────────────────────────────────────────────────────────
 
 def test_pages_by_role_is_green_and_decides_every_cell(bench_env, server_factory):
@@ -135,7 +158,7 @@ def test_a_version_pin_that_disagrees_with_the_installed_kit_refuses(bench_env, 
     server_factory()
     m = tmp_path / "qa" / "manifest.yml"
     m.parent.mkdir()
-    m.write_text(open("qa/manifest.yml").read().replace("version: 0.1.0", "version: 9.9.9"))
+    m.write_text(open("qa/manifest.yml").read().replace("version: 0.1.1", "version: 9.9.9"))
     with pytest.raises(SystemExit) as ex:
         cli.main(["stage", "smoke", "--manifest", str(m)])
     assert "pins bench.version 9.9.9" in str(ex.value)

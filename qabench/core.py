@@ -202,6 +202,33 @@ class Session:
                             headers=headers, timeout=kw.pop("timeout", 30), **kw)
 
 
+def post_login(cfg: Bench, email: str, password: str) -> httpx.Response:
+    """ONE form POST to the login path, with the CSRF pair when the form has one.
+
+    A CSRF-protected form (tharros: `_csrf` field must equal the `tharros_csrf`
+    cookie) refuses a bare POST with 403, which reads exactly like a wrong
+    password. So when `login.csrf_field` is set the kit GETs the form first,
+    carries the cookie jar, and posts the token back. The response keeps the
+    cookies the server set on the POST merged with the ones from the GET.
+    """
+    L = cfg.login
+    with httpx.Client(base_url=cfg.origin, follow_redirects=False,
+                      timeout=httpx.Timeout(30.0, connect=45.0)) as h:
+        data = {L.fields["email"]: email, L.fields["password"]: password}
+        if L.csrf_field:
+            h.get(L.path)                                   # the server sets the CSRF cookie here
+            token = h.cookies.get(L.csrf_cookie or "") if L.csrf_cookie else None
+            if not token:
+                raise SystemExit(f"login form at {L.path} set no {L.csrf_cookie!r} cookie, so the CSRF field cannot be filled")
+            data[L.csrf_field] = token
+        r = h.post(L.path, data=data)
+        # merge: cookies set by the GET (csrf) plus the POST (session)
+        for name, value in h.cookies.items():
+            if name not in r.cookies:
+                r.cookies.set(name, value)
+        return r
+
+
 def login(cfg: Bench, role: str) -> Session:
     """Sign in with a form POST, surviving the cold connect every stage meets
     at its first request (measured 9.6 s then 0.1 s; anat 2026-08-27)."""
@@ -211,9 +238,7 @@ def login(cfg: Bench, role: str) -> Session:
     r = None
     for attempt in range(3):
         try:
-            with httpx.Client(base_url=cfg.origin, follow_redirects=False,
-                              timeout=httpx.Timeout(30.0, connect=45.0)) as h:
-                r = h.post(L.path, data={L.fields["email"]: email, L.fields["password"]: password})
+            r = post_login(cfg, email, password)
             break
         except (httpx.ConnectTimeout, httpx.ConnectError, httpx.ReadTimeout, httpx.RemoteProtocolError) as ex:
             last = ex
