@@ -50,8 +50,14 @@ def login_form():
     return resp
 
 
+_LOGINS = {"n": 0}
+
+
 @app.post("/login")
 def login(request: Request, email: str = Form(...), password: str = Form(...), csrf: str = Form("", alias="_csrf")):
+    _LOGINS["n"] += 1
+    if os.environ.get("FAKE_THROTTLE") == "1" and _LOGINS["n"] % 3 == 0:
+        return HTMLResponse("<h1>slow down</h1>", status_code=429)     # the app's login throttle
     if os.environ.get("FAKE_CSRF") == "1" and csrf != request.cookies.get("csrf_token"):
         return HTMLResponse("<h1>bad csrf</h1>", status_code=403)   # reads exactly like a wrong password
     u = USERS.get(email.lower())

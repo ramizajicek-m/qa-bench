@@ -230,41 +230,9 @@ def post_login(cfg: Bench, email: str, password: str) -> httpx.Response:
         return r
 
 
-def _session_path(cfg: Bench, role: str) -> Path:
-    return cfg.shots / "sessions" / f"{role}.json"
-
-
-def _cached_session(cfg: Bench, role: str) -> Session | None:
-    p = _session_path(cfg, role)
-    if not p.exists():
-        return None
-    try:
-        d = json.loads(p.read_text())
-    except (OSError, ValueError):
-        return None
-    if d.get("origin") != cfg.origin or time.time() - d.get("at", 0) > cfg.login.session_ttl_s:
-        return None
-    return Session(role, d["email"], d["cookies"], d.get("csrf", ""), cfg.origin)
-
-
-def forget_session(cfg: Bench, role: str) -> None:
-    """A stage that saw its session bounced to the login form calls this so the
-    next login is real, not the cache again."""
-    p = _session_path(cfg, role)
-    if p.exists():
-        p.unlink()
-
-
-def login(cfg: Bench, role: str, *, fresh: bool = False) -> Session:
+def login(cfg: Bench, role: str) -> Session:
     """Sign in with a form POST, surviving the cold connect every stage meets
-    at its first request (measured 9.6 s then 0.1 s; anat 2026-08-27), and the
-    app's own login throttle (tharros answers 429 after five logins a minute —
-    on the first live run `staff` was refused and the stage read it as a dead
-    credential). Sessions are cached per run so the stages share six logins."""
-    if not fresh:
-        cached = _cached_session(cfg, role)
-        if cached:
-            return cached
+    at its first request (measured 9.6 s then 0.1 s; anat 2026-08-27)."""
     email, password = credentials(cfg, role)
     L = cfg.login
     last: Exception | None = None
@@ -272,13 +240,6 @@ def login(cfg: Bench, role: str, *, fresh: bool = False) -> Session:
     for attempt in range(3):
         try:
             r = post_login(cfg, email, password)
-            if r.status_code == 429:
-                if attempt < 2:
-                    print(f"  (login as {role} throttled by the app — waiting {L.throttle_wait_s:.0f}s)", flush=True)
-                    time.sleep(L.throttle_wait_s)
-                    continue
-                raise SystemExit(f"login as {role}: the app's login throttle answered 429 three times "
-                                 f"({L.throttle_wait_s:.0f}s apart). Not a finding about the code; space the stages out.")
             break
         except (httpx.ConnectTimeout, httpx.ConnectError, httpx.ReadTimeout, httpx.RemoteProtocolError) as ex:
             last = ex
@@ -299,11 +260,7 @@ def login(cfg: Bench, role: str, *, fresh: bool = False) -> Session:
     cookies = [{"name": n, "value": v, "domain": host, "path": "/", "secure": secure}
                for n, v in jar.items() if v]
     csrf = jar.get(L.csrf_cookie, "") if L.csrf_cookie else ""
-    sess = Session(role, email, cookies, csrf, cfg.origin)
-    sp = _session_path(cfg, role)
-    sp.parent.mkdir(parents=True, exist_ok=True)
-    sp.write_text(json.dumps({"origin": cfg.origin, "email": email, "cookies": cookies, "csrf": csrf, "at": time.time()}))
-    return sess
+    return Session(role, email, cookies, csrf, cfg.origin)
 
 
 # ---------------------------------------------------------------- helpers ---

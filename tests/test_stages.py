@@ -66,6 +66,31 @@ def test_smoke_reports_a_csrf_form_it_was_not_told_about(bench_env, server_facto
     assert any("signs in" in label and "403" in detail for label, detail in led["failed"]), led["failed"]
 
 
+def test_smoke_waits_out_a_login_throttle_instead_of_calling_it_a_dead_credential(bench_env, server_factory, tmp_path):
+    server_factory(FAKE_THROTTLE="1")
+    m = tmp_path / "qa" / "manifest.yml"
+    m.parent.mkdir()
+    m.write_text(open("qa/manifest.yml").read().replace("csrf_cookie: csrf_token", "csrf_cookie: csrf_token\n    throttle_wait_s: 0.2"))
+    assert cli.main(["stage", "smoke", "--manifest", str(m)]) in (0, 3)
+    led = _ledger(bench_env, "smoke")
+    assert not led["failed"], led["failed"]
+    assert all("signs in" not in label for label, _ in led["not_run"]), "a 429 must never read as a dead credential"
+
+
+def test_a_session_is_reused_by_the_next_stage_and_forgotten_when_bounced(bench_env, server_factory):
+    s = server_factory()
+    assert cli.main(["stage", "smoke"]) == 0
+    assert (bench_env / "sessions" / "owner.json").exists()
+    s.stop()                                            # the server is gone; a cached login must not need it
+    from qabench import manifest as mf
+    cfg = mf.load(bench_env.parent.parent.parent / "fixture_repo") if False else mf.load()
+    sess = core.login(cfg, "owner")
+    assert sess.email == "owner@example.test"
+    core.forget_session(cfg, "owner")
+    with pytest.raises(SystemExit):
+        core.login(cfg, "owner")                        # nothing cached, nothing to reach
+
+
 # ── pages_by_role ────────────────────────────────────────────────────────────
 
 def test_pages_by_role_is_green_and_decides_every_cell(bench_env, server_factory):
@@ -158,7 +183,23 @@ def test_a_version_pin_that_disagrees_with_the_installed_kit_refuses(bench_env, 
     server_factory()
     m = tmp_path / "qa" / "manifest.yml"
     m.parent.mkdir()
-    m.write_text(open("qa/manifest.yml").read().replace("version: 0.1.1", "version: 9.9.9"))
+    m.write_text(open("qa/manifest.yml").read().replace("version: 0.1.3", "version: 9.9.9"))
     with pytest.raises(SystemExit) as ex:
         cli.main(["stage", "smoke", "--manifest", str(m)])
     assert "pins bench.version 9.9.9" in str(ex.value)
+
+
+def test_keychain_lookup_builds_a_command_security_accepts(monkeypatch):
+    """The argument ORDER is the test: `-a account` must precede `-s service`.
+    Stubbed, because CI has no keychain — the real one refused every lookup on
+    the first live run and the stage read it as six dead credentials."""
+    seen = {}
+
+    class R:
+        returncode = 0
+        stdout = "s3cret\n"
+    monkeypatch.setattr(core.subprocess, "run", lambda cmd, **kw: seen.setdefault("cmd", cmd) and R())
+    assert core._keychain_password("tharros-qa-owner", "tharros") == "s3cret"
+    assert seen["cmd"] == ["security", "find-generic-password", "-a", "tharros", "-s", "tharros-qa-owner", "-w"]
+    assert core._keychain_password("x", None)
+    assert seen["cmd"][:2] == ["security", "find-generic-password"]

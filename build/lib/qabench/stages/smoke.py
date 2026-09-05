@@ -47,7 +47,7 @@ def main(cfg: Bench, argv: list[str]) -> int:
     # 2. every role signs in
     for role in cfg.roles:
         try:
-            core.login(cfg, role, fresh=True)          # smoke PROVES the credential; later stages reuse its session
+            core.login(cfg, role)
             L.check(f"{role} signs in", True)
         except SystemExit as ex:
             msg = str(ex)
@@ -60,12 +60,9 @@ def main(cfg: Bench, argv: list[str]) -> int:
     try:
         email, _ = core.credentials(cfg, cfg.roles[0])
         bad = core.post_login(cfg, email, "definitely-not-the-password-" + "x" * 8)
-        if bad.status_code == 429:
-            L.skip("a wrong password is refused", "the login throttle answered 429 — a throttle is not a refusal, so this proved nothing")
-        else:
-            primary = cfg.login.cookies[0] if cfg.login.cookies else None
-            got_session = bool(bad.cookies.get(primary)) if primary else bad.status_code in (302, 303)
-            L.check("a wrong password is refused", not got_session, f"HTTP {bad.status_code}")
+        primary = cfg.login.cookies[0] if cfg.login.cookies else None
+        got_session = bool(bad.cookies.get(primary)) if primary else bad.status_code in (302, 303)
+        L.check("a wrong password is refused", not got_session, f"HTTP {bad.status_code}")
     except SystemExit as ex:
         L.skip("a wrong password is refused", str(ex)[:160])
 
