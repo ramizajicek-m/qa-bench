@@ -29,8 +29,19 @@ ADMITS = {
 app = FastAPI()
 
 
+_HITS = {"n": 0}
+
+
 def _role(request: Request) -> str | None:
-    return request.cookies.get("sess") or None
+    sess = request.cookies.get("sess") or None
+    if sess and os.environ.get("FAKE_SESSION_TTL"):
+        # A session that dies after N authenticated requests, whatever the page —
+        # IGA's demo roles, 2026-09-05. The cookie is stamped with the login
+        # count so a FRESH login (new cookie value) starts a new budget.
+        _HITS["n"] += 1
+        if _HITS["n"] > int(os.environ["FAKE_SESSION_TTL"]):
+            return None
+    return sess
 
 
 def _page(title: str, extra: str = "") -> HTMLResponse:
@@ -65,6 +76,7 @@ def login(request: Request, email: str = Form(...), password: str = Form(...), c
     if not u or u[0] != password:
         return HTMLResponse("<form>wrong</form>", status_code=401)
     resp = Response(status_code=302, headers={"Location": "/admin"})
+    _HITS["n"] = 0                                   # a login renews the budget
     resp.set_cookie("sess", u[1], path="/")
     resp.set_cookie("csrf_token", "csrf-" + u[1], path="/")
     return resp

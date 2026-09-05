@@ -47,6 +47,28 @@ def _admits(row: dict, role: str) -> bool:
     return True     # no declaration: every authenticated role may open it
 
 
+def _scrolls_sideways(page) -> bool:
+    """Does the DOCUMENT overflow the viewport — measured after the page has
+    settled, twice, and only when both samples agree.
+
+    The first live sweeps flipped this verdict between two runs of the same
+    build for several cells: a table still laying out, web fonts still loading,
+    an RTL reflow — one sample 1.5 s after `load` catches the page mid-paint. A
+    check that cannot tell the code is wrong from the page being slow is a coin
+    (tharros, 2026-09-05). So: wait for fonts, sample, wait, sample again.
+    """
+    try:
+        page.evaluate("document.fonts && document.fonts.ready")
+        page.wait_for_timeout(400)
+        first = bool(page.evaluate("document.documentElement.scrollWidth > window.innerWidth + 1"))
+        if not first:
+            return False
+        page.wait_for_timeout(800)
+        return bool(page.evaluate("document.documentElement.scrollWidth > window.innerWidth + 1"))
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _is_download(cfg: Bench, path: str) -> bool:
     tail = path.rsplit("/", 1)[-1].lower()
     return any(tail.endswith(suffix) for suffix in cfg.pages.download_suffixes)
@@ -125,6 +147,7 @@ def main(cfg: Bench, argv: list[str]) -> int:
             except SystemExit as ex:
                 L.skip(f"{role}: all pages", str(ex)[:200])
                 continue
+            relogged: dict[tuple[str, str], bool] = {}
             for (w, h_) in cfg.viewports:
                 label = f"{w}x{h_}"
                 print(f"  → {role} / {label} ({len(rows)} pages)", flush=True)
@@ -156,9 +179,28 @@ def main(cfg: Bench, argv: list[str]) -> int:
                         L.check(cell, False, f"navigation failed: {type(ex).__name__}: {str(ex)[:120]}")
                         continue
                     if core.bounced_to_login(cfg, page.url):
-                        bounced.append(tmpl)
-                        L.skip(cell, "navigation ended on the login form — the session was lost, so this cell measured the sign-in page and not the route")
-                        continue
+                        # A SHORT SESSION IS NOT A FINDING ABOUT THE PAGE. IGA's demo
+                        # roles lose their session minutes after login (2026-09-05:
+                        # inspector, then manager, at whatever cell they had reached).
+                        # Sign in again ONCE, refresh the context's cookies, retry the
+                        # cell; only a second bounce is recorded as a lost session.
+                        if not relogged.get((role, label)):        # once per role AND viewport: each context is a fresh budget
+                            relogged[(role, label)] = True
+                            core.forget_session(cfg, role)
+                            try:
+                                sess = core.login(cfg, role, fresh=True)
+                                ctx.clear_cookies()
+                                ctx.add_cookies(sess.cookies)
+                                print(f"  ({role}: session lost at {tmpl}; signed in again and retrying)", flush=True)
+                                resp = page.goto(cfg.origin + path, wait_until="load")
+                                page.wait_for_timeout(1500)
+                            except Exception as ex:  # noqa: BLE001
+                                L.check(cell, False, f"re-login after a lost session failed: {type(ex).__name__}: {str(ex)[:120]}")
+                                continue
+                        if core.bounced_to_login(cfg, page.url):
+                            bounced.append(tmpl)
+                            L.skip(cell, "navigation ended on the login form — the session was lost, so this cell measured the sign-in page and not the route")
+                            continue
                     status = resp.status if resp else 0
                     want_open = _admits(row, role)
                     landed = page.url.split("?", 1)[0].rstrip("/")
@@ -173,10 +215,7 @@ def main(cfg: Bench, argv: list[str]) -> int:
                     ok_status = (status == 200) if want_open else (status in cfg.pages.deny_statuses)
                     sideways = False
                     if want_open and status == 200:
-                        try:
-                            sideways = bool(page.evaluate("document.documentElement.scrollWidth > window.innerWidth + 1"))
-                        except Exception:  # noqa: BLE001
-                            sideways = False
+                        sideways = _scrolls_sideways(page)
                     detail = f"HTTP {status} (want {'200' if want_open else '/'.join(map(str, cfg.pages.deny_statuses))})"
                     if errs:
                         detail += f"; console: {errs[0][:140]}" + (f" (+{len(errs) - 1})" if len(errs) > 1 else "")
@@ -187,7 +226,7 @@ def main(cfg: Bench, argv: list[str]) -> int:
                         # KNOWN offender: recorded, not failed — the ratchet's grandfather list
                         L.skip(f"{cell} scrolls sideways at {w}px", f"known — {allowed_reason}")
                         sideways = False
-                    elif not sideways and allowed_reason and want_open and status == 200:
+                    elif not sideways and allowed_reason and want_open and status == 200 and (w, h_) == min(cfg.viewports):
                         # The debt was paid; the list must shrink or it is a pardon
                         L.skip(f"{cell} no longer scrolls sideways", "remove it from bench.pages.sideways_allow")
                     if sideways:

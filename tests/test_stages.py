@@ -161,6 +161,17 @@ def test_a_download_route_is_probed_not_opened_and_its_guard_still_counts(bench_
     assert not any("Download is starting" in d for _, d in led["failed"])
 
 
+def test_a_lost_session_is_renewed_once_and_the_cells_are_still_decided(bench_env, server_factory):
+    """IGA's demo roles lose their session minutes after login. The stage signs
+    in again once and retries; the role's cells are decided, not skipped."""
+    server_factory(FAKE_SESSION_TTL="6")
+    assert cli.main(["stage", "pages_by_role"]) == 0
+    led = _ledger(bench_env, "pages_by_role")
+    assert led["failed"] == [], led["failed"]
+    assert not any("session was lost" in why for _, why in led["not_run"]), led["not_run"]
+    assert led["cells"] == 22
+
+
 # ── endpoints_by_role ────────────────────────────────────────────────────────
 
 def test_endpoints_by_role_is_green_on_a_healthy_app(bench_env, server_factory):
@@ -214,7 +225,7 @@ def test_a_version_pin_that_disagrees_with_the_installed_kit_refuses(bench_env, 
     server_factory()
     m = tmp_path / "qa" / "manifest.yml"
     m.parent.mkdir()
-    m.write_text(open("qa/manifest.yml").read().replace("version: 0.1.6", "version: 9.9.9"))
+    m.write_text(open("qa/manifest.yml").read().replace("version: 0.1.7", "version: 9.9.9"))
     with pytest.raises(SystemExit) as ex:
         cli.main(["stage", "smoke", "--manifest", str(m)])
     assert "pins bench.version 9.9.9" in str(ex.value)
