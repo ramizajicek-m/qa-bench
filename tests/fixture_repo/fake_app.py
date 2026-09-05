@@ -20,6 +20,7 @@ ADMITS = {
     "/admin/broken": {"owner": True, "staff": True},
     "/admin/wide": {"owner": True, "staff": True},
     "/admin/items/{item_id}": {"owner": True, "staff": True},
+    "/admin/export.csv": {"owner": True, "staff": False},
     "/api/items": {"owner": True, "staff": True},
     "/api/secret": {"owner": True, "staff": False},
     "/api/boom": {"owner": True, "staff": True},
@@ -115,6 +116,15 @@ def wide(request: Request):
 @app.get("/admin/items/{item_id}", response_class=HTMLResponse)
 def item(request: Request, item_id: str):
     return _guard(request, "/admin/items/{item_id}") or _page(f"Item {item_id}")
+
+
+@app.get("/admin/export.csv")
+def export_csv(request: Request):
+    g = _guard(request, "/admin/export.csv")
+    if g:
+        return g
+    return Response("id,name\n42,a thing\n", media_type="text/csv",
+                    headers={"Content-Disposition": "attachment; filename=export.csv"})
 
 
 @app.get("/api/items")

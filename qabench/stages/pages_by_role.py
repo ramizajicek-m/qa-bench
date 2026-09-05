@@ -47,6 +47,42 @@ def _admits(row: dict, role: str) -> bool:
     return True     # no declaration: every authenticated role may open it
 
 
+def _is_download(cfg: Bench, path: str) -> bool:
+    tail = path.rsplit("/", 1)[-1].lower()
+    return any(tail.endswith(suffix) for suffix in cfg.pages.download_suffixes)
+
+
+def _probe_downloads(cfg: Bench, L: core.Ledger, rows: list[dict], ids: dict, only_roles) -> int:
+    """Files are fetched as the role, not opened: status equals the declared guard."""
+    n = 0
+    files = [r for r in rows if _is_download(cfg, r["path"])]
+    for role in cfg.roles:
+        if only_roles and role not in only_roles:
+            continue
+        try:
+            sess = core.login(cfg, role)
+        except SystemExit as ex:
+            L.skip(f"{role}: all downloads", str(ex)[:200])
+            continue
+        with sess.client(timeout=60) as h:
+            for row in files:
+                path = core.fill(row["path"], ids)
+                cell = f"{role} download {row['path']}"
+                if not path:
+                    L.skip(cell, "no id for a path parameter (bench.ids)")
+                    continue
+                try:
+                    r = h.get(path)
+                except Exception as ex:  # noqa: BLE001
+                    L.check(cell, False, f"request failed: {type(ex).__name__}")
+                    continue
+                want_open = _admits(row, role)
+                ok = (200 <= r.status_code < 300) if want_open else (r.status_code in cfg.pages.deny_statuses)
+                L.check(cell, ok, f"HTTP {r.status_code} (want {'2xx' if want_open else '/'.join(map(str, cfg.pages.deny_statuses))}), {len(r.content)} bytes")
+                n += 1
+    return n
+
+
 def main(cfg: Bench, argv: list[str]) -> int:
     from playwright.sync_api import sync_playwright
 
@@ -73,6 +109,11 @@ def main(cfg: Bench, argv: list[str]) -> int:
         except SystemExit as ex:
             L.skip("resolve path ids", str(ex)[:160])
     cells_total = 0
+    downloads = [r for r in rows if _is_download(cfg, r["path"])]
+    rows = [r for r in rows if not _is_download(cfg, r["path"])]
+    if downloads:
+        print(f"  {len(downloads)} download route(s) probed over HTTP, not opened: {', '.join(r['path'] for r in downloads)}", flush=True)
+        cells_total += _probe_downloads(cfg, L, downloads, ids, only_roles)
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)

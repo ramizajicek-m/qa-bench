@@ -56,6 +56,11 @@ class Pages:
     #: page NOT listed that scrolls fails. Tharros' first live sweep found 13
     #: (2026-09-05); a night red on day one is switched off within a week.
     sideways_allow: dict[str, str] = field(default_factory=dict)
+    #: A route whose path ends like a FILE is a download, not a page: page.goto
+    #: aborts with "Download is starting" (IGA /admin/reports.csv, 2026-09-05) and
+    #: a screenshot of it means nothing. Such routes are probed as the role over
+    #: HTTP — status against the declared guard — and never opened in the browser.
+    download_suffixes: list[str] = field(default_factory=lambda: [".csv", ".pdf", ".xlsx", ".xls", ".json", ".sqlite", ".zip", ".ics", ".txt"])
 
 
 @dataclass

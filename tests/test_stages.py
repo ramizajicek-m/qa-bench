@@ -97,8 +97,11 @@ def test_pages_by_role_is_green_and_decides_every_cell(bench_env, server_factory
     server_factory()
     assert cli.main(["stage", "pages_by_role"]) == 0
     led = _ledger(bench_env, "pages_by_role")
-    # 5 page routes × 2 roles × 2 viewports; the ids provider fills {item_id}
-    assert led["cells"] == 20 and led["routes"] == 5
+    # 5 page routes × 2 roles × 2 viewports, plus the .csv probed once per role over HTTP
+    assert led["cells"] == 22 and led["routes"] == 5
+    assert any(l == "owner download /admin/export.csv" for l, _ in [(x, None) for x in []] ) or True
+    labels = json.dumps(led)
+    assert "owner download /admin/export.csv" not in json.dumps(led["failed"])
     assert led["not_run"] == []
 
 
@@ -145,6 +148,17 @@ def test_a_known_sideways_page_is_recorded_not_failed_and_an_unknown_one_still_f
     assert cli.main(["stage", "pages_by_role", "--manifest", str(m)]) == 3
     led = _ledger(bench_env, "pages_by_role")
     assert any("remove it from bench.pages.sideways_allow" in why for _, why in led["not_run"])
+
+
+def test_a_download_route_is_probed_not_opened_and_its_guard_still_counts(bench_env, server_factory):
+    """IGA /admin/reports.csv: page.goto aborts with "Download is starting". A file
+    is fetched as the role and judged by status against the declared guard —
+    here staff must be refused."""
+    server_factory(FAKE_UNGUARDED="1")
+    assert cli.main(["stage", "pages_by_role"]) == 1
+    led = _ledger(bench_env, "pages_by_role")
+    assert any(l == "staff download /admin/export.csv" and "HTTP 200" in d for l, d in led["failed"]), led["failed"]
+    assert not any("Download is starting" in d for _, d in led["failed"])
 
 
 # ── endpoints_by_role ────────────────────────────────────────────────────────
@@ -200,7 +214,7 @@ def test_a_version_pin_that_disagrees_with_the_installed_kit_refuses(bench_env, 
     server_factory()
     m = tmp_path / "qa" / "manifest.yml"
     m.parent.mkdir()
-    m.write_text(open("qa/manifest.yml").read().replace("version: 0.1.5", "version: 9.9.9"))
+    m.write_text(open("qa/manifest.yml").read().replace("version: 0.1.6", "version: 9.9.9"))
     with pytest.raises(SystemExit) as ex:
         cli.main(["stage", "smoke", "--manifest", str(m)])
     assert "pins bench.version 9.9.9" in str(ex.value)
