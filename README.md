@@ -16,7 +16,7 @@ Exit codes everywhere: `0` proven · `1` failed · `3` nothing failed but someth
 ## Install
 
 ```
-pip install "git+https://github.com/ramizajicek-m/qa-bench@v0.1.4"
+pip install "git+https://github.com/ramizajicek-m/qa-bench@v0.1.5"
 python -m playwright install --with-deps chromium
 ```
 
@@ -24,7 +24,7 @@ python -m playwright install --with-deps chromium
 
 ```yaml
 bench:
-  version: 0.1.4                         # asserted against the installed kit
+  version: 0.1.5                         # asserted against the installed kit
   origin_env: QA_BASE_URL                # the staging URL; production hosts are refused
   health: /health                        # must return JSON with `commit`
   roles: [owner, staff]
@@ -34,7 +34,7 @@ bench:
     keychain_service: "myapp-qa-{role}"  # laptop fallback, optional
   login: { path: /login, fields: {email: email, password: password}, cookies: [session, csrf_token], csrf_cookie: csrf_token, csrf_field: _csrf }   # csrf_field only when the form is CSRF-protected
   viewports: [[1440, 900], [390, 844]]
-  pages: { include_prefixes: ["/admin"], exclude_prefixes: ["/admin/api/"] }
+  pages: { include_prefixes: ["/admin"], exclude_prefixes: ["/admin/api/"], sideways_allow: { "/admin/audit": "wide table; fix owed" } }   # known phone-width offenders, a ratchet
   api:   { include_prefixes: ["/api/"], exclude_paths: ["/api/stream"], portal_roles: [customer], portal_prefixes: ["/api/portal"] }
   ignore_console: ["favicon"]            # each entry justified in a comment
   routes: scripts.qa.route_matrix:collect        # -> [{path, methods, admits: {role: bool}}]

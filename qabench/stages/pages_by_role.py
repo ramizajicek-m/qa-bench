@@ -141,6 +141,14 @@ def main(cfg: Bench, argv: list[str]) -> int:
                         detail += f"; console: {errs[0][:140]}" + (f" (+{len(errs) - 1})" if len(errs) > 1 else "")
                     if bad and want_open:
                         detail += f"; failed: {bad[0][:120]}" + (f" (+{len(bad) - 1})" if len(bad) > 1 else "")
+                    allowed_reason = cfg.pages.sideways_allow.get(tmpl)
+                    if sideways and allowed_reason:
+                        # KNOWN offender: recorded, not failed — the ratchet's grandfather list
+                        L.skip(f"{cell} scrolls sideways at {w}px", f"known — {allowed_reason}")
+                        sideways = False
+                    elif not sideways and allowed_reason and want_open and status == 200:
+                        # The debt was paid; the list must shrink or it is a pardon
+                        L.skip(f"{cell} no longer scrolls sideways", "remove it from bench.pages.sideways_allow")
                     if sideways:
                         detail += f"; the page scrolls sideways at {w}px"
                     ok = ok_status and not errs and not (want_open and bad) and not sideways

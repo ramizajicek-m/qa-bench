@@ -130,6 +130,23 @@ def test_pages_by_role_sees_sideways_scroll_only_at_phone_width(bench_env, serve
     assert wide and all("390x844" in l and "scrolls sideways at 390px" in d for l, d in wide), led["failed"]
 
 
+def test_a_known_sideways_page_is_recorded_not_failed_and_an_unknown_one_still_fails(bench_env, server_factory, tmp_path):
+    server_factory(FAKE_WIDE="1")
+    m = tmp_path / "qa" / "manifest.yml"
+    m.parent.mkdir()
+    m.write_text(open("qa/manifest.yml").read().replace('pages: { include_prefixes: ["/admin"] }',
+                 'pages: { include_prefixes: ["/admin"], sideways_allow: { "/admin/wide": "a 600px table; fix owed" } }'))
+    assert cli.main(["stage", "pages_by_role", "--manifest", str(m)]) == 3       # skips, no failures
+    led = _ledger(bench_env, "pages_by_role")
+    assert led["failed"] == []
+    assert any("known — a 600px table" in why for _, why in led["not_run"])
+    # the same list on a healthy page asks to be removed
+    s = server_factory()
+    assert cli.main(["stage", "pages_by_role", "--manifest", str(m)]) == 3
+    led = _ledger(bench_env, "pages_by_role")
+    assert any("remove it from bench.pages.sideways_allow" in why for _, why in led["not_run"])
+
+
 # ── endpoints_by_role ────────────────────────────────────────────────────────
 
 def test_endpoints_by_role_is_green_on_a_healthy_app(bench_env, server_factory):
@@ -183,7 +200,7 @@ def test_a_version_pin_that_disagrees_with_the_installed_kit_refuses(bench_env, 
     server_factory()
     m = tmp_path / "qa" / "manifest.yml"
     m.parent.mkdir()
-    m.write_text(open("qa/manifest.yml").read().replace("version: 0.1.4", "version: 9.9.9"))
+    m.write_text(open("qa/manifest.yml").read().replace("version: 0.1.5", "version: 9.9.9"))
     with pytest.raises(SystemExit) as ex:
         cli.main(["stage", "smoke", "--manifest", str(m)])
     assert "pins bench.version 9.9.9" in str(ex.value)

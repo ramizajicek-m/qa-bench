@@ -50,6 +50,12 @@ class Pages:
     include_prefixes: list[str] = field(default_factory=lambda: ["/admin"])
     exclude_prefixes: list[str] = field(default_factory=list)
     deny_statuses: list[int] = field(default_factory=lambda: [401, 403])
+    #: Pages KNOWN to scroll sideways at a phone width, each with a reason — a
+    #: ratchet, not a pardon: a listed page still prints as a SKIP with its
+    #: reason, a listed page that no longer scrolls asks to be removed, and any
+    #: page NOT listed that scrolls fails. Tharros' first live sweep found 13
+    #: (2026-09-05); a night red on day one is switched off within a week.
+    sideways_allow: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
