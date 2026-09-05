@@ -1,0 +1,23 @@
+project: fake
+origin: https://fake.example.test
+environments:
+  production: { url: https://fake.example.test, branch: main }
+bench:
+  version: 0.1.0
+  origin_env: QA_BASE_URL
+  health: /health
+  roles: [owner, staff]
+  credentials:
+    email_template: "{role}@example.test"
+    password_env: "QA_{ROLE}_PASSWORD"
+  login:
+    path: /login
+    fields: { email: email, password: password }
+    cookies: [sess, csrf_token]
+    csrf_cookie: csrf_token
+  viewports: [[1440, 900], [390, 844]]
+  pages: { include_prefixes: ["/admin"] }
+  api: { include_prefixes: ["/api/"] }
+  routes: fake_app:collect
+  ids: fake_app:resolve_ids
+  heartbeat: { key: qa_nightly, cadence_h: 30 }
