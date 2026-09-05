@@ -147,6 +147,8 @@ def credentials(cfg: Bench, role: str) -> tuple[str, str]:
     upper, lower = role.upper(), role.lower()
     email = env(c.email_env.format(ROLE=upper, role=lower))
     password = env(c.password_env.format(ROLE=upper, role=lower))
+    if not email and c.emails.get(role):
+        email = c.emails[role]
     if not email and c.email_template:
         email = c.email_template.format(role=lower, ROLE=upper)
     if password is None and c.keychain_service:

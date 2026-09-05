@@ -148,6 +148,7 @@ def main(cfg: Bench, argv: list[str]) -> int:
                     cells_total += 1
                     core.shot(page, cfg.shots, f"{role}__{label}__{tmpl.strip('/').replace('/', '_').replace('{', '').replace('}', '')}")
                 if bounced:
+                    core.forget_session(cfg, role)
                     L.check(f"{role} {label}: the session survived the sweep", False,
                             f"{len(bounced)} of {len(rows)} cells ended on the login form (first: {bounced[0]}) — those cells decided nothing")
                 ctx.close()

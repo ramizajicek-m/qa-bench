@@ -35,6 +35,13 @@ class Login:
     #: `csrf_cookie` from the response, and posts it back in this form field
     #: (tharros: cookie tharros_csrf, field _csrf). None = the form has no CSRF.
     csrf_field: str | None = None
+    #: A login throttle (tharros: 5 per minute per IP) answers 429. The kit waits
+    #: this long and retries, up to three times; a 429 is never a verdict.
+    throttle_wait_s: float = 65.0
+    #: Sessions are cached under <shots>/sessions/<role>.json and reused by the
+    #: next stage in the same run, so six roles × three stages is six logins, not
+    #: eighteen — the throttle above is exactly what eighteen would trip.
+    session_ttl_s: float = 3300.0
 
 
 @dataclass

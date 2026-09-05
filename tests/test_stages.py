@@ -183,7 +183,7 @@ def test_a_version_pin_that_disagrees_with_the_installed_kit_refuses(bench_env, 
     server_factory()
     m = tmp_path / "qa" / "manifest.yml"
     m.parent.mkdir()
-    m.write_text(open("qa/manifest.yml").read().replace("version: 0.1.3", "version: 9.9.9"))
+    m.write_text(open("qa/manifest.yml").read().replace("version: 0.1.4", "version: 9.9.9"))
     with pytest.raises(SystemExit) as ex:
         cli.main(["stage", "smoke", "--manifest", str(m)])
     assert "pins bench.version 9.9.9" in str(ex.value)
@@ -203,3 +203,14 @@ def test_keychain_lookup_builds_a_command_security_accepts(monkeypatch):
     assert seen["cmd"] == ["security", "find-generic-password", "-a", "tharros", "-s", "tharros-qa-owner", "-w"]
     assert core._keychain_password("x", None)
     assert seen["cmd"][:2] == ["security", "find-generic-password"]
+
+
+def test_a_per_role_email_map_wins_over_the_template(bench_env, server_factory):
+    server_factory()                                    # load() needs an origin
+    from qabench import manifest as mf
+    cfg = mf.load()
+    cfg.credentials.emails = {"owner": "boss@example.test"}
+    email, _ = core.credentials(cfg, "owner")
+    assert email == "boss@example.test"
+    email, _ = core.credentials(cfg, "staff")
+    assert email == "staff@example.test"          # the template still serves the rest

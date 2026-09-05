@@ -21,6 +21,7 @@ class Credentials:
     email_env: str = "QA_{ROLE}_EMAIL"
     password_env: str = "QA_{ROLE}_PASSWORD"
     email_template: str | None = None          # e.g. "qa-{role}@example.com"
+    emails: dict[str, str] = field(default_factory=dict)   # per-role emails when no template fits (IGA: demo accounts)
     keychain_service: str | None = None        # e.g. "anat-qa-{role}" (laptop only)
     keychain_account: str | None = None
 
