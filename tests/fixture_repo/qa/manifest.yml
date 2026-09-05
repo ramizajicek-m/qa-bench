@@ -3,7 +3,7 @@ origin: https://fake.example.test
 environments:
   production: { url: https://fake.example.test, branch: main }
 bench:
-  version: 0.1.7
+  version: 0.1.8
   origin_env: QA_BASE_URL
   health: /health
   roles: [owner, staff]

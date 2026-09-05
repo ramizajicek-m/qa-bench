@@ -121,7 +121,10 @@ def wide(request: Request):
     # 600px: wider than the phone (390) and narrower than the desk (1440), so the
     # defect exists at exactly one of the two viewports — which is what the test
     # asserts, and what a real "fine on the laptop, broken on the phone" looks like.
-    block = "<div style='width:600px;height:10px;background:#ccc'></div>" if os.environ.get("FAKE_WIDE") == "1" else ""
+    # FAKE_WIDE=1: wide for every role. FAKE_WIDE=<role>: wide for that role only —
+    # a real shape (tharros 2026-09-05: 22 pages scrolled for some roles, not all).
+    wide_for = os.environ.get("FAKE_WIDE", "")
+    block = "<div style='width:600px;height:10px;background:#ccc'></div>" if wide_for in ("1", _role(request)) else ""
     return _page("Wide?", block)
 
 

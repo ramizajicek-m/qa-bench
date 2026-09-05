@@ -233,7 +233,15 @@ def post_login(cfg: Bench, email: str, password: str) -> httpx.Response:
 
 
 def _session_path(cfg: Bench, role: str) -> Path:
-    return cfg.shots / "sessions" / f"{role}.json"
+    """NEVER under cfg.shots. The shots directory is the evidence a workflow
+    uploads as an artifact on failure, and a cached session is a live cookie —
+    for 14 days anyone who could read the artifact could be staging's admin
+    (IGA security review, 2026-09-05). Sessions live beside the OS temp dir,
+    keyed by origin, readable by this user only."""
+    import hashlib
+    import tempfile
+    key = hashlib.sha256(cfg.origin.encode()).hexdigest()[:12]
+    return Path(os.environ.get("QA_SESSION_DIR") or tempfile.gettempdir()) / "qabench-sessions" / key / f"{role}.json"
 
 
 def _cached_session(cfg: Bench, role: str) -> Session | None:
@@ -303,8 +311,9 @@ def login(cfg: Bench, role: str, *, fresh: bool = False) -> Session:
     csrf = jar.get(L.csrf_cookie, "") if L.csrf_cookie else ""
     sess = Session(role, email, cookies, csrf, cfg.origin)
     sp = _session_path(cfg, role)
-    sp.parent.mkdir(parents=True, exist_ok=True)
+    sp.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     sp.write_text(json.dumps({"origin": cfg.origin, "email": email, "cookies": cookies, "csrf": csrf, "at": time.time()}))
+    sp.chmod(0o600)
     return sess
 
 

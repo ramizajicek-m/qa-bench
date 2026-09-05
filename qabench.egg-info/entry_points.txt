@@ -1,2 +1,0 @@
-[console_scripts]
-qabench = qabench.__main__:main

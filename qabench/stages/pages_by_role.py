@@ -137,6 +137,13 @@ def main(cfg: Bench, argv: list[str]) -> int:
         print(f"  {len(downloads)} download route(s) probed over HTTP, not opened: {', '.join(r['path'] for r in downloads)}", flush=True)
         cells_total += _probe_downloads(cfg, L, downloads, ids, only_roles)
 
+    # sideways_allow bookkeeping at the narrowest viewport, PER PATH across roles:
+    # a page that scrolls for one role and not another is still an offender, and
+    # telling the reader to "remove it" per cell sent 34 wrong hints in one
+    # tharros run (2026-09-05) — followed, they would have made the next night red.
+    narrow_w = min(cfg.viewports)[0]
+    paid: set[str] = set()          # listed paths measured at the narrowest width
+    still: set[str] = set()         # …of which at least one role's cell still scrolled
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         for role in cfg.roles:
@@ -222,13 +229,14 @@ def main(cfg: Bench, argv: list[str]) -> int:
                     if bad and want_open:
                         detail += f"; failed: {bad[0][:120]}" + (f" (+{len(bad) - 1})" if len(bad) > 1 else "")
                     allowed_reason = cfg.pages.sideways_allow.get(tmpl)
+                    if allowed_reason and want_open and status == 200 and w == narrow_w:
+                        paid.add(tmpl)
+                        if sideways:
+                            still.add(tmpl)
                     if sideways and allowed_reason:
                         # KNOWN offender: recorded, not failed — the ratchet's grandfather list
                         L.skip(f"{cell} scrolls sideways at {w}px", f"known — {allowed_reason}")
                         sideways = False
-                    elif not sideways and allowed_reason and want_open and status == 200 and (w, h_) == min(cfg.viewports):
-                        # The debt was paid; the list must shrink or it is a pardon
-                        L.skip(f"{cell} no longer scrolls sideways", "remove it from bench.pages.sideways_allow")
                     if sideways:
                         detail += f"; the page scrolls sideways at {w}px"
                     ok = ok_status and not errs and not (want_open and bad) and not sideways
@@ -241,6 +249,9 @@ def main(cfg: Bench, argv: list[str]) -> int:
                             f"{len(bounced)} of {len(rows)} cells ended on the login form (first: {bounced[0]}) — those cells decided nothing")
                 ctx.close()
         browser.close()
+    for tmpl in sorted(paid - still):
+        # The debt was paid for EVERY role; the list must shrink or it is a pardon
+        L.skip(f"{tmpl} no longer scrolls sideways at {narrow_w}px for any role", "remove it from bench.pages.sideways_allow")
     L.extra["cells"] = cells_total
     L.extra["routes"] = len(rows)
     print(f"  decided {cells_total} cells over {len(rows)} routes × {len(cfg.viewports)} viewports", flush=True)

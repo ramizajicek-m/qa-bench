@@ -48,8 +48,10 @@ def bench_env(monkeypatch, tmp_path):
     monkeypatch.setenv("QA_OWNER_PASSWORD", "pw-owner-secret-1")
     monkeypatch.setenv("QA_STAFF_PASSWORD", "pw-staff-secret-1")
     monkeypatch.setenv("QA_SHOT_DIR", str(tmp_path / "shots"))
+    monkeypatch.setenv("QA_SESSION_DIR", str(tmp_path / "sessions-home"))   # tests must not share the user's real cache
     monkeypatch.delenv("QA_EXPECT_SHA", raising=False)
     monkeypatch.chdir(FIXTURE)
+    monkeypatch.syspath_prepend(str(FIXTURE))   # a manifest copied elsewhere still describes THIS app; no test may depend on a neighbour having imported it
     return tmp_path / "shots"
 
 

@@ -80,7 +80,14 @@ def test_smoke_waits_out_a_login_throttle_instead_of_calling_it_a_dead_credentia
 def test_a_session_is_reused_by_the_next_stage_and_forgotten_when_bounced(bench_env, server_factory):
     s = server_factory()
     assert cli.main(["stage", "smoke"]) == 0
-    assert (bench_env / "sessions" / "owner.json").exists()
+    from qabench import manifest as mf0
+    sp = core._session_path(mf0.load(), "owner")
+    assert sp.exists()
+    # A cached session is a live cookie; the shots dir is the artifact a failing
+    # night uploads. The two must never share a tree (IGA review, 2026-09-05).
+    assert bench_env.resolve() not in sp.resolve().parents, sp
+    assert not list(bench_env.rglob("owner.json"))
+    assert (sp.stat().st_mode & 0o077) == 0, oct(sp.stat().st_mode)
     s.stop()                                            # the server is gone; a cached login must not need it
     from qabench import manifest as mf
     cfg = mf.load(bench_env.parent.parent.parent / "fixture_repo") if False else mf.load()
@@ -134,7 +141,7 @@ def test_pages_by_role_sees_sideways_scroll_only_at_phone_width(bench_env, serve
 
 
 def test_a_known_sideways_page_is_recorded_not_failed_and_an_unknown_one_still_fails(bench_env, server_factory, tmp_path):
-    server_factory(FAKE_WIDE="1")
+    s = server_factory(FAKE_WIDE="1")
     m = tmp_path / "qa" / "manifest.yml"
     m.parent.mkdir()
     m.write_text(open("qa/manifest.yml").read().replace('pages: { include_prefixes: ["/admin"] }',
@@ -143,11 +150,21 @@ def test_a_known_sideways_page_is_recorded_not_failed_and_an_unknown_one_still_f
     led = _ledger(bench_env, "pages_by_role")
     assert led["failed"] == []
     assert any("known — a 600px table" in why for _, why in led["not_run"])
-    # the same list on a healthy page asks to be removed
-    s = server_factory()
+    # a page that still scrolls for ONE role must not be told to leave the list
+    s.stop()
+    s = server_factory(FAKE_WIDE="owner")
     assert cli.main(["stage", "pages_by_role", "--manifest", str(m)]) == 3
     led = _ledger(bench_env, "pages_by_role")
-    assert any("remove it from bench.pages.sideways_allow" in why for _, why in led["not_run"])
+    assert led["failed"] == []
+    assert any("known — a 600px table" in why for _, why in led["not_run"])
+    assert not any("remove it" in why for _, why in led["not_run"]), "staff's clean cell must not pardon owner's offender"
+    # the same list on a page healthy for EVERY role asks to be removed, once
+    s.stop()
+    server_factory()
+    assert cli.main(["stage", "pages_by_role", "--manifest", str(m)]) == 3
+    led = _ledger(bench_env, "pages_by_role")
+    hints = [lbl for lbl, why in led["not_run"] if "remove it from bench.pages.sideways_allow" in why]
+    assert hints == ["/admin/wide no longer scrolls sideways at 390px for any role"], hints
 
 
 def test_a_download_route_is_probed_not_opened_and_its_guard_still_counts(bench_env, server_factory):
@@ -225,7 +242,10 @@ def test_a_version_pin_that_disagrees_with_the_installed_kit_refuses(bench_env, 
     server_factory()
     m = tmp_path / "qa" / "manifest.yml"
     m.parent.mkdir()
-    m.write_text(open("qa/manifest.yml").read().replace("version: 0.1.7", "version: 9.9.9"))
+    import re
+    # not a literal: a pin written into this test moves with every release and a
+    # stale one made the test pass without refusing anything (0.1.8, 2026-09-05)
+    m.write_text(re.sub(r"version: \S+", "version: 9.9.9", open("qa/manifest.yml").read(), count=1))
     with pytest.raises(SystemExit) as ex:
         cli.main(["stage", "smoke", "--manifest", str(m)])
     assert "pins bench.version 9.9.9" in str(ex.value)
