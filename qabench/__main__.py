@@ -1,13 +1,14 @@
 """    python -m qabench nightly [--only a,b] [--except c] [--manifest PATH]
     python -m qabench stage <smoke|pages_by_role|endpoints_by_role> [stage args]
     python -m qabench show          # the resolved config, credentials as presence only
+    python -m qabench report [--estate FILE] [--json]   # every project, every morning: did the night run, is production the swept build
 """
 from __future__ import annotations
 
 import sys
 from pathlib import Path
 
-from . import __version__, core, manifest, nightly
+from . import __version__, core, manifest, nightly, report
 from .stages import endpoints_by_role, pages_by_role, smoke
 
 STAGES = {"smoke": smoke.main, "pages_by_role": pages_by_role.main, "endpoints_by_role": endpoints_by_role.main}
@@ -32,6 +33,8 @@ def main(argv: list[str] | None = None) -> int:
     if cmd == "version":
         print(__version__)
         return 0
+    if cmd == "report":                     # no manifest, no pin: it reads the estate, not one repo
+        return report.run(rest)
     cfg = _cfg(rest)
     if cmd == "nightly":
         return nightly.run(cfg, rest)

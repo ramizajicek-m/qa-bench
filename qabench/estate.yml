@@ -1,0 +1,64 @@
+# The estate, for `python -m qabench report`: one row per project, read every
+# morning. A night that did not run, a night that ran red, or a production that
+# does not answer with the commit the night swept is a RED row — the report's
+# exit code says so, and the workflow that runs it fails loudly.
+#
+# cron_days: the weekdays (cron numbering, 0 = Sunday) the night lane is
+# scheduled on; a missing run is only a finding on a morning after one.
+# window_h: how old the latest run may be on such a morning.
+projects:
+  - name: anat
+    repo: anat-bforb/anat-agent
+    night_workflow: bench-nightly.yml
+    promote_workflow: nightly-promote.yml
+    main: main
+    staging_branch: staging
+    production: https://app.anatbforb.com/health
+    staging: https://web-staging-bb80.up.railway.app/health
+    cron_days: "1-5"
+    window_h: 30
+  - name: tharros
+    repo: tharros-motors/tharros
+    night_workflow: qa-nightly.yml
+    promote_workflow: deploy-production.yml
+    main: main
+    production: https://tharros-production.up.railway.app/health
+    staging: https://tharros-staging.up.railway.app/health
+    cron_days: "0-6"
+    window_h: 30
+  - name: iga
+    repo: iga-it/iga
+    night_workflow: qa-nightly.yml
+    promote_workflow: deploy-production.yml
+    main: main
+    production: https://web-production-3dc81.up.railway.app/health
+    staging: https://web-staging-2bee.up.railway.app/health
+    cron_days: "1-5"
+    window_h: 30
+  - name: ana-log
+    repo: ana-log-logistics/ana-log
+    night_workflow: qa-nightly.yml
+    promote_workflow: deploy-production.yml
+    main: main
+    production: https://ana-log-production-b013.up.railway.app/health
+    staging: https://ana-log-production.up.railway.app/health
+    cron_days: "1-5"
+    window_h: 30
+  - name: eliad
+    repo: ramizajicek-m/renewal-engine
+    night_workflow: qa-nightly.yml
+    promote_workflow: deploy-production.yml
+    main: main
+    production: https://web-production-cb8894.up.railway.app/health
+    staging: https://web-staging-418a.up.railway.app/health
+    cron_days: "0-4"
+    window_h: 30
+  - name: my8200
+    repo: my8200/8200-platform
+    night_workflow: qa-nightly.yml
+    promote_workflow: deploy-production.yml
+    main: main
+    production: https://app.my8200.com/health
+    staging: https://web-staging-7945.up.railway.app/health
+    cron_days: "0-4"
+    window_h: 30

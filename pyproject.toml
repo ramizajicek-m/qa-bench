@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "qabench"
-version = "0.1.8"
+version = "0.1.9"
 description = "The comprehensive QA tier, driven by a project's qa/manifest.yml: every page as every role in a real browser at two widths, every API route as every role, a smoke that names the dead secret, and an orchestrator whose verdict depends on what actually ran."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -23,6 +23,9 @@ qabench = "qabench.__main__:main"
 
 [tool.setuptools.packages.find]
 include = ["qabench*"]
+
+[tool.setuptools.package-data]
+qabench = ["estate.yml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
