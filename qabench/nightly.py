@@ -69,6 +69,14 @@ def verdict(results: list[dict], floor: int) -> tuple[bool, str]:
 
 def run(cfg: Bench, argv: list[str]) -> int:
     plan: list[tuple[str, list[str] | None]] = [(n, None) for n in SHARED] + [(n, a) for n, a in cfg.stages_extra]
+    # A stage with nothing to measure is EXCLUDED BY DECLARATION, never run to
+    # a vacuous verdict: eliad's console has no /api, and on 2026-09-06
+    # endpoints_by_role ran there, decided nothing, and the floor rightly
+    # called the night red. The manifest says so (api.include_prefixes: [])
+    # and the plan prints why — a silent omission would read like a sweep.
+    if not cfg.api.include_prefixes:
+        plan = [p for p in plan if p[0] != "endpoints_by_role"]
+        print("endpoints_by_role: not applicable — bench.api.include_prefixes is empty (declared in the manifest, not discovered)", flush=True)
     if "--only" in argv:
         keep = set(argv[argv.index("--only") + 1].split(","))
         plan = [p for p in plan if p[0] in keep]

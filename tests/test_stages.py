@@ -276,3 +276,20 @@ def test_a_per_role_email_map_wins_over_the_template(bench_env, server_factory):
     assert email == "boss@example.test"
     email, _ = core.credentials(cfg, "staff")
     assert email == "staff@example.test"          # the template still serves the rest
+
+
+def test_a_project_that_declares_no_api_does_not_run_the_endpoints_stage(bench_env, server_factory, capsys):
+    """Declared, not discovered: with api.include_prefixes empty the endpoints
+    stage is left out of the plan and the omission is printed — the night is
+    then judged on the stages that CAN decide something."""
+    from qabench import manifest as mf
+    srv = server_factory()
+    cfg = mf.load()
+    cfg.origin = srv.url
+    cfg.api.include_prefixes = []
+    code = nightly.run(cfg, [])
+    out = capsys.readouterr().out
+    assert "endpoints_by_role: not applicable" in out
+    assert not (bench_env / "endpoints_by_role.json").exists(), "the stage ran anyway"
+    assert (bench_env / "pages_by_role.json").exists() and (bench_env / "smoke.json").exists()
+    assert code == 0, out[-800:]
