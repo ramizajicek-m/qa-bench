@@ -28,8 +28,25 @@ class Credentials:
 
 @dataclass
 class Login:
+    #: `form` — ONE form-encoded POST to `path` (anat, tharros, IGA, eliad, my8200).
+    #: `json` — a JSON body to `path` with the role's credentials under the keys
+    #: in `body`, answered with `expect` and the session in Set-Cookie (ana-log
+    #: 2026-09-07: `{"email","password"}` → 200 + `analog_refresh`). Both kinds
+    #: prove the SAME thing — the named cookies were set — and a wrong password
+    #: is refused the same way, so the smoke stage does not know which it drove.
+    kind: str = "form"
     path: str = "/login"
     fields: dict[str, str] = field(default_factory=lambda: {"email": "email", "password": "password"})
+    #: json only: JSON key → credential. `{email: email, password: password}`
+    #: means the body is `{"email": <email>, "password": <password>}`.
+    body: dict[str, str] = field(default_factory=lambda: {"email": "email", "password": "password"})
+    #: json only: the status a successful login answers. A form login answers
+    #: whatever its redirect is, so it is not asserted there.
+    expect: int = 200
+    #: The PAGE a signed-out browser is sent to. A form login's path is that
+    #: page; a JSON login's path is an endpoint the browser never lands on, so a
+    #: lost session would go unrecognised and read as the route. Default: `path`.
+    page: str | None = None
     cookies: list[str] = field(default_factory=list)   # first one is the session; empty = any Set-Cookie
     csrf_cookie: str | None = None
     #: A login form protected by a CSRF pair: the kit GETs `path` first, takes
@@ -43,6 +60,15 @@ class Login:
     #: next stage in the same run, so six roles × three stages is six logins, not
     #: eighteen — the throttle above is exactly what eighteen would trip.
     session_ttl_s: float = 3300.0
+
+    def __post_init__(self):
+        if self.kind not in ("form", "json"):
+            raise SystemExit(f"bench.login.kind must be `form` or `json`, not {self.kind!r}")
+        if self.kind == "json" and self.csrf_field:
+            raise SystemExit("bench.login.csrf_field is a form-login setting; a `json` login has no form to fetch a token from")
+        for key in ("email", "password"):
+            if key not in self.body:
+                raise SystemExit(f"bench.login.body must map `{key}` to the JSON key the login reads it from")
 
 
 @dataclass

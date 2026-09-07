@@ -25,17 +25,27 @@ from .manifest import Bench
 SHARED = ["smoke", "pages_by_role", "endpoints_by_role"]
 
 
+#: Where THIS kit lives, so a stage subprocess imports the same qabench that
+#: planned it — a checkout run from its own tree (the kit's tests) has no
+#: installed copy, and `-m qabench` under the project's cwd found nothing.
+_KIT_HOME = str(Path(__file__).resolve().parents[1])
+
+
+def _pythonpath(*first: str) -> str:
+    return os.pathsep.join([*first, _KIT_HOME, *filter(None, [os.environ.get("PYTHONPATH")])])
+
+
 def _run_shared(name: str, cfg: Bench, timeout: int) -> tuple[int, float]:
     started = time.time()
     proc = subprocess.run([sys.executable, "-m", "qabench", "stage", name], cwd=cfg.repo, timeout=timeout,
-                          env={**os.environ, "QA_SHOT_DIR": str(cfg.shots)})
+                          env={**os.environ, "PYTHONPATH": _pythonpath(), "QA_SHOT_DIR": str(cfg.shots)})
     return proc.returncode, time.time() - started
 
 
 def _run_extra(argv: list[str], cfg: Bench, timeout: int) -> tuple[int, float]:
     started = time.time()
     proc = subprocess.run([sys.executable, *argv], cwd=cfg.repo, timeout=timeout,
-                          env={**os.environ, "PYTHONPATH": str(cfg.repo), "QA_SHOT_DIR": str(cfg.shots)})
+                          env={**os.environ, "PYTHONPATH": _pythonpath(str(cfg.repo)), "QA_SHOT_DIR": str(cfg.shots)})
     return proc.returncode, time.time() - started
 
 

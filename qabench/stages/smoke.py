@@ -63,9 +63,9 @@ def main(cfg: Bench, argv: list[str]) -> int:
         if bad.status_code == 429:
             L.skip("a wrong password is refused", "the login throttle answered 429 — a throttle is not a refusal, so this proved nothing")
         else:
-            primary = cfg.login.cookies[0] if cfg.login.cookies else None
-            got_session = bool(bad.cookies.get(primary)) if primary else bad.status_code in (302, 303)
-            L.check("a wrong password is refused", not got_session, f"HTTP {bad.status_code}")
+            # the same rule that let each role in above; a probe that decided
+            # differently could refuse a password the roles' logins accepted
+            L.check("a wrong password is refused", not core.login_accepted(cfg, bad), f"HTTP {bad.status_code}")
     except SystemExit as ex:
         L.skip("a wrong password is refused", str(ex)[:160])
 

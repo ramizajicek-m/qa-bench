@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import os
 
-from fastapi import FastAPI, Form, Request, Response
+from fastapi import Body, FastAPI, Form, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 
 USERS = {"owner@example.test": ("pw-owner-secret-1", "owner"),
@@ -79,6 +79,25 @@ def login(request: Request, email: str = Form(...), password: str = Form(...), c
     _HITS["n"] = 0                                   # a login renews the budget
     resp.set_cookie("sess", u[1], path="/")
     resp.set_cookie("csrf_token", "csrf-" + u[1], path="/")
+    return resp
+
+
+@app.post("/api/login")
+def login_json(request: Request, body: dict = Body(...)):
+    """The ana-log shape (2026-09-07): a JSON body, 200, the session in Set-Cookie.
+    FAKE_JSON_MFA=1: a 200 with NO session cookie (ana-log's `{"mfaRequired": true}`)
+    — a login the kit must NOT count as signed in. FAKE_JSON_ACCEPTS_ANY=1: any
+    password signs in — the refusal check must go red."""
+    u = USERS.get(str(body.get("email", "")).lower())
+    if os.environ.get("FAKE_JSON_ACCEPTS_ANY") == "1" and u is None:
+        u = ("", "owner")
+    if not u or (os.environ.get("FAKE_JSON_ACCEPTS_ANY") != "1" and u[0] != body.get("password")):
+        return JSONResponse({"detail": "wrong"}, status_code=401)
+    if os.environ.get("FAKE_JSON_MFA") == "1":
+        return JSONResponse({"mfaRequired": True, "challengeId": "c-1"})
+    resp = JSONResponse({"accessToken": "t-" + u[1], "expiresIn": 900})
+    _HITS["n"] = 0
+    resp.set_cookie("sess", u[1], path="/")
     return resp
 
 

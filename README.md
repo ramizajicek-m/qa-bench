@@ -16,7 +16,7 @@ Exit codes everywhere: `0` proven · `1` failed · `3` nothing failed but someth
 ## Install
 
 ```
-pip install "git+https://github.com/ramizajicek-m/qa-bench@v0.1.7"
+pip install "git+https://github.com/ramizajicek-m/qa-bench@v0.1.12"
 python -m playwright install --with-deps chromium
 ```
 
@@ -24,7 +24,7 @@ python -m playwright install --with-deps chromium
 
 ```yaml
 bench:
-  version: 0.1.7                         # asserted against the installed kit
+  version: 0.1.12                        # asserted against the installed kit
   origin_env: QA_BASE_URL                # the staging URL; production hosts are refused
   health: /health                        # must return JSON with `commit`
   roles: [owner, staff]
@@ -33,6 +33,8 @@ bench:
     email_env: "QA_{ROLE}_EMAIL"         # or email_template: "qa-{role}@example.com"
     keychain_service: "myapp-qa-{role}"  # laptop fallback, optional
   login: { path: /login, fields: {email: email, password: password}, cookies: [session, csrf_token], csrf_cookie: csrf_token, csrf_field: _csrf }   # csrf_field only when the form is CSRF-protected
+  # an app that signs in with a JSON POST instead of a form (ana-log):
+  # login: { kind: json, path: /api/auth/login, body: {email: email, password: password}, expect: 200, page: /login, cookies: [analog_refresh] }
   viewports: [[1440, 900], [390, 844]]
   pages: { include_prefixes: ["/admin"], exclude_prefixes: ["/admin/api/"], sideways_allow: { "/admin/audit": "wide table; fix owed" } }   # known phone-width offenders, a ratchet
   api:   { include_prefixes: ["/api/"], exclude_paths: ["/api/stream"], portal_roles: [customer], portal_prefixes: ["/api/portal"] }
@@ -43,6 +45,21 @@ bench:
     - [message_gallery, [scripts/qa/message_gallery.py]]   # must write <shots>/message_gallery.json
   heartbeat: { key: qa_nightly, cadence_h: 30, stamp: scripts.qa.heartbeat:stamp }
 ```
+
+### `login`
+
+| key | form (default) | json |
+|---|---|---|
+| `kind` | `form` — one form-encoded POST to `path` | `json` — a JSON body to `path` |
+| `path` | the form's action | the endpoint |
+| `fields` | form field → credential (`{email: email, password: password}`) | ignored |
+| `body` | ignored | JSON key → credential; `{email: email, password: password}` sends `{"email": …, "password": …}` |
+| `expect` | not asserted (a form answers its redirect) | the status of a successful login, default 200 |
+| `page` | the sign-in page a signed-out browser lands on — default `path` | required in practice: `path` is an endpoint the browser never lands on, so without it a lost session reads as the route |
+| `cookies` | the cookies a login must set; the first is the session | same |
+| `csrf_cookie` / `csrf_field` | the pair a protected form demands back | refused — there is no form to fetch a token from |
+
+Both kinds prove the same thing and are judged by one rule (`core.login_accepted`): the first named cookie was set. A status alone is not a login — a JSON endpoint answers 200 with no session when it wants a second factor — and the smoke stage's "a wrong password is refused" uses the same rule in the other direction. The cookies the POST set are planted in the browser context the page stages drive, whichever kind set them.
 
 ## Run
 

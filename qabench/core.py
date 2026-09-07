@@ -206,17 +206,24 @@ class Session:
 
 
 def post_login(cfg: Bench, email: str, password: str) -> httpx.Response:
-    """ONE form POST to the login path, with the CSRF pair when the form has one.
+    """ONE POST to the login path — form-encoded (`login.kind: form`, with the
+    CSRF pair when the form has one) or a JSON body (`login.kind: json`).
 
     A CSRF-protected form (tharros: `_csrf` field must equal the `tharros_csrf`
     cookie) refuses a bare POST with 403, which reads exactly like a wrong
     password. So when `login.csrf_field` is set the kit GETs the form first,
     carries the cookie jar, and posts the token back. The response keeps the
     cookies the server set on the POST merged with the ones from the GET.
+
+    The cookies come back on the response either way; `login()` plants them in
+    the browser context the page stages drive, so a JSON login's session lands
+    exactly where a form login's does.
     """
     L = cfg.login
     with httpx.Client(base_url=cfg.origin, follow_redirects=False,
                       timeout=httpx.Timeout(30.0, connect=45.0)) as h:
+        if L.kind == "json":
+            return h.post(L.path, json={L.body["email"]: email, L.body["password"]: password})
         data = {L.fields["email"]: email, L.fields["password"]: password}
         if L.csrf_field:
             h.get(L.path)                                   # the server sets the CSRF cookie here
@@ -230,6 +237,27 @@ def post_login(cfg: Bench, email: str, password: str) -> httpx.Response:
             if name not in r.cookies:
                 r.cookies.set(name, value)
         return r
+
+
+def login_accepted(cfg: Bench, r: httpx.Response) -> bool:
+    """Did this login response grant a session? ONE decision for both login
+    kinds and both directions: `login()` fails a role on False, and the smoke
+    stage's wrong-password probe fails on True. Two copies of this rule would
+    be two chances to accept a role the app refused, or to call an accepted
+    wrong password a refusal.
+
+    The verdict is the SESSION COOKIE, not the status: a JSON login can answer
+    200 with no session (ana-log's `{"mfaRequired": true}`), and a form login's
+    302 says only where it went. When the manifest names no cookie the status
+    is all there is — `expect` for json, a redirect for form.
+    """
+    L = cfg.login
+    if L.kind == "json" and r.status_code != L.expect:
+        return False
+    primary = L.cookies[0] if L.cookies else None
+    if primary:
+        return bool(r.cookies.get(primary))
+    return r.status_code in (302, 303) if L.kind == "form" else True
 
 
 def _session_path(cfg: Bench, role: str) -> Path:
@@ -300,10 +328,9 @@ def login(cfg: Bench, role: str, *, fresh: bool = False) -> Session:
         raise SystemExit(f"login as {role}: {cfg.origin} unreachable after 3 tries "
                          f"({type(last).__name__}). This is a network or host failure, NOT a finding about the code.")
     assert r is not None
-    jar = {name: r.cookies.get(name, "") for name in L.cookies}
-    primary = L.cookies[0] if L.cookies else None
-    if primary and not jar.get(primary):
+    if not login_accepted(cfg, r):
         raise SystemExit(f"login as {role} ({email}) failed: {r.status_code} {redact(r.text[:160])}")
+    jar = {name: r.cookies.get(name, "") for name in L.cookies}
     host = urlparse(cfg.origin).hostname or ""
     secure = cfg.origin.startswith("https://")
     cookies = [{"name": n, "value": v, "domain": host, "path": "/", "secure": secure}
@@ -350,4 +377,5 @@ def bounced_to_login(cfg: Bench, landed_url: str) -> bool:
     """page.goto FOLLOWS redirects, so an expired session lands on the login form
     with a 200 — indistinguishable from the page being served (anat 2026-08-31:
     46 phantom "HTTP 200 (want 403)" findings)."""
-    return (landed_url or "").split("?", 1)[0].rstrip("/").endswith(cfg.login.path.rstrip("/"))
+    page = cfg.login.page or cfg.login.path
+    return (landed_url or "").split("?", 1)[0].rstrip("/").endswith(page.rstrip("/"))

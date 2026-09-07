@@ -77,6 +77,101 @@ def test_smoke_waits_out_a_login_throttle_instead_of_calling_it_a_dead_credentia
     assert all("signs in" not in label for label, _ in led["not_run"]), "a 429 must never read as a dead credential"
 
 
+# ── json login (ana-log 2026-09-07: a JSON POST, not a form) ─────────────────
+
+JSON_LOGIN = """  login:
+    kind: json
+    path: /api/login
+    body: { email: email, password: password }
+    expect: 200
+    cookies: [sess]
+"""
+
+
+def _json_manifest(tmp_path):
+    """The fixture manifest with its form login swapped for the JSON one."""
+    import re
+    src = open("qa/manifest.yml").read()
+    out, n = re.subn(r"  login:\n(?:    .*\n)+", JSON_LOGIN, src)
+    assert n == 1, "the fixture manifest's login block moved"
+    m = tmp_path / "qa" / "manifest.yml"
+    m.parent.mkdir()
+    m.write_text(out)
+    return m
+
+
+def test_a_json_login_signs_every_role_in_and_the_page_stage_sees_the_session(bench_env, server_factory, tmp_path):
+    server_factory()
+    m = _json_manifest(tmp_path)
+    assert cli.main(["stage", "smoke", "--manifest", str(m)]) == 0
+    led = _ledger(bench_env, "smoke")
+    assert led["failed"] == [] and led["not_run"] == []
+    assert led["passed"] == 4          # health, owner signs in, staff signs in, a wrong password is refused
+    # the session the JSON POST set is the one the browser context carries
+    assert cli.main(["stage", "pages_by_role", "--manifest", str(m)]) == 0
+    pages = _ledger(bench_env, "pages_by_role")
+    # a session the browser did not carry would bounce every cell to the login
+    # form, which the stage records as not_run — so an empty not_run IS the proof
+    assert pages["not_run"] == [] and pages["failed"] == [], pages
+    assert pages["passed"] > 0
+
+
+def test_a_lost_session_behind_a_json_login_is_recognised_on_the_sign_in_page(bench_env, server_factory, tmp_path):
+    """The browser is bounced to /login, not to the JSON endpoint; `login.page`
+    is what the stage compares against. Without it every bounced cell would be
+    measured as the route (HTTP 200 on the sign-in form)."""
+    server_factory(FAKE_SESSION_TTL="6")            # the same budget the form-login twin above survives
+    m = _json_manifest(tmp_path)
+    m.write_text(m.read_text().replace("    expect: 200\n", "    expect: 200\n    page: /login\n"))
+    assert cli.main(["stage", "pages_by_role", "--manifest", str(m)]) == 0
+    led = _ledger(bench_env, "pages_by_role")
+    assert led["failed"] == [] and led["not_run"] == [], led
+
+
+def test_a_json_login_that_accepts_any_password_is_named_by_the_smoke_stage(bench_env, server_factory, tmp_path):
+    server_factory(FAKE_JSON_ACCEPTS_ANY="1")
+    m = _json_manifest(tmp_path)
+    assert cli.main(["stage", "smoke", "--manifest", str(m)]) == 1
+    led = _ledger(bench_env, "smoke")
+    assert [l for l, _ in led["failed"]] == ["a wrong password is refused"], led["failed"]
+
+
+def test_a_json_200_without_the_session_cookie_is_not_a_login(bench_env, server_factory, tmp_path):
+    """ana-log answers 200 `{"mfaRequired": true}` and sets nothing — a status
+    alone would call that signed in, and every cell after it would measure the
+    login page. The verdict is the cookie. Mutation: drop the cookie assertion in
+    `core.login_accepted` and this test goes red on `owner signs in` passing."""
+    server_factory(FAKE_JSON_MFA="1")
+    m = _json_manifest(tmp_path)
+    assert cli.main(["stage", "smoke", "--manifest", str(m)]) == 1
+    led = _ledger(bench_env, "smoke")
+    failed = {l: d for l, d in led["failed"]}
+    assert "owner signs in" in failed and "200" in failed["owner signs in"], led
+
+
+def test_a_login_kind_the_kit_does_not_know_is_refused_by_name(bench_env, server_factory, tmp_path):
+    server_factory()
+    m = _json_manifest(tmp_path)
+    m.write_text(m.read_text().replace("kind: json", "kind: bearer"))
+    with pytest.raises(SystemExit) as ex:
+        cli.main(["stage", "smoke", "--manifest", str(m)])
+    assert "login.kind" in str(ex.value) and "bearer" in str(ex.value)
+
+
+def test_the_fixture_manifest_pins_the_kit_it_is_tested_with():
+    """0.1.11 bumped `__version__` and not this pin, and every stage test failed
+    on the version refusal until the next release noticed (2026-09-07). A
+    release moves three numbers; this is the check that they moved together."""
+    import pathlib
+    import re
+    from qabench import __version__
+    here = pathlib.Path(__file__).resolve().parent
+    pinned = re.search(r"version: (\S+)", (here / "fixture_repo" / "qa" / "manifest.yml").read_text()).group(1)
+    assert pinned == __version__
+    toml = (here.parent / "pyproject.toml").read_text()
+    assert f'version = "{__version__}"' in toml
+
+
 def test_a_session_is_reused_by_the_next_stage_and_forgotten_when_bounced(bench_env, server_factory):
     s = server_factory()
     assert cli.main(["stage", "smoke"]) == 0
