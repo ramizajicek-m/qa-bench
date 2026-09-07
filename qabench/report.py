@@ -68,6 +68,17 @@ def latest_run(repo: str, workflow: str) -> dict | None:
     return runs[0] if runs else None
 
 
+def latest_scheduled_run(repo: str, workflow: str) -> dict | None:
+    """The last run the CRON started. A hand dispatch proves the lane works;
+    it says nothing about the schedule — on 2026-09-07 three projects had
+    never had a scheduled night at all and every morning read green off the
+    hand runs, and the ones that did fire fired 4.5 h late (a starved
+    account is queued last)."""
+    d = gh_json(f"repos/{repo}/actions/workflows/{workflow}/runs?event=schedule&per_page=1")
+    runs = (d or {}).get("workflow_runs") if isinstance(d, dict) else None
+    return runs[0] if runs else None
+
+
 def main_tip(repo: str, branch: str) -> str | None:
     d = gh_json(f"repos/{repo}/commits/{branch}")
     return d.get("sha") if isinstance(d, dict) else None
@@ -79,13 +90,25 @@ def compare(repo: str, base: str, head: str) -> str | None:
     return d.get("status") if isinstance(d, dict) else None
 
 
-def row_for(p: dict, now: datetime, *, fetch_run=latest_run, fetch_tip=main_tip, fetch_health=health_commit, fetch_compare=compare) -> dict:
+def row_for(p: dict, now: datetime, *, fetch_run=latest_run, fetch_tip=main_tip, fetch_health=health_commit, fetch_compare=compare,
+            fetch_scheduled=latest_scheduled_run) -> dict:
     """One project's row. `red` carries the reasons; an empty list is green."""
     red: list[str] = []
     notes: list[str] = []
     run = fetch_run(p["repo"], p["night_workflow"])
     expected = night_expected(p.get("cron_days", "0-6"), now)
     age_h = None
+    # The schedule is a second claim: the cron fired. Judged separately so a
+    # hand run cannot stand in for it.
+    sched = fetch_scheduled(p["repo"], p["night_workflow"])
+    sched_age_h = None
+    if sched is not None:
+        sched_age_h = round((now - datetime.fromisoformat(sched["created_at"].replace("Z", "+00:00"))).total_seconds() / 3600, 1)
+    if expected:
+        if sched is None:
+            red.append("the schedule has NEVER fired — every night so far was a hand dispatch")
+        elif sched_age_h > p.get("window_h", 30):
+            red.append(f"the schedule last fired {sched_age_h}h ago — the nights since were hand dispatches, or none")
     if run is None:
         red.append("could not read the night workflow's runs" if expected else "no night run readable")
     else:
@@ -122,16 +145,19 @@ def row_for(p: dict, now: datetime, *, fetch_run=latest_run, fetch_tip=main_tip,
         notes.append(f"staging serves {stag[:8]}, main is {tip[:8]} — a deploy in flight, or the day lane is red")
     return {"name": p["name"], "night": (run or {}).get("conclusion") or (run or {}).get("status") or "unreadable",
             "night_age_h": age_h, "night_sha": (run or {}).get("head_sha", "")[:8], "expected": expected,
+            "night_event": (run or {}).get("event"), "schedule_age_h": sched_age_h,
             "main": (tip or "")[:8], "production": (prod or "")[:8], "staging": (stag or "")[:8],
             "red": red, "notes": notes}
 
 
 def render(rows: list[dict]) -> str:
-    lines = ["| project | night | age | swept | main | staging | production | verdict |", "|---|---|---|---|---|---|---|---|"]
+    lines = ["| project | night | age | by | schedule fired | swept | main | staging | production | verdict |", "|---|---|---|---|---|---|---|---|---|---|"]
     for r in rows:
         verdict = "RED — " + "; ".join(r["red"]) if r["red"] else ("ok" + (" — " + "; ".join(r["notes"]) if r["notes"] else ""))
         age = "" if r["night_age_h"] is None else f"{r['night_age_h']}h"
-        lines.append(f"| {r['name']} | {r['night']} | {age} | {r['night_sha']} | {r['main']} | {r['staging'] or '—'} | {r['production'] or '—'} | {verdict} |")
+        by = {"schedule": "cron", "workflow_dispatch": "hand"}.get(r.get("night_event") or "", r.get("night_event") or "")
+        sched = "never" if r.get("schedule_age_h") is None else f"{r['schedule_age_h']}h ago"
+        lines.append(f"| {r['name']} | {r['night']} | {age} | {by} | {sched} | {r['night_sha']} | {r['main']} | {r['staging'] or '—'} | {r['production'] or '—'} | {verdict} |")
     return "\n".join(lines)
 
 

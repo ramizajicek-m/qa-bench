@@ -26,8 +26,9 @@ def _row(**kw):
     health = kw.pop("health", {"https://p/health": "a" * 12, "https://s/health": "a" * 12})
     now = kw.pop("now", MON)
     rel = kw.pop("rel", "diverged")
+    sched = kw.pop("sched", lambda repo, wf: _run())          # by default the cron fired tonight
     return report.row_for(P, now, fetch_run=fetch_run, fetch_tip=lambda r, b: tip, fetch_health=lambda u: health.get(u),
-                          fetch_compare=lambda repo, base, head: rel)
+                          fetch_compare=lambda repo, base, head: rel, fetch_scheduled=sched)
 
 
 def test_a_healthy_estate_is_green():
@@ -85,3 +86,19 @@ def test_the_table_carries_every_row_and_the_verdict():
     rows = [_row(), _row(run=lambda repo, wf: _run(conclusion="failure"))]
     text = report.render(rows)
     assert text.count("\n") == 3 and "RED — last night was failure" in text and "| ok" in text
+
+
+def test_a_hand_dispatched_night_does_not_prove_the_schedule():
+    """2026-09-07: three projects had never had a scheduled night; every morning read green off `make night`."""
+    r = _row(sched=lambda repo, wf: None)
+    assert any("NEVER fired" in x for x in r["red"]), r
+
+
+def test_a_schedule_that_stopped_firing_is_red_even_with_a_fresh_hand_run():
+    r = _row(sched=lambda repo, wf: _run(hours_ago=60))
+    assert any("last fired 60.0h ago" in x for x in r["red"]), r
+
+
+def test_the_schedule_is_not_judged_on_an_off_day():
+    r = _row(run=lambda repo, wf: _run(now=SAT), now=SAT, sched=lambda repo, wf: None)
+    assert r["red"] == [], r
