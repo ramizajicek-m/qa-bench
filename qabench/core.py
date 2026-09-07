@@ -197,12 +197,41 @@ class Session:
     cookies: list[dict]
     csrf: str
     base_url: str
+    #: The bearer token a `login.bearer` login answered; "" for a cookie session.
+    bearer: str = ""
 
     def client(self, **kw) -> httpx.Client:
         jar = {c["name"]: c["value"] for c in self.cookies}
         headers = {"X-CSRF-Token": self.csrf} if self.csrf else {}
+        if self.bearer:
+            headers["Authorization"] = f"Bearer {self.bearer}"
         return httpx.Client(base_url=self.base_url, cookies=jar, follow_redirects=False,
                             headers=headers, timeout=kw.pop("timeout", 30), **kw)
+
+    def browser_headers(self, cfg: Bench) -> dict[str, str]:
+        """What the page stages install on the browser context: the bearer, and
+        only when the manifest says the browser signs in with it (`header`).
+        Under `cookie` the app's own script mints its token from the planted
+        cookie, and a context header would override the fetches it makes."""
+        if self.bearer and cfg.login.bearer_browser == "header":
+            return {"Authorization": f"Bearer {self.bearer}"}
+        return {}
+
+
+def bearer_token(cfg: Bench, r: httpx.Response) -> str:
+    """The token under `login.bearer` (dotted path) in the response body, or ""."""
+    key = cfg.login.bearer
+    if not key:
+        return ""
+    try:
+        node = r.json()
+    except ValueError:
+        return ""
+    for part in key.split("."):
+        if not isinstance(node, dict):
+            return ""
+        node = node.get(part)
+    return node.strip() if isinstance(node, str) else ""
 
 
 def post_login(cfg: Bench, email: str, password: str) -> httpx.Response:
@@ -250,9 +279,16 @@ def login_accepted(cfg: Bench, r: httpx.Response) -> bool:
     200 with no session (ana-log's `{"mfaRequired": true}`), and a form login's
     302 says only where it went. When the manifest names no cookie the status
     is all there is — `expect` for json, a redirect for form.
+
+    With `login.bearer` the TOKEN is part of the verdict too: ana-log answers
+    the refresh cookie AND `accessToken`, and a session with the cookie alone
+    reads every page as signed out (2026-09-07). Both must be present where
+    both are declared.
     """
     L = cfg.login
     if L.kind == "json" and r.status_code != L.expect:
+        return False
+    if L.bearer and not bearer_token(cfg, r):
         return False
     primary = L.cookies[0] if L.cookies else None
     if primary:
@@ -282,7 +318,7 @@ def _cached_session(cfg: Bench, role: str) -> Session | None:
         return None
     if d.get("origin") != cfg.origin or time.time() - d.get("at", 0) > cfg.login.session_ttl_s:
         return None
-    return Session(role, d["email"], d["cookies"], d.get("csrf", ""), cfg.origin)
+    return Session(role, d["email"], d["cookies"], d.get("csrf", ""), cfg.origin, d.get("bearer", ""))
 
 
 def forget_session(cfg: Bench, role: str) -> None:
@@ -331,15 +367,22 @@ def login(cfg: Bench, role: str, *, fresh: bool = False) -> Session:
     if not login_accepted(cfg, r):
         raise SystemExit(f"login as {role} ({email}) failed: {r.status_code} {redact(r.text[:160])}")
     jar = {name: r.cookies.get(name, "") for name in L.cookies}
+    # Plant each cookie at the PATH the server set it on. ana-log scopes
+    # `analog_refresh` to /api and rotates it on every refresh; a copy planted at
+    # "/" would sit beside the rotated one, the browser sends both, and the
+    # server reads the revoked one (2026-09-07).
+    paths = {c.name: c.path for c in r.cookies.jar if c.path}
     host = urlparse(cfg.origin).hostname or ""
     secure = cfg.origin.startswith("https://")
-    cookies = [{"name": n, "value": v, "domain": host, "path": "/", "secure": secure}
+    cookies = [{"name": n, "value": v, "domain": host, "path": paths.get(n) or "/", "secure": secure}
                for n, v in jar.items() if v]
     csrf = jar.get(L.csrf_cookie, "") if L.csrf_cookie else ""
-    sess = Session(role, email, cookies, csrf, cfg.origin)
+    bearer = bearer_token(cfg, r)
+    sess = Session(role, email, cookies, csrf, cfg.origin, bearer)
     sp = _session_path(cfg, role)
     sp.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    sp.write_text(json.dumps({"origin": cfg.origin, "email": email, "cookies": cookies, "csrf": csrf, "at": time.time()}))
+    sp.write_text(json.dumps({"origin": cfg.origin, "email": email, "cookies": cookies, "csrf": csrf,
+                              "bearer": bearer, "at": time.time()}))
     sp.chmod(0o600)
     return sess
 

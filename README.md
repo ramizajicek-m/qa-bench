@@ -16,7 +16,7 @@ Exit codes everywhere: `0` proven · `1` failed · `3` nothing failed but someth
 ## Install
 
 ```
-pip install "git+https://github.com/ramizajicek-m/qa-bench@v0.1.12"
+pip install "git+https://github.com/ramizajicek-m/qa-bench@v0.1.13"
 python -m playwright install --with-deps chromium
 ```
 
@@ -24,7 +24,7 @@ python -m playwright install --with-deps chromium
 
 ```yaml
 bench:
-  version: 0.1.12                        # asserted against the installed kit
+  version: 0.1.13                        # asserted against the installed kit
   origin_env: QA_BASE_URL                # the staging URL; production hosts are refused
   health: /health                        # must return JSON with `commit`
   roles: [owner, staff]
@@ -34,7 +34,7 @@ bench:
     keychain_service: "myapp-qa-{role}"  # laptop fallback, optional
   login: { path: /login, fields: {email: email, password: password}, cookies: [session, csrf_token], csrf_cookie: csrf_token, csrf_field: _csrf }   # csrf_field only when the form is CSRF-protected
   # an app that signs in with a JSON POST instead of a form (ana-log):
-  # login: { kind: json, path: /api/auth/login, body: {email: email, password: password}, expect: 200, page: /login, cookies: [analog_refresh] }
+  # login: { kind: json, path: /api/auth/login, body: {email: email, password: password}, expect: 200, page: /login, cookies: [analog_refresh], bearer: accessToken, bearer_browser: cookie }
   viewports: [[1440, 900], [390, 844]]
   pages: { include_prefixes: ["/admin"], exclude_prefixes: ["/admin/api/"], sideways_allow: { "/admin/audit": "wide table; fix owed" } }   # known phone-width offenders, a ratchet
   api:   { include_prefixes: ["/api/"], exclude_paths: ["/api/stream"], portal_roles: [customer], portal_prefixes: ["/api/portal"] }
@@ -58,8 +58,12 @@ bench:
 | `page` | the sign-in page a signed-out browser lands on — default `path` | required in practice: `path` is an endpoint the browser never lands on, so without it a lost session reads as the route |
 | `cookies` | the cookies a login must set; the first is the session | same |
 | `csrf_cookie` / `csrf_field` | the pair a protected form demands back | refused — there is no form to fetch a token from |
+| `bearer` | refused | the key (dotted for nesting) under which the login answers a bearer token, e.g. `accessToken`; every httpx request the stages make then carries `Authorization: Bearer …`, and a 200 without the token is not a login |
+| `bearer_browser` | — | with `bearer`, required: `header` installs the token on the browser context for every navigation and fetch (a server that gates pages by bearer); `cookie` installs nothing — the app's own script mints its token from the planted cookie (ana-log's SPA calls `/api/auth/refresh` on load) |
 
-Both kinds prove the same thing and are judged by one rule (`core.login_accepted`): the first named cookie was set. A status alone is not a login — a JSON endpoint answers 200 with no session when it wants a second factor — and the smoke stage's "a wrong password is refused" uses the same rule in the other direction. The cookies the POST set are planted in the browser context the page stages drive, whichever kind set them.
+Both kinds prove the same thing and are judged by one rule (`core.login_accepted`): the first named cookie was set, and with `bearer` the token was answered too. A status alone is not a login — a JSON endpoint answers 200 with no session when it wants a second factor — and the smoke stage's "a wrong password is refused" uses the same rule in the other direction. The cookies the POST set are planted in the browser context the page stages drive, whichever kind set them, each at the path the server scoped it to (ana-log's refresh cookie lives under `/api` and is rotated on every refresh; a copy at `/` would sit beside the rotated one and the server would read the revoked one).
+
+`bearer_browser` is not defaulted because the two modes are not interchangeable: in Chromium a context extra header OVERRIDES the same header the page's own `fetch` sets (measured 2026-09-07), so `header` on an app that refreshes its own token would clobber every later token with the stale first one. An app whose session outlives its access token (ana-log: 15 minutes) should also set `session_ttl_s` below that lifetime, so a later stage signs in again rather than probing with an expired token.
 
 ## Run
 

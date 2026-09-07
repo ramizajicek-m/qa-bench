@@ -33,6 +33,13 @@ _HITS = {"n": 0}
 
 
 def _role(request: Request) -> str | None:
+    if os.environ.get("FAKE_BEARER") == "1":
+        # ana-log's shape (2026-09-07): the cookie is only a refresh token scoped
+        # to /api; a page or an API call is signed in by `Authorization: Bearer`
+        # alone, and a session that carries the cookie without the token is
+        # signed OUT everywhere.
+        auth = request.headers.get("authorization", "")
+        return auth.removeprefix("Bearer t-") if auth.startswith("Bearer t-") else None
     sess = request.cookies.get("sess") or None
     if sess and os.environ.get("FAKE_SESSION_TTL"):
         # A session that dies after N authenticated requests, whatever the page —
@@ -87,7 +94,10 @@ def login_json(request: Request, body: dict = Body(...)):
     """The ana-log shape (2026-09-07): a JSON body, 200, the session in Set-Cookie.
     FAKE_JSON_MFA=1: a 200 with NO session cookie (ana-log's `{"mfaRequired": true}`)
     — a login the kit must NOT count as signed in. FAKE_JSON_ACCEPTS_ANY=1: any
-    password signs in — the refusal check must go red."""
+    password signs in — the refusal check must go red. FAKE_JSON_NO_TOKEN=1: a
+    200 WITH the cookie and WITHOUT `accessToken` — under `login.bearer` that is
+    not a login either. FAKE_BEARER=1: the cookie is scoped to /api as ana-log's
+    is, and nothing but the bearer signs a request in (see `_role`)."""
     u = USERS.get(str(body.get("email", "")).lower())
     if os.environ.get("FAKE_JSON_ACCEPTS_ANY") == "1" and u is None:
         u = ("", "owner")
@@ -95,9 +105,10 @@ def login_json(request: Request, body: dict = Body(...)):
         return JSONResponse({"detail": "wrong"}, status_code=401)
     if os.environ.get("FAKE_JSON_MFA") == "1":
         return JSONResponse({"mfaRequired": True, "challengeId": "c-1"})
-    resp = JSONResponse({"accessToken": "t-" + u[1], "expiresIn": 900})
+    body_out = {"expiresIn": 900} if os.environ.get("FAKE_JSON_NO_TOKEN") == "1" else {"accessToken": "t-" + u[1], "expiresIn": 900}
+    resp = JSONResponse(body_out)
     _HITS["n"] = 0
-    resp.set_cookie("sess", u[1], path="/")
+    resp.set_cookie("sess", u[1], path="/api" if os.environ.get("FAKE_BEARER") == "1" else "/")
     return resp
 
 

@@ -43,6 +43,22 @@ class Login:
     #: json only: the status a successful login answers. A form login answers
     #: whatever its redirect is, so it is not asserted there.
     expect: int = 200
+    #: json only: the key (dotted for nesting: `data.accessToken`) under which a
+    #: login answers a BEARER TOKEN. ana-log (2026-09-07): the cookie is only a
+    #: refresh token; every API call carries `Authorization: Bearer <accessToken>`
+    #: and a cookie-only session reads every page as signed out. When set, the
+    #: token is part of the verdict (a 200 without it is not a login) and every
+    #: httpx request the stages make carries it.
+    bearer: str | None = None
+    #: With `bearer`, REQUIRED — how the BROWSER signs in for the page stages:
+    #:   header — the token is installed on the browser context and rides on
+    #:            every navigation and fetch (a server that gates pages by bearer);
+    #:   cookie — nothing is installed; the app's own script mints its token from
+    #:            the planted cookie (ana-log's SPA calls /api/auth/refresh on load).
+    #: Not a default: in Chromium a context header OVERRIDES the one the page's
+    #: own fetch sets (measured 2026-09-07), so `header` on an app that refreshes
+    #: its own token would clobber every later token with the stale first one.
+    bearer_browser: str | None = None
     #: The PAGE a signed-out browser is sent to. A form login's path is that
     #: page; a JSON login's path is an endpoint the browser never lands on, so a
     #: lost session would go unrecognised and read as the route. Default: `path`.
@@ -69,6 +85,13 @@ class Login:
         for key in ("email", "password"):
             if key not in self.body:
                 raise SystemExit(f"bench.login.body must map `{key}` to the JSON key the login reads it from")
+        if self.bearer and self.kind != "json":
+            raise SystemExit("bench.login.bearer names a key in a JSON login's response body; a `form` login answers a redirect")
+        if self.bearer and self.bearer_browser not in ("header", "cookie"):
+            raise SystemExit("bench.login.bearer_browser must be `header` (install the token on the browser context) or "
+                             "`cookie` (the app's own script signs in from the planted cookie) — it is not inferred")
+        if self.bearer_browser and not self.bearer:
+            raise SystemExit("bench.login.bearer_browser needs bench.login.bearer — there is no token to install")
 
 
 @dataclass

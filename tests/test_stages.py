@@ -149,6 +149,108 @@ def test_a_json_200_without_the_session_cookie_is_not_a_login(bench_env, server_
     assert "owner signs in" in failed and "200" in failed["owner signs in"], led
 
 
+# ── bearer login (ana-log 2026-09-07: the cookie is a refresh token; the API wants a header) ──
+
+def _bearer_manifest(tmp_path, browser="header"):
+    m = _json_manifest(tmp_path)
+    # `page: /login` as ana-log's block has it: the browser is bounced to the
+    # sign-in PAGE, never to the JSON endpoint, and without it a bounced cell is
+    # measured as the route (the 0.1.12 ledger row)
+    m.write_text(m.read_text().replace("    cookies: [sess]\n", f"    cookies: [sess]\n    page: /login\n    bearer: accessToken\n    bearer_browser: {browser}\n"))
+    return m
+
+
+def test_a_bearer_login_signs_in_and_both_stages_carry_the_token(bench_env, server_factory, tmp_path):
+    """FAKE_BEARER: the fixture signs a request in by `Authorization: Bearer`
+    alone — a cookie-only session bounces every page to /login and every API
+    call to 401. Mutation: drop the header from `Session.client()` and the
+    endpoints stage contradicts every admitted route; drop
+    `set_extra_http_headers` from the page stage and every page cell is a
+    not_run bounce (watched red 2026-09-07)."""
+    server_factory(FAKE_BEARER="1")
+    m = _bearer_manifest(tmp_path)
+    assert cli.main(["stage", "smoke", "--manifest", str(m)]) == 0
+    led = _ledger(bench_env, "smoke")
+    assert led["failed"] == [] and led["not_run"] == [] and led["passed"] == 4
+    assert cli.main(["stage", "pages_by_role", "--manifest", str(m)]) == 0
+    pages = _ledger(bench_env, "pages_by_role")
+    assert pages["not_run"] == [] and pages["failed"] == [], pages
+    assert pages["cells"] == 22
+    assert cli.main(["stage", "endpoints_by_role", "--manifest", str(m)]) == 0
+    api = _ledger(bench_env, "endpoints_by_role")
+    assert api["failed"] == [] and api["probed"] == 6, api
+
+
+def test_a_bearer_session_keeps_the_cookie_at_the_path_the_server_set(bench_env, server_factory, tmp_path):
+    """ana-log scopes `analog_refresh` to /api and rotates it on every refresh;
+    a copy planted at "/" sits beside the rotated one and the server reads the
+    revoked one. The session records the server's path, and the cached copy
+    carries the token so the next stage does not sign in again."""
+    server_factory(FAKE_BEARER="1")
+    m = _bearer_manifest(tmp_path)
+    from qabench import manifest as mf
+    cfg = mf.load(m.parent.parent, manifest=m)
+    sess = core.login(cfg, "owner", fresh=True)
+    assert sess.bearer == "t-owner"
+    assert [(c["name"], c["path"]) for c in sess.cookies] == [("sess", "/api")]
+    again = core.login(cfg, "owner")                 # from the cache
+    assert again.bearer == "t-owner" and again.cookies == sess.cookies
+
+
+def test_a_200_with_the_cookie_but_without_the_token_is_not_a_bearer_login(bench_env, server_factory, tmp_path):
+    """The cookie rule alone would call this signed in — and every API probe
+    after it would be a 401 read as a refusal. Mutation: drop the
+    `bearer_token` clause in `core.login_accepted` and `owner signs in` passes."""
+    server_factory(FAKE_JSON_NO_TOKEN="1")
+    m = _bearer_manifest(tmp_path)
+    assert cli.main(["stage", "smoke", "--manifest", str(m)]) == 1
+    led = _ledger(bench_env, "smoke")
+    failed = {l: d for l, d in led["failed"]}
+    assert "owner signs in" in failed and "200" in failed["owner signs in"], led
+    assert "a wrong password is refused" not in failed, "a refusal is still a refusal under the token rule"
+
+
+def test_a_bearer_login_that_accepts_any_password_is_still_named(bench_env, server_factory, tmp_path):
+    server_factory(FAKE_BEARER="1", FAKE_JSON_ACCEPTS_ANY="1")
+    m = _bearer_manifest(tmp_path)
+    assert cli.main(["stage", "smoke", "--manifest", str(m)]) == 1
+    led = _ledger(bench_env, "smoke")
+    assert [l for l, _ in led["failed"]] == ["a wrong password is refused"], led["failed"]
+
+
+def test_under_bearer_browser_cookie_the_context_gets_no_header(bench_env, server_factory, tmp_path):
+    """`cookie` means the app's own script signs in from the planted cookie; a
+    context header would OVERRIDE the token that script later fetches (Chromium,
+    measured 2026-09-07). The fixture's pages need the header, so with `cookie`
+    every page cell bounces — the proof that nothing was installed."""
+    server_factory(FAKE_BEARER="1")
+    m = _bearer_manifest(tmp_path, browser="cookie")
+    from qabench import manifest as mf
+    cfg = mf.load(m.parent.parent, manifest=m)
+    assert core.login(cfg, "owner", fresh=True).browser_headers(cfg) == {}
+    assert cli.main(["stage", "pages_by_role", "--manifest", str(m)]) == 1
+    led = _ledger(bench_env, "pages_by_role")
+    assert any("the session survived the sweep" in l for l, _ in led["failed"]), led["failed"]
+
+
+def test_bearer_needs_its_browser_mode_and_a_json_login(bench_env, server_factory, tmp_path):
+    server_factory(FAKE_BEARER="1")
+    m = _bearer_manifest(tmp_path)
+    m.write_text(m.read_text().replace("    bearer_browser: header\n", ""))
+    with pytest.raises(SystemExit) as ex:
+        cli.main(["stage", "smoke", "--manifest", str(m)])
+    assert "bearer_browser" in str(ex.value)
+    m.write_text(m.read_text().replace("    bearer_browser: header\n", "    bearer_browser: localStorage\n"))
+    with pytest.raises(SystemExit) as ex:
+        cli.main(["stage", "smoke", "--manifest", str(m)])
+    assert "bearer_browser" in str(ex.value)
+    form = tmp_path / "qa" / "form.yml"
+    form.write_text(open("qa/manifest.yml").read().replace("    cookies: [sess, csrf_token]\n", "    cookies: [sess, csrf_token]\n    bearer: accessToken\n    bearer_browser: header\n"))
+    with pytest.raises(SystemExit) as ex:
+        cli.main(["stage", "smoke", "--manifest", str(form)])
+    assert "bearer" in str(ex.value) and "form" in str(ex.value)
+
+
 def test_a_login_kind_the_kit_does_not_know_is_refused_by_name(bench_env, server_factory, tmp_path):
     server_factory()
     m = _json_manifest(tmp_path)

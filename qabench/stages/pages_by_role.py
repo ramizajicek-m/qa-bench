@@ -162,6 +162,9 @@ def main(cfg: Bench, argv: list[str]) -> int:
                 ctx.set_default_timeout(30_000)
                 ctx.set_default_navigation_timeout(45_000)
                 ctx.add_cookies(sess.cookies)
+                # a bearer session (login.bearer_browser: header) rides on every
+                # navigation and fetch the context makes — measured on Chromium
+                ctx.set_extra_http_headers(sess.browser_headers(cfg))
                 page = ctx.new_page()
                 console: list[str] = []
                 failed: list[str] = []
@@ -198,6 +201,7 @@ def main(cfg: Bench, argv: list[str]) -> int:
                                 sess = core.login(cfg, role, fresh=True)
                                 ctx.clear_cookies()
                                 ctx.add_cookies(sess.cookies)
+                                ctx.set_extra_http_headers(sess.browser_headers(cfg))
                                 print(f"  ({role}: session lost at {tmpl}; signed in again and retrying)", flush=True)
                                 resp = page.goto(cfg.origin + path, wait_until="load")
                                 page.wait_for_timeout(1500)
