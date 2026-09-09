@@ -172,3 +172,13 @@ def test_a_queued_retry_without_current_timestamp_is_unknown():
     result = _row(run=lambda *args: run)
     assert any("retry age unavailable" in item for item in result["red"])
     assert not any("10.0h queued" in item for item in result["red"])
+
+
+def test_an_old_run_retried_today_does_not_report_a_stale_attempt():
+    for status in ("queued", "in_progress", "completed"):
+        run = _run(hours_ago=70)
+        run.update(status=status, conclusion="success" if status == "completed" else None,
+                   run_attempt=2, run_started_at=(MON - timedelta(minutes=5)).isoformat())
+        result = _row(run=lambda *args: run)
+        assert result["red"] == []
+        assert result["night_age_h"] == 0.1

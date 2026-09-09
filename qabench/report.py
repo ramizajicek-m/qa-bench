@@ -120,6 +120,12 @@ def row_for(p: dict, now: datetime, *, fetch_run=latest_run, fetch_tip=main_tip,
     else:
         created = datetime.fromisoformat(run["created_at"].replace("Z", "+00:00"))
         age_h = round((now - created).total_seconds() / 3600, 1)
+        if run.get("run_attempt", 1) > 1:
+            attempt_timestamp = run.get("run_started_at")
+            age_h = (round((now - datetime.fromisoformat(attempt_timestamp.replace("Z", "+00:00"))).total_seconds() / 3600, 1)
+                     if attempt_timestamp else None)
+            if age_h is None:
+                red.append("night retry age unavailable — current attempt has no start timestamp")
         if run.get("status") != "completed":
             queued = run.get("status") in ("queued", "waiting", "requested", "pending")
             deadline = p.get("queue_deadline_h", 0.5) if queued else p.get("run_deadline_h", 3)
@@ -128,7 +134,7 @@ def row_for(p: dict, now: datetime, *, fetch_run=latest_run, fetch_tip=main_tip,
             retry = run.get("run_attempt", 1) > 1
             attempt_start = run.get("run_started_at")
             if retry and not attempt_start:
-                red.append("night retry age unavailable — current attempt has no start timestamp")
+                pass  # Already reported above, for completed retries too.
             else:
                 clock_start = attempt_start if retry or not queued else run["created_at"]
                 runtime_start = datetime.fromisoformat((clock_start or run["created_at"]).replace("Z", "+00:00"))
@@ -137,7 +143,7 @@ def row_for(p: dict, now: datetime, *, fetch_run=latest_run, fetch_tip=main_tip,
                 (red if active_age > deadline else notes).append(message)
         elif run.get("conclusion") != "success":
             red.append(f"last night was {run.get('conclusion')} ({age_h}h ago)")
-        if expected and age_h > p.get("window_h", 30):
+        if expected and age_h is not None and age_h > p.get("window_h", 30):
             red.append(f"no night in {age_h}h — the schedule did not fire")
     tip = fetch_tip(p["repo"], p.get("main", "main"))
     integration_branch = p.get("staging_branch") or p.get("main", "main")
