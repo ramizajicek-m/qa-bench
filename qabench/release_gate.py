@@ -60,6 +60,7 @@ def _time(value: object) -> datetime:
 def check(*, repo: str, sha: str, workflow: str, branch: str,
           required: list[str], events: list[str], run_id: int | None = None,
           attempt: int | None = None, max_age_hours: float = 30,
+          immutable_push_evidence: bool = False,
           fetch=gh_json, now: datetime | None = None) -> dict:
     """Return an auditable verdict or raise; never search for older green runs."""
     if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo):
@@ -74,6 +75,8 @@ def check(*, repo: str, sha: str, workflow: str, branch: str,
         raise Refused("required job names must be unique and events must be explicit")
     if not math.isfinite(max_age_hours) or max_age_hours <= 0:
         raise Refused("evidence age limit must be finite and positive")
+    if immutable_push_evidence and set(events) != {"push"}:
+        raise Refused("immutable evidence is allowed only for push checks; deployed checks must be fresh")
     if run_id is not None and (type(run_id) is not int or run_id < 1):
         raise Refused("run id must be positive")
     if attempt is not None and (type(attempt) is not int or attempt < 1):
@@ -122,7 +125,7 @@ def check(*, repo: str, sha: str, workflow: str, branch: str,
     started = _time(run.get("run_started_at"))
     now = now or datetime.now(timezone.utc)
     age = now - started
-    if age < -timedelta(minutes=5) or age > timedelta(hours=max_age_hours):
+    if age < -timedelta(minutes=5) or (not immutable_push_evidence and age > timedelta(hours=max_age_hours)):
         raise Refused("run evidence is stale or future-dated")
 
     jobs: list[dict] = []
@@ -170,7 +173,7 @@ def check(*, repo: str, sha: str, workflow: str, branch: str,
             # GitHub includes inherited successful jobs in a failed-only rerun
             # (observed Tharros run 34107882560/attempts/2). They are valid
             # same-SHA evidence, but a fresh rerun cannot rejuvenate old proof.
-            if completed < now - timedelta(hours=max_age_hours) or completed > now + timedelta(minutes=5):
+            if (not immutable_push_evidence and completed < now - timedelta(hours=max_age_hours)) or completed > now + timedelta(minutes=5):
                 raise Refused(f"job {name!r} evidence is stale or future-dated")
             accepted.append({"id": job["id"], "name": job["name"], "attempt": job_attempt,
                              "completed_at": job["completed_at"]})
@@ -183,6 +186,7 @@ def check(*, repo: str, sha: str, workflow: str, branch: str,
         raise Refused("a newer eligible run appeared while evidence was read")
     return {"status": "accepted", "repo": repo, "sha": sha, "workflow": workflow,
             "branch": branch, "run_id": run_id, "attempt": current_attempt,
+            "immutable_push_evidence": immutable_push_evidence,
             "required_jobs": accepted, "observed_at": now.isoformat()}
 
 
@@ -195,6 +199,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--run-id", type=int)
     parser.add_argument("--attempt", type=int)
     parser.add_argument("--max-age-hours", type=float, default=30)
+    parser.add_argument("--immutable-push-evidence", action="store_true",
+                        help="Reuse unchanged-SHA push proof without age expiry; never for deployed/night checks")
     args = vars(parser.parse_args(argv))
     args["events"] = args.pop("event")
     try:
