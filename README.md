@@ -73,6 +73,22 @@ python -m qabench stage pages_by_role --roles owner --only /admin
 python -m qabench show
 ```
 
+## Release evidence
+
+`python qabench/release_gate.py` is a stdlib-only reader for deployment workflows. Run it from a checkout of this kit pinned to a full commit, before introducing production credentials. It never deploys or waits for another job. Example:
+
+```sh
+python qabench/release_gate.py --repo owner/project --sha "$CANDIDATE_SHA" \
+  --workflow qa-nightly.yml --branch main --event schedule --event workflow_dispatch \
+  --required staging_is_healthy --required bench --max-age-hours 30
+```
+
+The candidate must already be resolved to a full SHA. Required names are exact displayed job names: enumerate every expected matrix member, such as `browser (phone)` and `browser (desktop)`, rather than a prefix. The caller owns this contract and must include every necessary tier and a staging-target proof job where a workflow supports multiple targets. Existing branch-eligibility checks remain required. Workflows that execute a different checkout from their own GitHub head SHA (Anat's current scheduled bench) need candidate-bound evidence or a matching dispatch contract before using this gate.
+
+The reader selects the latest eligible run for this workflow/SHA/branch/event set, never the latest successful one. Automated callers can bind `--run-id` and `--attempt`; a superseding run or rerun refuses. It reads every page of the current attempt's jobs and requires each prerequisite to have completed successfully. The enclosing nightly may still be dispatching its promotion job, preventing a recursive wait. GitHub can carry successful jobs into a failed-only rerun: these count only when the current attempt's API includes them, they belong to the same run/SHA and their own completion evidence remains fresh. A fresh retry cannot rejuvenate stale successful jobs. The JSON result names the actual job IDs and attempts. Exit codes: 0 accepted, 1 refused, 3 evidence unavailable.
+
+The estate report rejects literal `unknown` build identities, compares staging against `staging_branch` when configured, and prints valid JSON even when all projects are healthy. A queued night has a default 0.5-hour deadline; active execution has a default 3-hour deadline measured from `run_started_at`, so fresh retries do not inherit the original run's age. Projects can set `queue_deadline_h` and `run_deadline_h` separately. These are observation deadlines, not evidence that a cancelled/failed job was repaired; a full release-flow ownership ledger remains separate work.
+
 ## Its own tests
 
 `tests/` boots a two-role FastAPI app and plants one defect per test — a removed guard, a script that dies after render, a 3000px element, a 500, a dead secret — and asserts the stage names it. The kit is not believed until it has gone red for the right reason.

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
@@ -25,6 +26,11 @@ import httpx
 import yaml
 
 DEFAULT_ESTATE = Path(__file__).with_name("estate.yml")
+
+
+def valid_commit(value: object) -> bool:
+    """Health often uses short SHAs; a word such as 'unknown' is no identity."""
+    return isinstance(value, str) and re.fullmatch(r"[0-9a-f]{7,40}", value) is not None
 
 
 def gh_json(path: str) -> dict | list | None:
@@ -42,7 +48,7 @@ def health_commit(url: str) -> str | None:
         if r.status_code != 200:
             return None
         v = r.json().get("commit")
-        return v or None
+        return v if valid_commit(v) else None
     except Exception:  # noqa: BLE001
         return None
 
@@ -106,7 +112,7 @@ def row_for(p: dict, now: datetime, *, fetch_run=latest_run, fetch_tip=main_tip,
         sched_age_h = round((now - datetime.fromisoformat(sched["created_at"].replace("Z", "+00:00"))).total_seconds() / 3600, 1)
     if expected:
         if sched is None:
-            red.append("the schedule has NEVER fired — every night so far was a hand dispatch")
+            red.append("scheduled-run evidence unavailable — no scheduled run readable; a hand dispatch does not prove the schedule")
         elif sched_age_h > p.get("window_h", 30):
             red.append(f"the schedule last fired {sched_age_h}h ago — the nights since were hand dispatches, or none")
     if run is None:
@@ -115,14 +121,38 @@ def row_for(p: dict, now: datetime, *, fetch_run=latest_run, fetch_tip=main_tip,
         created = datetime.fromisoformat(run["created_at"].replace("Z", "+00:00"))
         age_h = round((now - created).total_seconds() / 3600, 1)
         if run.get("status") != "completed":
-            notes.append(f"night still {run.get('status')} ({age_h}h old)")
+            queued = run.get("status") in ("queued", "waiting", "requested", "pending")
+            deadline = p.get("queue_deadline_h", 0.5) if queued else p.get("run_deadline_h", 3)
+            # created_at survives a rerun, including time spent queued. GitHub's
+            # current attempt timestamp is required before judging retry age.
+            retry = run.get("run_attempt", 1) > 1
+            attempt_start = run.get("run_started_at")
+            if retry and not attempt_start:
+                red.append("night retry age unavailable — current attempt has no start timestamp")
+            else:
+                clock_start = attempt_start if retry or not queued else run["created_at"]
+                runtime_start = datetime.fromisoformat((clock_start or run["created_at"]).replace("Z", "+00:00"))
+                active_age = round((now - runtime_start).total_seconds() / 3600, 1)
+                message = f"night still {run.get('status')} ({active_age}h {'queued' if queued else 'running'}; deadline {deadline}h)"
+                (red if active_age > deadline else notes).append(message)
         elif run.get("conclusion") != "success":
             red.append(f"last night was {run.get('conclusion')} ({age_h}h ago)")
         if expected and age_h > p.get("window_h", 30):
             red.append(f"no night in {age_h}h — the schedule did not fire")
     tip = fetch_tip(p["repo"], p.get("main", "main"))
+    integration_branch = p.get("staging_branch") or p.get("main", "main")
+    integration_tip = (tip if integration_branch == p.get("main", "main")
+                       else fetch_tip(p["repo"], integration_branch))
+    if not valid_commit(tip):
+        red.append("could not identify the production branch tip")
+        tip = None
+    if not valid_commit(integration_tip):
+        red.append(f"could not identify the integration branch {integration_branch}")
+        integration_tip = None
     prod = fetch_health(p["production"])
     stag = fetch_health(p["staging"]) if p.get("staging") else None
+    prod = prod if valid_commit(prod) else None
+    stag = stag if valid_commit(stag) else None
     if prod is None:
         red.append("production does not name its commit (unreachable, or no `commit` in /health)")
     elif run and run.get("conclusion") == "success" and not prod.startswith(run["head_sha"][: len(prod)]) and not run["head_sha"].startswith(prod):
@@ -141,12 +171,13 @@ def row_for(p: dict, now: datetime, *, fetch_run=latest_run, fetch_tip=main_tip,
         notes.append(f"production is behind main ({prod[:8]} vs {tip[:8]}) — expected until the next green night")
     if p.get("staging") and stag is None:
         red.append("staging does not name its commit")
-    elif tip and stag and not tip.startswith(stag) and not stag.startswith(tip):
-        notes.append(f"staging serves {stag[:8]}, main is {tip[:8]} — a deploy in flight, or the day lane is red")
+    elif integration_tip and stag and not integration_tip.startswith(stag) and not stag.startswith(integration_tip):
+        notes.append(f"staging serves {stag[:8]}, {integration_branch} is {integration_tip[:8]} — a deploy in flight, or the day lane is red")
     return {"name": p["name"], "night": (run or {}).get("conclusion") or (run or {}).get("status") or "unreadable",
             "night_age_h": age_h, "night_sha": (run or {}).get("head_sha", "")[:8], "expected": expected,
             "night_event": (run or {}).get("event"), "schedule_age_h": sched_age_h,
-            "main": (tip or "")[:8], "production": (prod or "")[:8], "staging": (stag or "")[:8],
+            "main": (tip or "")[:8], "integration_branch": integration_branch, "integration_tip": (integration_tip or "")[:8],
+            "production": (prod or "")[:8], "staging": (stag or "")[:8],
             "red": red, "notes": notes}
 
 
@@ -179,5 +210,5 @@ def run(argv: list[str]) -> int:
     if reds:
         print(f"\n{len(reds)} of {len(rows)} projects RED: " + ", ".join(r["name"] for r in reds), file=sys.stderr)
         return 1
-    print(f"\nall {len(rows)} projects ok")
+    print(f"\nall {len(rows)} projects ok", file=sys.stderr if "--json" in argv else sys.stdout)
     return 0
