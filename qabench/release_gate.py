@@ -75,6 +75,8 @@ def check(*, repo: str, sha: str, workflow: str, branch: str,
         raise Refused("required job names must be unique and events must be explicit")
     if not math.isfinite(max_age_hours) or max_age_hours <= 0:
         raise Refused("evidence age limit must be finite and positive")
+    if type(immutable_push_evidence) is not bool:
+        raise Refused("immutable push evidence must be a boolean")
     if immutable_push_evidence and set(events) != {"push"}:
         raise Refused("immutable evidence is allowed only for push checks; deployed checks must be fresh")
     if run_id is not None and (type(run_id) is not int or run_id < 1):

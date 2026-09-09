@@ -85,6 +85,11 @@ def test_deployed_evidence_cannot_disable_freshness():
         evaluate(immutable_push_evidence=True)
 
 
+def test_text_false_cannot_enable_immutable_evidence():
+    with pytest.raises(Refused, match="must be a boolean"):
+        evaluate(events=["push"], immutable_push_evidence="false")
+
+
 @pytest.mark.parametrize("field,value", [("head_sha", "b" * 40), ("head_branch", "feature/x"),
     ("workflow_id", 99), ("event", "pull_request"), ("repository", {"full_name": "other/repo"})])
 def test_wrong_run_identity_refuses(field, value):
