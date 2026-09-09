@@ -75,6 +75,12 @@ python -m qabench show
 
 ## Release evidence
 
+Push CI for an unchanged full SHA may use `--immutable-push-evidence`: its
+successful required jobs remain valid across a weekend or operational hold.
+Night/deployed checks retain the freshness limit and reject that flag. Both
+still require the newest eligible run and current attempt, so a failed rerun
+cannot fall back to older success.
+
 `python qabench/release_gate.py` is a stdlib-only reader for deployment workflows. Run it from a checkout of this kit pinned to a full commit, before introducing production credentials. It never deploys or waits for another job. Example:
 
 ```sh

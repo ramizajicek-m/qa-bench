@@ -66,6 +66,30 @@ def test_completed_prerequisites_pass_while_parent_is_dispatching():
     assert [j["name"] for j in result["required_jobs"]] == ["unit", "browser"]
 
 
+def test_friday_push_proof_can_accompany_fresh_monday_night():
+    api = API()
+    api.run.update(event="push", run_started_at="2026-09-04T17:00:00Z")
+    for item in api.jobs[:2]:
+        item["completed_at"] = "2026-09-04T17:30:00Z"
+    with pytest.raises(Refused, match="stale"):
+        evaluate(api, events=["push"])
+    assert evaluate(api, events=["push"], immutable_push_evidence=True)["status"] == "accepted"
+    assert evaluate()["status"] == "accepted"  # Fresh deployed proof is still required independently.
+    api.jobs[0]["conclusion"] = "failure"
+    with pytest.raises(Refused, match="unit"):
+        evaluate(api, events=["push"], immutable_push_evidence=True)
+
+
+def test_deployed_evidence_cannot_disable_freshness():
+    with pytest.raises(Refused, match="only for push"):
+        evaluate(immutable_push_evidence=True)
+
+
+def test_text_false_cannot_enable_immutable_evidence():
+    with pytest.raises(Refused, match="must be a boolean"):
+        evaluate(events=["push"], immutable_push_evidence="false")
+
+
 @pytest.mark.parametrize("field,value", [("head_sha", "b" * 40), ("head_branch", "feature/x"),
     ("workflow_id", 99), ("event", "pull_request"), ("repository", {"full_name": "other/repo"})])
 def test_wrong_run_identity_refuses(field, value):
