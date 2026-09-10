@@ -314,8 +314,20 @@ def population(gestures: list[Gesture]) -> list[Gesture]:
     `unknown` is IN the population on purpose. Excluding it would make the
     number look better every time the classifier got worse, which is the
     degenerate direction — the count would fall for the wrong reason.
+
+    UNIQUE BY ID, and that is not cosmetic. The id IS the control's key, so two
+    rows sharing one are the same control (the same form rendered twice in a
+    template). While this returned duplicates, a generator counting a list and a
+    consumer counting a set disagreed by exactly the number of repeats — on
+    my8200, 60 against 59 — and that gap is free slack a new undriven control
+    can hide in. It did: a single-control mutation failed to breach the ratchet.
+    One definition, so the two cannot drift.
     """
-    return [g for g in gestures if g.mutates in ("yes", "unknown")]
+    seen: dict[str, Gesture] = {}
+    for g in gestures:
+        if g.mutates in ("yes", "unknown") and g.id not in seen:
+            seen[g.id] = g
+    return list(seen.values())
 
 
 def uncovered(gestures: list[Gesture], covered_ids: set[str]) -> list[Gesture]:

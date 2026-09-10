@@ -233,3 +233,20 @@ def test_classifying_a_large_estate_does_not_take_minutes():
     classify_with_js(gestures, big)
     assert time.monotonic() - started < 20, (
         "classification is rebuilding the shared blob per control again")
+
+
+def test_the_population_is_unique_by_id(tmp_path):
+    """A generator counting a list and a consumer counting a set must agree.
+
+    They did not: my8200's `library_tags.html` renders one form twice, so the
+    register froze a ceiling of 60 while the guard measured 59 — and that gap is
+    exactly the room a new undriven control needs to slip through. A mutation
+    adding one did not breach the ratchet. The id IS the key; two rows sharing
+    one are the same control.
+    """
+    write(tmp_path, "t.html",
+          '<form method="post" action="/x/{{ a }}/go"></form>'
+          '<form method="post" action="/x/{{ b }}/go"></form>')
+    pop = population(lift(tmp_path))
+    assert len(pop) == 1, f"the same control counted {len(pop)} times"
+    assert len(pop) == len({g.id for g in pop}), "list and set disagree"
