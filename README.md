@@ -97,4 +97,6 @@ The estate report rejects literal `unknown` build identities, compares staging a
 
 ## Its own tests
 
+Local, inactive acceptance-contract, JUnit, ready-work and escaped-defect tools are documented in [the acceptance draft](docs/acceptance.md). Their new tests are written but not executed; they do not change the current nightly or promotion path.
+
 `tests/` boots a two-role FastAPI app and plants one defect per test — a removed guard, a script that dies after render, a 3000px element, a 500, a dead secret — and asserts the stage names it. The kit is not believed until it has gone red for the right reason.

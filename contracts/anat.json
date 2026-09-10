@@ -1,0 +1,251 @@
+{
+  "version": 1,
+  "project": "anat",
+  "repo": "anat-bforb/anat-agent",
+  "requirement_source": "Frozen defect-driven audit, 8 September 18:25 through 9 September 18:25 Israel, recorded in docs/acceptance.md; original ticket text governs.",
+  "draft": true,
+  "activation": "none; local source only; no CI or manifest consumer installed",
+  "scenarios": [
+    {
+      "id": "A01",
+      "checks": [
+        "C9",
+        "C10"
+      ],
+      "requirement": "Approval #647: all four controls honor send, suppress and cancel.",
+      "root_cause": "Only shared handlers/helpers were exercised; real callers and recipient configuration were absent.",
+      "sibling_scope": "Discover Approve, inline status, Convert and Create-from-Estimate callers; cross deposit/configuration/duplicate/provider-failure states.",
+      "expected_outcome": "Assert approval/project/invoice state and intended recipient sink effects; cancel changes nothing.",
+      "tests": [],
+      "candidate_test_files": [
+        "tests/e2e/test_approval_entry_points.py"
+      ],
+      "mapping_status": "pending actual normalized report IDs; file presence is not executed coverage",
+      "negative_control": "Restore the historical failure mechanism in disposable owned source, then introduce one held-out sibling variation; record changed-source and intended-assertion evidence.",
+      "planned_lanes": [
+        "bounded affected day tests",
+        "comprehensive merged candidate"
+      ],
+      "execution_status": "not_run_in_local_implementation_phase"
+    },
+    {
+      "id": "A02",
+      "checks": [
+        "C2",
+        "C11",
+        "C12"
+      ],
+      "requirement": "Costing #648: entered components persist and reopened totals reflect supported overrides.",
+      "root_cause": "Arithmetic helpers passed while form/API/storage fields were disconnected.",
+      "sibling_scope": "Discover create/edit and summary readers; independently vary price and cost overrides and start a second order.",
+      "expected_outcome": "Compare stored and reopened inputs, independent 1428.57 example and achieved margin; no stale override.",
+      "tests": [],
+      "candidate_test_files": [
+        "tests/e2e/test_change_order_costing_roundtrip.py"
+      ],
+      "mapping_status": "pending actual normalized report IDs; file presence is not executed coverage",
+      "negative_control": "Restore the historical failure mechanism in disposable owned source, then introduce one held-out sibling variation; record changed-source and intended-assertion evidence.",
+      "planned_lanes": [
+        "bounded affected day tests",
+        "comprehensive merged candidate"
+      ],
+      "execution_status": "not_run_in_local_implementation_phase"
+    },
+    {
+      "id": "A03",
+      "checks": [
+        "C2",
+        "C6",
+        "C10"
+      ],
+      "requirement": "Advisory fixed-plan drift #649: warn without rewriting milestones or preventing save/send.",
+      "root_cause": "Banner helper was tested without the real total-changing form and persisted reload.",
+      "sibling_scope": "Both fixed v1/v2 plans; deposit once; zero/zero, positive/zero, cent boundary, no-plan and open-progress; discover all total writers.",
+      "expected_outcome": "Actual price 8000 to 7500 shows both totals and 500; save/reopen retains plan, undo clears notice; send remains permitted.",
+      "tests": [],
+      "candidate_test_files": [
+        "tests/e2e/test_payment_plan_drift_roundtrip.py"
+      ],
+      "mapping_status": "partial local observation; complete scenario and protected candidate lane unqualified; executable tests mapping remains empty",
+      "negative_control": "Restore the historical failure mechanism in disposable owned source, then introduce one held-out sibling variation; record changed-source and intended-assertion evidence.",
+      "planned_lanes": [
+        "bounded affected day tests",
+        "comprehensive merged candidate"
+      ],
+      "execution_status": "bounded_healthy_and_mechanism_controls_observed_2026-09-10",
+      "observed_test_ids": [
+        "tests.e2e.test_payment_plan_drift_roundtrip::test_real_price_edit_preserves_plan_and_shows_advisory_after_reload[v1-phone]",
+        "tests.e2e.test_payment_plan_drift_roundtrip::test_real_price_edit_preserves_plan_and_shows_advisory_after_reload[v1-desktop]",
+        "tests.e2e.test_payment_plan_drift_roundtrip::test_real_price_edit_preserves_plan_and_shows_advisory_after_reload[v2-phone]",
+        "tests.e2e.test_payment_plan_drift_roundtrip::test_real_price_edit_preserves_plan_and_shows_advisory_after_reload[v2-desktop]"
+      ],
+      "local_evidence": "/Users/ramizajicek/Documents/testing-coverage-audit-2026-09-09/qualification-2026-09-10/anat-restored-green"
+    },
+    {
+      "id": "A04",
+      "checks": [
+        "C4",
+        "C6",
+        "C11",
+        "C12"
+      ],
+      "requirement": "Discount #650: correct financial transaction, reason, audit and rollback.",
+      "root_cause": "Mocked storage missed the deployed CHECK constraint and partial transactions.",
+      "sibling_scope": "Project and Collections entry points, stale repeat decision, linked/standalone/QBO policy distinctions.",
+      "expected_outcome": "Read balance, milestone and audit actor/reason; invalid or mid-transaction failure leaves every affected row unchanged.",
+      "tests": [],
+      "candidate_test_files": [
+        "tests/integration/test_discount_transaction.py"
+      ],
+      "mapping_status": "pending actual normalized report IDs; file presence is not executed coverage",
+      "negative_control": "Restore the historical failure mechanism in disposable owned source, then introduce one held-out sibling variation; record changed-source and intended-assertion evidence.",
+      "planned_lanes": [
+        "bounded affected day tests",
+        "comprehensive merged candidate"
+      ],
+      "execution_status": "not_run_in_local_implementation_phase"
+    },
+    {
+      "id": "A05",
+      "checks": [
+        "C11",
+        "C12"
+      ],
+      "requirement": "Supplier #661: company-only contact saves with address and survives editing.",
+      "root_cause": "Recording fake did not enforce NOT NULL or exercise the separate channel writer.",
+      "sibling_scope": "Company-only and named person; create/edit/import and other contact kinds; omitted versus explicit blank values.",
+      "expected_outcome": "Real backend fallback uses company only when person absent; company/address survive reload and channel edit.",
+      "tests": [],
+      "candidate_test_files": [
+        "tests/e2e/test_supplier_contact_roundtrip.py"
+      ],
+      "mapping_status": "partial local observation; complete scenario and protected candidate lane unqualified; executable tests mapping remains empty",
+      "negative_control": "Restore the historical failure mechanism in disposable owned source, then introduce one held-out sibling variation; record changed-source and intended-assertion evidence.",
+      "planned_lanes": [
+        "bounded affected day tests",
+        "comprehensive merged candidate"
+      ],
+      "execution_status": "bounded_healthy_and_mechanism_controls_observed_2026-09-10",
+      "observed_test_ids": [
+        "tests.e2e.test_supplier_contact_roundtrip::test_supplier_create_reopen_and_phone_edit_preserve_identity_and_address[phone-company-only]",
+        "tests.e2e.test_supplier_contact_roundtrip::test_supplier_create_reopen_and_phone_edit_preserve_identity_and_address[phone-named-person]",
+        "tests.e2e.test_supplier_contact_roundtrip::test_supplier_create_reopen_and_phone_edit_preserve_identity_and_address[desktop-company-only]",
+        "tests.e2e.test_supplier_contact_roundtrip::test_supplier_create_reopen_and_phone_edit_preserve_identity_and_address[desktop-named-person]"
+      ],
+      "local_evidence": "/Users/ramizajicek/Documents/testing-coverage-audit-2026-09-09/qualification-2026-09-10/anat-restored-green"
+    },
+    {
+      "id": "A06",
+      "checks": [
+        "C2",
+        "C10"
+      ],
+      "requirement": "Identity/races #629/#634/#494: selected record stays selected.",
+      "root_cause": "Generic success/tab checks did not discriminate a different valid ID or late loader.",
+      "sibling_scope": "Enumerate deep links and asynchronous selection dialogs; A/B distinct, A returns/fails after B, dialog closed mid-load.",
+      "expected_outcome": "B remains visible; failed/foreign load cannot leave active Send controls; late A cannot reopen/change dialog.",
+      "tests": [],
+      "candidate_test_files": [],
+      "mapping_status": "pending actual normalized report IDs; file presence is not executed coverage",
+      "negative_control": "Restore the historical failure mechanism in disposable owned source, then introduce one held-out sibling variation; record changed-source and intended-assertion evidence.",
+      "planned_lanes": [
+        "bounded affected day tests",
+        "comprehensive merged candidate"
+      ],
+      "execution_status": "not_run_in_local_implementation_phase"
+    },
+    {
+      "id": "A07",
+      "checks": [
+        "C2",
+        "C9"
+      ],
+      "requirement": "History/recipients #644/#645/#663/#520: preserve each event and intended message.",
+      "root_cause": "Body-only checks missed missing send, overwritten history and maintenance operations bypassing notification.",
+      "sibling_scope": "All notifying operations, intended participant types together, suppress/provider failure and repeated sends.",
+      "expected_outcome": "Distinct timestamps/actors and correct sender, recipient, escaped content, attachment and resolving record link at controlled transport.",
+      "tests": [],
+      "candidate_test_files": [],
+      "mapping_status": "pending actual normalized report IDs; file presence is not executed coverage",
+      "negative_control": "Restore the historical failure mechanism in disposable owned source, then introduce one held-out sibling variation; record changed-source and intended-assertion evidence.",
+      "planned_lanes": [
+        "bounded affected day tests",
+        "comprehensive merged candidate"
+      ],
+      "execution_status": "not_run_in_local_implementation_phase"
+    },
+    {
+      "id": "A08",
+      "checks": [
+        "C10",
+        "C12"
+      ],
+      "requirement": "Tenant writers #507/#628: own actions work, foreign data stays inaccessible.",
+      "root_cause": "Fixtures had one organization or unauthorized users on both legs.",
+      "sibling_scope": "Mechanically discover HR/PTO/payroll/internal-hours readers and writers; two enabled tenants and authorized principals.",
+      "expected_outcome": "Own succeeds, foreign read exposes no data and foreign write changes no affected rows.",
+      "tests": [],
+      "candidate_test_files": [],
+      "mapping_status": "pending actual normalized report IDs; file presence is not executed coverage",
+      "negative_control": "Restore the historical failure mechanism in disposable owned source, then introduce one held-out sibling variation; record changed-source and intended-assertion evidence.",
+      "planned_lanes": [
+        "bounded affected day tests",
+        "comprehensive merged candidate"
+      ],
+      "execution_status": "not_run_in_local_implementation_phase"
+    },
+    {
+      "id": "A09",
+      "checks": [
+        "C4",
+        "C5",
+        "C11"
+      ],
+      "requirement": "Alternate input/provenance #500/#501: import/API validation and unresolved money provenance agree.",
+      "root_cause": "Only one writer and degenerate/default-valued fixtures were checked.",
+      "sibling_scope": "Actual import artifacts and API writers; discover fields carrying inferred defaults.",
+      "expected_outcome": "Invalid input yields no partial import; unrelated save retains unresolved provenance, explicit supported resolution changes it.",
+      "tests": [],
+      "candidate_test_files": [],
+      "mapping_status": "pending actual normalized report IDs; file presence is not executed coverage",
+      "negative_control": "Restore the historical failure mechanism in disposable owned source, then introduce one held-out sibling variation; record changed-source and intended-assertion evidence.",
+      "planned_lanes": [
+        "bounded affected day tests",
+        "comprehensive merged candidate"
+      ],
+      "execution_status": "not_run_in_local_implementation_phase"
+    },
+    {
+      "id": "FRESH",
+      "checks": [
+        "C1",
+        "C2",
+        "C4",
+        "C6",
+        "C10",
+        "C11",
+        "C12"
+      ],
+      "requirement": "Estimate to project/invoice/collection; received communications; supplier/HR; tenant and company settings.",
+      "root_cause": "Historical incidents do not enumerate unseen business states or all current entry points.",
+      "sibling_scope": "Derive routes/controls/writers/roles/artifacts independently from product and schema; account for each member and meaningful state/configuration combinations.",
+      "expected_outcome": "Valid and refusal legs, cancel/reopen, second record/tenant, duplicate/stale/partial failure, phone/desktop; every excluded member has a stated reason.",
+      "tests": [],
+      "mapping_status": "population enumeration and executable mappings pending"
+    },
+    {
+      "id": "DELIVERY",
+      "checks": [
+        "C7",
+        "C8",
+        "C12"
+      ],
+      "requirement": "Fast staging and comprehensive promotion with no ready work silently stranded.",
+      "root_cause": "Correct tests were omitted, skipped, run on another candidate, or green work never integrated.",
+      "sibling_scope": "All deploy triggers and required matrix members; local/remote work, runner queue/run deadlines and independent observer.",
+      "expected_outcome": "Exact merged candidate, target, current attempt and fresh deployed proof; ready owner/deadline; missing evidence cannot authorize production.",
+      "tests": [],
+      "mapping_status": "Existing release-gate implementation is separate; this full contract is not yet qualified"
+    }
+  ]
+}

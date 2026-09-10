@@ -40,7 +40,8 @@ def test_smoke_refuses_a_build_other_than_the_one_asked_about(bench_env, server_
     monkeypatch.setenv("QA_EXPECT_SHA", "deadbeef0000")
     assert cli.main(["stage", "smoke"]) == 1
     led = _ledger(bench_env, "smoke")
-    assert any("SHA this run was asked about" in label for label, _ in led["failed"])
+    from qabench.stages.smoke import RUNNING_THE_ASKED_CODE
+    assert any(RUNNING_THE_ASKED_CODE == label for label, _ in led["failed"])
 
 
 def test_smoke_signs_in_through_a_csrf_protected_form(bench_env, server_factory, tmp_path, monkeypatch):

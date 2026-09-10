@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "project": "IGA",
+  "repo": "iga-it/iga",
+  "requirement_source": "Frozen defect-driven audit, 8 September 18:25 through 9 September 18:25 Israel, recorded in docs/acceptance.md; original ticket text governs.",
+  "draft": true,
+  "activation": "none; local source only; no CI or manifest consumer installed",
+  "scenarios": [
+    {
+      "id": "I01",
+      "checks": [
+        "C7",
+        "C8"
+      ],
+      "requirement": "Operational backup observer must survive writer failure and detect silence.",
+      "root_cause": "Observer shared writer dependency and could vanish with the failed job.",
+      "sibling_scope": "Missing dependency, empty/stale/fresh bucket, transport failure and both jobs never starting; independent observer host.",
+      "expected_outcome": "Reader still distinguishes stale/missing from unavailable; separate deadline observation catches never-started jobs.",
+      "tests": [],
+      "candidate_test_files": [
+        "tests/test_backup_observer_independence.py",
+        "tests/test_bucket_freshness.py"
+      ],
+      "mapping_status": "pending actual normalized report IDs; file presence is not executed coverage",
+      "negative_control": "Restore the historical failure mechanism in disposable owned source, then introduce one held-out sibling variation; record changed-source and intended-assertion evidence.",
+      "planned_lanes": [
+        "bounded affected day tests",
+        "comprehensive merged candidate"
+      ],
+      "execution_status": "not_run_in_local_implementation_phase"
+    },
+    {
+      "id": "FRESH",
+      "checks": [
+        "C1",
+        "C2",
+        "C4",
+        "C6",
+        "C10",
+        "C11",
+        "C12"
+      ],
+      "requirement": "Allocation/certificate to stored document and QR verification; ownership/duplicates; restore and independent observation.",
+      "root_cause": "Historical incidents do not enumerate unseen business states or all current entry points.",
+      "sibling_scope": "Derive routes/controls/writers/roles/artifacts independently from product and schema; account for each member and meaningful state/configuration combinations.",
+      "expected_outcome": "Valid and refusal legs, cancel/reopen, second record/tenant, duplicate/stale/partial failure, phone/desktop; every excluded member has a stated reason.",
+      "tests": [],
+      "mapping_status": "population enumeration and executable mappings pending"
+    },
+    {
+      "id": "DELIVERY",
+      "checks": [
+        "C7",
+        "C8",
+        "C12"
+      ],
+      "requirement": "Fast staging and comprehensive promotion with no ready work silently stranded.",
+      "root_cause": "Correct tests were omitted, skipped, run on another candidate, or green work never integrated.",
+      "sibling_scope": "All deploy triggers and required matrix members; local/remote work, runner queue/run deadlines and independent observer.",
+      "expected_outcome": "Exact merged candidate, target, current attempt and fresh deployed proof; ready owner/deadline; missing evidence cannot authorize production.",
+      "tests": [],
+      "mapping_status": "Existing release-gate implementation is separate; this full contract is not yet qualified"
+    }
+  ]
+}

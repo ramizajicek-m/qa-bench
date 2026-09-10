@@ -1,0 +1,76 @@
+{
+  "version": 1,
+  "project": "my8200",
+  "repo": "my8200/8200-platform",
+  "requirement_source": "Frozen defect-driven audit, 8 September 18:25 through 9 September 18:25 Israel, recorded in docs/acceptance.md; original ticket text governs.",
+  "draft": true,
+  "activation": "none; local source only; no CI or manifest consumer installed",
+  "scenarios": [
+    {
+      "id": "M01",
+      "checks": [
+        "C6",
+        "C10",
+        "C11",
+        "C12"
+      ],
+      "requirement": "Review-found session lifecycle: writers preserve hidden data, identity and timestamps.",
+      "root_cause": "SQLite/helper tests omitted deployed Postgres behavior, actual browser lifecycle and writer population.",
+      "sibling_scope": "Enumerate real session writers; modules shown/hidden, checkbox off with text, late member, wrong cohort, second tenant, duplicate open.",
+      "expected_outcome": "On Postgres and actual form, absent preserves, explicit supported clearing clears, repeated open is idempotent; edit keeps original submission time.",
+      "tests": [],
+      "candidate_test_files": [
+        "tests/pg/test_session_lifecycle.py",
+        "tests/pg/test_session_writer_accounting.py"
+      ],
+      "mapping_status": "partial local observation; complete scenario and protected candidate lane unqualified; executable tests mapping remains empty",
+      "negative_control": "Restore the historical failure mechanism in disposable owned source, then introduce one held-out sibling variation; record changed-source and intended-assertion evidence.",
+      "planned_lanes": [
+        "bounded affected day tests",
+        "comprehensive merged candidate"
+      ],
+      "execution_status": "bounded_healthy_and_mechanism_controls_observed_2026-09-10",
+      "observed_test_ids": [
+        "tests.pg.test_session_lifecycle::test_cohort_and_member_boolean_writers_preserve_identity",
+        "tests.pg.test_session_lifecycle::test_double_open_late_member_and_first_submission_time",
+        "tests.pg.test_session_lifecycle::test_route_hidden_fields_preserve_but_explicit_clearing_clears",
+        "tests.pg.test_session_lifecycle::test_foreign_parent_refused_and_foreign_vocabulary_not_attached",
+        "tests.pg.test_session_lifecycle::test_deletion_removes_own_relations_without_touching_other_session",
+        "tests.pg.test_session_lifecycle::test_sibling_library_writer_checks_both_ends_of_a_term_link"
+      ],
+      "local_evidence": "/Users/ramizajicek/Documents/testing-coverage-audit-2026-09-09/qualification-2026-09-10/my8200-restored-green"
+    },
+    {
+      "id": "FRESH",
+      "checks": [
+        "C1",
+        "C2",
+        "C4",
+        "C6",
+        "C10",
+        "C11",
+        "C12"
+      ],
+      "requirement": "Tenant onboarding/configuration to enabled customer operation; session/cohort lifecycle; owner/operator/staff.",
+      "root_cause": "Historical incidents do not enumerate unseen business states or all current entry points.",
+      "sibling_scope": "Derive routes/controls/writers/roles/artifacts independently from product and schema; account for each member and meaningful state/configuration combinations.",
+      "expected_outcome": "Valid and refusal legs, cancel/reopen, second record/tenant, duplicate/stale/partial failure, phone/desktop; every excluded member has a stated reason.",
+      "tests": [],
+      "mapping_status": "population enumeration and executable mappings pending"
+    },
+    {
+      "id": "DELIVERY",
+      "checks": [
+        "C7",
+        "C8",
+        "C12"
+      ],
+      "requirement": "Fast staging and comprehensive promotion with no ready work silently stranded.",
+      "root_cause": "Correct tests were omitted, skipped, run on another candidate, or green work never integrated.",
+      "sibling_scope": "All deploy triggers and required matrix members; local/remote work, runner queue/run deadlines and independent observer.",
+      "expected_outcome": "Exact merged candidate, target, current attempt and fresh deployed proof; ready owner/deadline; missing evidence cannot authorize production.",
+      "tests": [],
+      "mapping_status": "Existing release-gate implementation is separate; this full contract is not yet qualified"
+    }
+  ]
+}

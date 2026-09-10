@@ -1,0 +1,138 @@
+{
+  "version": 1,
+  "project": "ana-log",
+  "repo": "ana-log-logistics/ana-log",
+  "requirement_source": "Frozen defect-driven audit, 8 September 18:25 through 9 September 18:25 Israel, recorded in docs/acceptance.md; original ticket text governs.",
+  "draft": true,
+  "activation": "none; local source only; no CI or manifest consumer installed",
+  "scenarios": [
+    {
+      "id": "L01",
+      "checks": [
+        "C10",
+        "C12"
+      ],
+      "requirement": "Israel QR: actual camera control decodes and attaches the intended pallet.",
+      "root_cause": "Button presence and hardware denial did not exercise pixels, decoder, submit and persistence.",
+      "sibling_scope": "jsQR through synthetic camera; manual input, denial, invalid code, cancellation, rescan, late permission and second order; physical device separately.",
+      "expected_outcome": "Guard owned IDs before forwarding; real decoder and backend attach one correct pallet, quantities persist and tracks stop.",
+      "tests": [],
+      "candidate_test_files": [
+        "tests/e2e/test_warehouse_acceptance.py"
+      ],
+      "mapping_status": "focused local observation; full scenario/protected candidate lane unqualified; executable mapping remains empty",
+      "negative_control": "Restore the historical failure mechanism in disposable owned source, then introduce one held-out sibling variation; record changed-source and intended-assertion evidence.",
+      "planned_lanes": [
+        "bounded affected day tests",
+        "comprehensive merged candidate"
+      ],
+      "execution_status": "bounded_healthy_and_mechanism_controls_observed_2026-09-10",
+      "observed_test_ids": [
+        "tests.e2e.test_warehouse_acceptance::test_qr_pixels_reach_real_decoder_and_persist_the_correct_pallet[390]",
+        "tests.e2e.test_warehouse_acceptance::test_qr_pixels_reach_real_decoder_and_persist_the_correct_pallet[1440]"
+      ],
+      "local_evidence": "/Users/ramizajicek/Documents/testing-coverage-audit-2026-09-09/qualification-2026-09-10/ANA-LOG-QUALIFICATION.md"
+    },
+    {
+      "id": "L02",
+      "checks": [
+        "C2",
+        "C4",
+        "C6"
+      ],
+      "requirement": "Israel close picking: some actual goods are required; full picking is not required.",
+      "root_cause": "Container existence and cached counts are degenerate substitutes for contents.",
+      "sibling_scope": "Empty/zero/positive package and pallet; stale positive and zero caches; other order holding goods; preview/confirm close and send.",
+      "expected_outcome": "Empty refuses without writes; partially picked succeeds; other order cannot satisfy this order's precondition.",
+      "tests": [],
+      "candidate_test_files": [
+        "tests/integration/test_flow_order_through_picking.py"
+      ],
+      "mapping_status": "focused local observation; full scenario/protected candidate lane unqualified; executable mapping remains empty",
+      "negative_control": "Restore the historical failure mechanism in disposable owned source, then introduce one held-out sibling variation; record changed-source and intended-assertion evidence.",
+      "planned_lanes": [
+        "bounded affected day tests",
+        "comprehensive merged candidate"
+      ],
+      "execution_status": "bounded_healthy_and_mechanism_controls_observed_2026-09-10",
+      "observed_test_ids": [
+        "tests.integration.test_flow_order_through_picking::test_the_four_transitions_run_in_order",
+        "tests.integration.test_flow_order_through_picking::test_a_verb_refuses_an_order_in_the_wrong_state",
+        "tests.integration.test_flow_order_through_picking::test_picking_does_not_deduct_the_shelf",
+        "tests.integration.test_flow_order_through_picking::test_closing_picking_refuses_an_order_with_nothing_picked",
+        "tests.integration.test_flow_order_through_picking::test_empty_containers_cannot_close_or_send[zero-cache-package]",
+        "tests.integration.test_flow_order_through_picking::test_empty_containers_cannot_close_or_send[zero-cache-pallet]",
+        "tests.integration.test_flow_order_through_picking::test_empty_containers_cannot_close_or_send[stale-positive-cache-package]",
+        "tests.integration.test_flow_order_through_picking::test_empty_containers_cannot_close_or_send[stale-positive-cache-pallet]",
+        "tests.integration.test_flow_order_through_picking::test_goods_on_another_order_cannot_satisfy_this_orders_precondition"
+      ],
+      "local_evidence": "/Users/ramizajicek/Documents/testing-coverage-audit-2026-09-09/qualification-2026-09-10/ANA-LOG-QUALIFICATION.md"
+    },
+    {
+      "id": "L03",
+      "checks": [
+        "C10",
+        "C11"
+      ],
+      "requirement": "Israel child Add: surcharge, pallet and package save under visible parent.",
+      "root_cause": "First Add tested order items, leaving other controls, prefill and persistence outside the subject.",
+      "sibling_scope": "Enumerate descriptor-declared child create controls; unequal parent IDs; save once, reopen, cancel/back; phone/desktop.",
+      "expected_outcome": "Exact form/parent label and submitted owned ID; exactly one stored child under A, B unchanged, actual row edit control opens it.",
+      "tests": [],
+      "candidate_test_files": [
+        "tests/e2e/test_warehouse_acceptance.py"
+      ],
+      "mapping_status": "focused local observation; full scenario/protected candidate lane unqualified; executable mapping remains empty",
+      "negative_control": "Restore the historical failure mechanism in disposable owned source, then introduce one held-out sibling variation; record changed-source and intended-assertion evidence.",
+      "planned_lanes": [
+        "bounded affected day tests",
+        "comprehensive merged candidate"
+      ],
+      "execution_status": "bounded_healthy_and_mechanism_controls_observed_2026-09-10",
+      "observed_test_ids": [
+        "tests.e2e.test_warehouse_acceptance::test_each_reported_add_saves_one_child_under_the_visible_parent[390-\\u05ea\\u05d5\\u05e1\\u05e4\\u05d5\\u05ea \\u05de\\u05d7\\u05d9\\u05e8-ordersurcharges-order_surcharges]",
+        "tests.e2e.test_warehouse_acceptance::test_each_reported_add_saves_one_child_under_the_visible_parent[390-\\u05de\\u05e9\\u05d8\\u05d7\\u05d9\\u05dd \\u05dc\\u05d4\\u05d6\\u05de\\u05e0\\u05d4-pallets-pallets_storage]",
+        "tests.e2e.test_warehouse_acceptance::test_each_reported_add_saves_one_child_under_the_visible_parent[390-\\u05d7\\u05d1\\u05d9\\u05dc\\u05d5\\u05ea \\u05dc\\u05d4\\u05d6\\u05de\\u05e0\\u05d4-packages-packages]",
+        "tests.e2e.test_warehouse_acceptance::test_each_reported_add_saves_one_child_under_the_visible_parent[1440-\\u05ea\\u05d5\\u05e1\\u05e4\\u05d5\\u05ea \\u05de\\u05d7\\u05d9\\u05e8-ordersurcharges-order_surcharges]",
+        "tests.e2e.test_warehouse_acceptance::test_each_reported_add_saves_one_child_under_the_visible_parent[1440-\\u05de\\u05e9\\u05d8\\u05d7\\u05d9\\u05dd \\u05dc\\u05d4\\u05d6\\u05de\\u05e0\\u05d4-pallets-pallets_storage]",
+        "tests.e2e.test_warehouse_acceptance::test_each_reported_add_saves_one_child_under_the_visible_parent[1440-\\u05d7\\u05d1\\u05d9\\u05dc\\u05d5\\u05ea \\u05dc\\u05d4\\u05d6\\u05de\\u05e0\\u05d4-packages-packages]",
+        "tests.e2e.test_warehouse_acceptance::test_leaving_each_add_without_save_creates_nothing[\\u05ea\\u05d5\\u05e1\\u05e4\\u05d5\\u05ea \\u05de\\u05d7\\u05d9\\u05e8-ordersurcharges-order_surcharges]",
+        "tests.e2e.test_warehouse_acceptance::test_leaving_each_add_without_save_creates_nothing[\\u05de\\u05e9\\u05d8\\u05d7\\u05d9\\u05dd \\u05dc\\u05d4\\u05d6\\u05de\\u05e0\\u05d4-pallets-pallets_storage]",
+        "tests.e2e.test_warehouse_acceptance::test_leaving_each_add_without_save_creates_nothing[\\u05d7\\u05d1\\u05d9\\u05dc\\u05d5\\u05ea \\u05dc\\u05d4\\u05d6\\u05de\\u05e0\\u05d4-packages-packages]"
+      ],
+      "local_evidence": "/Users/ramizajicek/Documents/testing-coverage-audit-2026-09-09/qualification-2026-09-10/ANA-LOG-QUALIFICATION.md"
+    },
+    {
+      "id": "FRESH",
+      "checks": [
+        "C1",
+        "C2",
+        "C4",
+        "C6",
+        "C10",
+        "C11",
+        "C12"
+      ],
+      "requirement": "Intake to storage, pick, close/send, delivery and billing; inventory across screens, descriptors, permissions and printed labels.",
+      "root_cause": "Historical incidents do not enumerate unseen business states or all current entry points.",
+      "sibling_scope": "Derive routes/controls/writers/roles/artifacts independently from product and schema; account for each member and meaningful state/configuration combinations.",
+      "expected_outcome": "Valid and refusal legs, cancel/reopen, second record/tenant, duplicate/stale/partial failure, phone/desktop; every excluded member has a stated reason.",
+      "tests": [],
+      "mapping_status": "population enumeration and executable mappings pending"
+    },
+    {
+      "id": "DELIVERY",
+      "checks": [
+        "C7",
+        "C8",
+        "C12"
+      ],
+      "requirement": "Fast staging and comprehensive promotion with no ready work silently stranded.",
+      "root_cause": "Correct tests were omitted, skipped, run on another candidate, or green work never integrated.",
+      "sibling_scope": "All deploy triggers and required matrix members; local/remote work, runner queue/run deadlines and independent observer.",
+      "expected_outcome": "Exact merged candidate, target, current attempt and fresh deployed proof; ready owner/deadline; missing evidence cannot authorize production.",
+      "tests": [],
+      "mapping_status": "Existing release-gate implementation is separate; this full contract is not yet qualified"
+    }
+  ]
+}

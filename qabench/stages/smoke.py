@@ -23,6 +23,12 @@ from .. import core
 from ..manifest import Bench
 
 
+# The label is a NAME, not prose typed at the call site. It was typed there,
+# a commit reworded it, and tests/test_stages.py went on asserting the old
+# wording -- so main was red for an hour and the failure said nothing about
+# the cause. A check's identity must not be re-typed in two places.
+RUNNING_THE_ASKED_CODE = "the deployment is running the code this run was asked about"
+
 def main(cfg: Bench, argv: list[str]) -> int:
     L = core.Ledger("smoke", cfg.shots, cfg.origin)
     core.banner(f"smoke on {cfg.origin}")
@@ -46,7 +52,7 @@ def main(cfg: Bench, argv: list[str]) -> int:
         # affect what runs. Three projects hit that on 2026-09-10; see
         # qabench/deployable.py for the incident and what still refuses.
         ok, why = running_this_code(commit, expect)
-        L.check("the deployment is running the code this run was asked about", ok, why)
+        L.check(RUNNING_THE_ASKED_CODE, ok, why)
     L.extra["swept_sha"] = commit
 
     # 2. every role signs in
