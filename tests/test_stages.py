@@ -491,3 +491,43 @@ def test_a_project_that_declares_no_api_does_not_run_the_endpoints_stage(bench_e
     assert not (bench_env / "endpoints_by_role.json").exists(), "the stage ran anyway"
     assert (bench_env / "pages_by_role.json").exists() and (bench_env / "smoke.json").exists()
     assert code == 0, out[-800:]
+
+
+# ── pages_by_role: the wire is not the app ───────────────────────────────────
+#
+# tharros, 2026-09-10: three bench runs on two good commits went red on nothing
+# but net::ERR_NETWORK_CHANGED — five cells, then two — with zero assertion
+# failures across 384 decided probes each time, and each red held a promote
+# carrying a fix for a live money defect. The classifier below is what decides
+# whether a dropped connection is a finding, so it is tested in BOTH directions:
+# a transport error must be forgiven, and a timeout must NOT be.
+
+def test_a_dropped_connection_is_classified_as_transport():
+    from qabench.stages.pages_by_role import _is_transport, _transport_reason
+    for msg in ("Page.goto: net::ERR_NETWORK_CHANGED at https://x/admin",
+                "Page.goto: net::ERR_CONNECTION_RESET at https://x/admin",
+                'Navigation to "https://x/a" is interrupted by another navigation to "https://x/b"'):
+        ex = Exception(msg)
+        assert _is_transport(ex), f"not recognised as transport: {msg}"
+        assert _transport_reason(ex) in msg
+
+
+def test_a_timeout_is_still_a_finding_about_the_page():
+    """THE DIRECTION THAT MATTERS. A page that never finishes loading is a real
+    defect; folding it into the transport set is how a retry starts hiding one.
+
+    Mutation: add "Timeout" to _TRANSPORT_MARKERS — this goes red.
+    """
+    from qabench.stages.pages_by_role import _is_transport
+    assert not _is_transport(Exception(
+        "Page.goto: Timeout 45000ms exceeded at https://x/admin/slow"))
+    assert not _is_transport(Exception("Page.goto: net::ERR_ABORTED at https://x/a")), \
+        "ERR_ABORTED is how a page cancels its own navigation — that is the app, not the wire"
+
+
+def test_an_application_error_is_never_forgiven_as_transport():
+    from qabench.stages.pages_by_role import _is_transport
+    for msg in ("Execution context was destroyed",
+                "TypeError: Cannot read properties of undefined",
+                "Page crashed"):
+        assert not _is_transport(Exception(msg)), f"wrongly forgiven: {msg}"

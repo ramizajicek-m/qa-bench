@@ -105,6 +105,29 @@ def _probe_downloads(cfg: Bench, L: core.Ledger, rows: list[dict], ids: dict, on
     return n
 
 
+# The transport errors Chromium reports when the connection itself failed, as
+# opposed to the SERVER answering badly or the page never settling. Deliberately
+# a closed list of `net::` codes plus Playwright's own interrupted-navigation
+# message: anything not named here — a timeout above all — keeps being a finding,
+# because widening this set is how a retry starts hiding real defects.
+_TRANSPORT_MARKERS = (
+    "net::ERR_NETWORK_CHANGED", "net::ERR_CONNECTION_RESET",
+    "net::ERR_CONNECTION_CLOSED", "net::ERR_CONNECTION_ABORTED",
+    "net::ERR_CONNECTION_REFUSED", "net::ERR_CONNECTION_FAILED",
+    "net::ERR_INTERNET_DISCONNECTED", "net::ERR_NAME_NOT_RESOLVED",
+    "net::ERR_SOCKET_NOT_CONNECTED", "net::ERR_EMPTY_RESPONSE",
+    "is interrupted by another navigation",
+)
+
+
+def _is_transport(ex: Exception) -> bool:
+    return any(m in str(ex) for m in _TRANSPORT_MARKERS)
+
+
+def _transport_reason(ex: Exception) -> str:
+    return next((m for m in _TRANSPORT_MARKERS if m in str(ex)), "connection lost")
+
+
 def main(cfg: Bench, argv: list[str]) -> int:
     from playwright.sync_api import sync_playwright
 
@@ -131,6 +154,7 @@ def main(cfg: Bench, argv: list[str]) -> int:
         except SystemExit as ex:
             L.skip("resolve path ids", str(ex)[:160])
     cells_total = 0
+    transport_lost: list[str] = []
     downloads = [r for r in rows if _is_download(cfg, r["path"])]
     rows = [r for r in rows if not _is_download(cfg, r["path"])]
     if downloads:
@@ -186,8 +210,33 @@ def main(cfg: Bench, argv: list[str]) -> int:
                         resp = page.goto(cfg.origin + path, wait_until="load")
                         page.wait_for_timeout(1500)
                     except Exception as ex:  # noqa: BLE001
-                        L.check(cell, False, f"navigation failed: {type(ex).__name__}: {str(ex)[:120]}")
-                        continue
+                        # A DROPPED CONNECTION IS NOT A FINDING ABOUT THE PAGE —
+                        # the same reasoning as the lost session below, which this
+                        # file already applies. Measured on tharros 2026-09-10:
+                        # three consecutive bench runs on two good commits went red
+                        # on nothing but net::ERR_NETWORK_CHANGED, five cells then
+                        # two, with ZERO assertion failures across 384 decided
+                        # probes each time — and each red held a promote that
+                        # carried a fix for a live money defect. A check that
+                        # cannot tell "the code is wrong" from "the wire moved"
+                        # is not a check.
+                        if not _is_transport(ex):
+                            # A TIMEOUT STAYS A FINDING. A page that never
+                            # finishes loading is a defect, and folding it in
+                            # here would be how this fix starts hiding real ones.
+                            L.check(cell, False, f"navigation failed: {type(ex).__name__}: {str(ex)[:120]}")
+                            continue
+                        try:
+                            page.wait_for_timeout(2000)
+                            resp = page.goto(cfg.origin + path, wait_until="load")
+                            page.wait_for_timeout(1500)
+                        except Exception as ex2:  # noqa: BLE001
+                            transport_lost.append(cell)
+                            L.skip(cell, "the connection dropped twice "
+                                         f"({_transport_reason(ex2)}) — this cell "
+                                         "measured the network and made no claim "
+                                         "about the route")
+                            continue
                     if core.bounced_to_login(cfg, page.url):
                         # A SHORT SESSION IS NOT A FINDING ABOUT THE PAGE. IGA's demo
                         # roles lose their session minutes after login (2026-09-05:
@@ -258,6 +307,20 @@ def main(cfg: Bench, argv: list[str]) -> int:
         L.skip(f"{tmpl} no longer scrolls sideways at {narrow_w}px for any role", "remove it from bench.pages.sideways_allow")
     L.extra["cells"] = cells_total
     L.extra["routes"] = len(rows)
+    L.extra["transport_lost"] = transport_lost
     print(f"  decided {cells_total} cells over {len(rows)} routes × {len(cfg.viewports)} viewports", flush=True)
+    if transport_lost:
+        # SAY IT, and say how much of the surface it cost. A handful of dropped
+        # connections is the wire; a large share means this stage did not
+        # measure the app and its green is worth nothing. The number is printed
+        # rather than judged against a threshold — a threshold here would be a
+        # guess, and the reader can see 2-of-386 and 200-of-386 differently.
+        attempted = cells_total + len(transport_lost)
+        print(f"  ⚠ {len(transport_lost)} of {attempted} cells lost the connection "
+              f"TWICE and decided nothing — host/network, not a finding about the "
+              f"app. If that share is large, treat this stage as DID NOT RUN.",
+              flush=True)
+        print(f"    {', '.join(transport_lost[:8])}"
+              + (" …" if len(transport_lost) > 8 else ""), flush=True)
     L.write()
     return L.exit_code()
