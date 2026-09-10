@@ -131,6 +131,12 @@ class _Lifter(HTMLParser):
         self._form_depth = 0          # >0 while inside any form
         self._mutating_form = 0       # >0 while inside a MUTATING form
         self._counter: dict[str, int] = {}
+        self._in_script = False
+        #: Inline handler source from THIS template. anat wires 907 of its 914
+        #: controls in an inline <script>, so a classifier that reads only
+        #: static/js/ resolves none of them and every control stays `unknown` —
+        #: a population of 900 unknowns is a wall, not a signal.
+        self.scripts: list[str] = []
 
     def _key(self, tag, attrs) -> str:
         sel, how = _stable_selector(tag, attrs)
@@ -144,6 +150,9 @@ class _Lifter(HTMLParser):
         return f"{tag}#{n}?positional"
 
     def handle_starttag(self, tag, attrs):
+        if tag == "script":
+            self._in_script = True
+            return
         if tag == "form":
             self._form_depth += 1
             method = (_attr(attrs, "method") or "GET").upper()
@@ -188,7 +197,13 @@ class _Lifter(HTMLParser):
         return Gesture(template=self.template, kind="button" if tag == "button" else "action",
                        selector=self._key(tag, attrs), mutates=mutates, why=why)
 
+    def handle_data(self, data):
+        if self._in_script:
+            self.scripts.append(data)
+
     def handle_endtag(self, tag):
+        if tag == "script":
+            self._in_script = False
         if tag == "form":
             if self._mutating_form:
                 self._mutating_form -= 1
@@ -196,13 +211,13 @@ class _Lifter(HTMLParser):
                 self._form_depth -= 1
 
 
-def lift_template(path: Path, root: Path) -> list[Gesture]:
-    """Every control in one template."""
+def lift_template(path: Path, root: Path) -> tuple[list[Gesture], str]:
+    """(controls, the template's own inline script source)."""
     rel = str(path.relative_to(root))
     lifter = _Lifter(rel)
     lifter.feed(neutralise_jinja(path.read_text(encoding="utf-8", errors="replace")))
     lifter.close()
-    return lifter.found
+    return lifter.found, "\n".join(lifter.scripts)
 
 
 def lift(template_root: Path, glob: str = "**/*.html") -> list[Gesture]:
@@ -210,8 +225,29 @@ def lift(template_root: Path, glob: str = "**/*.html") -> list[Gesture]:
     root = Path(template_root)
     out: list[Gesture] = []
     for p in sorted(root.glob(glob)):
-        out.extend(lift_template(p, root))
+        found, _ = lift_template(p, root)
+        out.extend(found)
     return sorted(out, key=lambda g: g.id)
+
+
+def lift_with_scripts(template_root: Path, glob: str = "**/*.html"
+                      ) -> tuple[list[Gesture], dict[str, str]]:
+    """Controls, plus each template's own inline script keyed by template.
+
+    Use this over `lift` wherever handlers are written inline: it lets the
+    classifier look in the RIGHT template rather than in one shared blob, so a
+    control named `save` in one page is not resolved by an unrelated `save` in
+    another.
+    """
+    root = Path(template_root)
+    out: list[Gesture] = []
+    scripts: dict[str, str] = {}
+    for p in sorted(root.glob(glob)):
+        found, src = lift_template(p, root)
+        out.extend(found)
+        if src.strip():
+            scripts[str(p.relative_to(root))] = src
+    return sorted(out, key=lambda g: g.id), scripts
 
 
 # --- the JS half -----------------------------------------------------------
@@ -233,13 +269,29 @@ def classify_with_js(gestures: list[Gesture], js_sources: dict[str, str]) -> lis
     this module exists to prevent; an underclaim only leaves a row needing a
     reason.
     """
-    blob = "\n".join(js_sources.values())
+    shared = "\n".join(v for k, v in js_sources.items() if not k.endswith(".html"))
+    # Built ONCE per template, not once per control. The first version
+    # concatenated `shared` (12 MB on anat) for each of 907 gestures and did not
+    # finish in ten minutes — and a checker nobody will wait for is a checker
+    # nobody runs.
+    per_template: dict[str, str] = {}
+
+    def blob_for(template: str) -> str:
+        if template not in per_template:
+            per_template[template] = js_sources.get(template, "") + "\n" + shared
+        return per_template[template]
+
     for g in gestures:
         if g.mutates != "unknown":
             continue
         token = re.search(r"\[(?:data-action|id|name|data-testid)=([^\]]+)\]", g.selector)
         if not token:
             continue
+        # The control's OWN template first, then the shared scripts. Searching
+        # one global blob lets a `save` in an unrelated page resolve a `save`
+        # here — the same substring-collision that makes one surface stand in
+        # for another in the coverage half.
+        blob = blob_for(g.template)
         needle = re.escape(token.group(1))
         # The handler's neighbourhood: from where the control is selected to the
         # end of that statement block. A window is a blunt instrument, so it is

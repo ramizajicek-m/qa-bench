@@ -12,8 +12,8 @@ from pathlib import Path
 import pytest
 
 from qabench.gestures import (Gesture, NOT_DRIVING, classify_with_js,
-                              driven_by_corpus, lift, neutralise_jinja,
-                              population, read_corpus)
+                              driven_by_corpus, lift, lift_with_scripts,
+                              neutralise_jinja, population, read_corpus)
 
 
 def write(tmp_path: Path, name: str, body: str) -> Path:
@@ -171,3 +171,65 @@ def test_a_corpus_that_walked_nothing_is_empty_not_wrong(tmp_path):
 # `test_the_sweep_read_a_real_corpus` refuses a run that lifts fewer than 20
 # controls or reads fewer than 20 corpus files, and says DID NOT RUN rather
 # than reporting a clean repo.
+
+
+# --- inline handlers --------------------------------------------------------
+
+def test_a_handler_in_the_same_template_resolves_the_control(tmp_path):
+    """anat wires 907 of its 914 controls in an inline <script>.
+
+    A classifier reading only static/js/ resolved SEVEN of them, so the first
+    run reported zero undriven mutating controls — false, and false in the
+    reassuring direction.
+    """
+    write(tmp_path, "t.html",
+          '<button id="send">Send</button>'
+          '<script>document.getElementById("send")'
+          '.addEventListener("click", () => fetch("/api/send", {method: "POST"}))</script>')
+    gestures, scripts = lift_with_scripts(tmp_path)
+    assert "t.html" in scripts, "the inline script was not captured"
+    got = classify_with_js(gestures, dict(scripts))
+    assert got[0].mutates == "yes"
+
+
+def test_a_control_is_not_resolved_by_an_unrelated_template(tmp_path):
+    """One page's `save` must not resolve another page's `save`.
+
+    Searching a single global blob is the same substring collision that lets one
+    surface stand in for another in the coverage half.
+    """
+    write(tmp_path, "quiet.html", '<button id="save">Save</button>')
+    write(tmp_path, "loud.html",
+          '<button id="unrelated">x</button>'
+          '<script>document.getElementById("save")'
+          '.addEventListener("click", () => fetch("/api/save", {method:"POST"}))</script>')
+    gestures, scripts = lift_with_scripts(tmp_path)
+    got = {g.template: g for g in classify_with_js(gestures, dict(scripts))}
+    assert got["quiet.html"].mutates == "unknown", (
+        "a handler in loud.html resolved a control in quiet.html")
+
+
+def test_a_script_body_is_not_mistaken_for_a_control(tmp_path):
+    """Script text is data, not markup: nothing inside <script> is a gesture."""
+    write(tmp_path, "t.html",
+          '<script>var s = "<button data-action=ghost>not real</button>";</script>')
+    assert lift(tmp_path) == []
+
+
+def test_classifying_a_large_estate_does_not_take_minutes():
+    """A checker nobody will wait for is a checker nobody runs.
+
+    The first version concatenated the shared script blob once PER CONTROL and
+    did not finish in ten minutes on anat (914 controls, 12 MB of corpus). The
+    blob is now built once per template. This pins the shape rather than a
+    wall-clock number, which would be a fixture about this machine.
+    """
+    import time
+    gestures = [Gesture(template=f"t{i}.html", kind="button",
+                        selector=f"button[id=b{i}]", mutates="unknown")
+                for i in range(400)]
+    big = {"shared.js": "x = 1;\n" * 80_000}
+    started = time.monotonic()
+    classify_with_js(gestures, big)
+    assert time.monotonic() - started < 20, (
+        "classification is rebuilding the shared blob per control again")
