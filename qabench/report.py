@@ -33,12 +33,47 @@ def valid_commit(value: object) -> bool:
     return isinstance(value, str) and re.fullmatch(r"[0-9a-f]{7,40}", value) is not None
 
 
-def gh_json(path: str) -> dict | list | None:
+class _Unreadable:
+    """The read did not happen. NOT an answer about the thing being read.
+
+    This exists because the morning report spent 2026-09-08 and 09-09 telling
+    six projects they were RED because "the schedule has NEVER fired", while
+    every one of those crons had fired — anat's thirteen times. `gh` had no
+    usable auth inside the workflow, every call failed, `gh_json` returned None,
+    and None was indistinguishable from "the API answered, and there are no
+    scheduled runs". A failed read became the strongest negative claim this
+    report can make.
+
+    The cost was not the wrong sentence. It is that a report which says RED for
+    everything every morning cannot be read at all, and inside two days of that
+    noise two real failures went unseen: anat's staging refresh had been dead
+    for three weeks, and five projects' runners were offline for nine hours —
+    with the uptime alerts that watch whether the sites are up among the jobs
+    that never ran.
+
+    Falsy, so every existing `if not d` guard keeps treating it as "nothing came
+    back"; distinguishable, so no verdict is ever derived from it.
+    """
+
+    __slots__ = ()
+
+    def __bool__(self) -> bool:
+        return False
+
+    def __repr__(self) -> str:
+        return "UNREADABLE"
+
+
+#: Returned by a fetch whose call FAILED, as opposed to one that answered empty.
+UNREADABLE = _Unreadable()
+
+
+def gh_json(path: str) -> dict | list | None | _Unreadable:
     try:
         out = subprocess.run(["gh", "api", path], capture_output=True, text=True, check=True, timeout=60).stdout
         return json.loads(out)
     except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired, json.JSONDecodeError):
-        return None
+        return UNREADABLE
 
 
 def health_commit(url: str) -> str | None:
@@ -68,8 +103,10 @@ def night_expected(cron_days: str, now: datetime) -> bool:
     return cron_yesterday in _cron_days(cron_days)
 
 
-def latest_run(repo: str, workflow: str) -> dict | None:
+def latest_run(repo: str, workflow: str) -> dict | None | _Unreadable:
     d = gh_json(f"repos/{repo}/actions/workflows/{workflow}/runs?per_page=1")
+    if d is UNREADABLE:
+        return UNREADABLE
     runs = (d or {}).get("workflow_runs") if isinstance(d, dict) else None
     return runs[0] if runs else None
 
@@ -81,6 +118,8 @@ def latest_scheduled_run(repo: str, workflow: str) -> dict | None:
     hand runs, and the ones that did fire fired 4.5 h late (a starved
     account is queued last)."""
     d = gh_json(f"repos/{repo}/actions/workflows/{workflow}/runs?event=schedule&per_page=1")
+    if d is UNREADABLE:
+        return UNREADABLE
     runs = (d or {}).get("workflow_runs") if isinstance(d, dict) else None
     return runs[0] if runs else None
 
@@ -108,15 +147,24 @@ def row_for(p: dict, now: datetime, *, fetch_run=latest_run, fetch_tip=main_tip,
     # hand run cannot stand in for it.
     sched = fetch_scheduled(p["repo"], p["night_workflow"])
     sched_age_h = None
-    if sched is not None:
+    if sched is not None and sched is not UNREADABLE:
         sched_age_h = round((now - datetime.fromisoformat(sched["created_at"].replace("Z", "+00:00"))).total_seconds() / 3600, 1)
     if expected:
-        if sched is None:
+        # A READ THAT FAILED IS NOT EVIDENCE ABOUT THE CRON. Still red — a
+        # morning nobody can see is not a morning that is fine — but the
+        # sentence must name the INSTRUMENT rather than accuse the schedule, so
+        # that one broken credential cannot read as six broken projects. That is
+        # exactly what it read as on 2026-09-08 and 09-09.
+        if sched is UNREADABLE:
+            red.append("could not read the schedule — gh failed here; this says NOTHING about whether the cron fired")
+        elif sched is None:
             red.append("scheduled-run evidence unavailable — no scheduled run readable; a hand dispatch does not prove the schedule")
         elif sched_age_h > p.get("window_h", 30):
             red.append(f"the schedule last fired {sched_age_h}h ago — the nights since were hand dispatches, or none")
-    if run is None:
-        red.append("could not read the night workflow's runs" if expected else "no night run readable")
+    if run is UNREADABLE:
+        red.append("could not read the night workflow's runs — gh failed here")
+    elif run is None:
+        red.append("the night workflow has no runs at all" if expected else "no night run readable")
     else:
         created = datetime.fromisoformat(run["created_at"].replace("Z", "+00:00"))
         age_h = round((now - created).total_seconds() / 3600, 1)
@@ -182,6 +230,7 @@ def row_for(p: dict, now: datetime, *, fetch_run=latest_run, fetch_tip=main_tip,
     return {"name": p["name"], "night": (run or {}).get("conclusion") or (run or {}).get("status") or "unreadable",
             "night_age_h": age_h, "night_sha": (run or {}).get("head_sha", "")[:8], "expected": expected,
             "night_event": (run or {}).get("event"), "schedule_age_h": sched_age_h,
+            "schedule_unreadable": sched is UNREADABLE,
             "main": (tip or "")[:8], "integration_branch": integration_branch, "integration_tip": (integration_tip or "")[:8],
             "production": (prod or "")[:8], "staging": (stag or "")[:8],
             "red": red, "notes": notes}
@@ -193,7 +242,13 @@ def render(rows: list[dict]) -> str:
         verdict = "RED — " + "; ".join(r["red"]) if r["red"] else ("ok" + (" — " + "; ".join(r["notes"]) if r["notes"] else ""))
         age = "" if r["night_age_h"] is None else f"{r['night_age_h']}h"
         by = {"schedule": "cron", "workflow_dispatch": "hand"}.get(r.get("night_event") or "", r.get("night_event") or "")
-        sched = "never" if r.get("schedule_age_h") is None else f"{r['schedule_age_h']}h ago"
+        # "never" is a claim about the cron; "?" is a claim about our reading of
+        # it. The table is what people actually look at, so the distinction has
+        # to survive into the column and not only into the verdict sentence.
+        if r.get("schedule_unreadable"):
+            sched = "?"
+        else:
+            sched = "never" if r.get("schedule_age_h") is None else f"{r['schedule_age_h']}h ago"
         lines.append(f"| {r['name']} | {r['night']} | {age} | {by} | {sched} | {r['night_sha']} | {r['main']} | {r['staging'] or '—'} | {r['production'] or '—'} | {verdict} |")
     return "\n".join(lines)
 

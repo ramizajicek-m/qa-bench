@@ -73,8 +73,16 @@ def test_an_environment_that_cannot_name_its_build_is_red_not_unknown():
 
 
 def test_an_unreadable_workflow_is_red_on_a_scheduled_morning():
-    r = _row(run=lambda repo, wf: None)
+    # Updated 2026-09-10: "unreadable" is now the UNREADABLE sentinel rather
+    # than None. This test used to pass None and assert "could not read", which
+    # IS the conflation the sentinel exists to end — None means the API
+    # answered and there are no runs. Both remain RED; they now say different
+    # things, and the second assertion holds that half so this change cannot
+    # quietly turn a workflow with no runs green.
+    r = _row(run=lambda repo, wf: report.UNREADABLE)
     assert any("could not read" in x for x in r["red"])
+    absent = _row(run=lambda repo, wf: None)
+    assert absent["red"], "a night workflow with no runs at all is still red"
 
 
 def test_staging_behind_main_is_a_note_not_a_verdict():
@@ -182,3 +190,86 @@ def test_an_old_run_retried_today_does_not_report_a_stale_attempt():
         result = _row(run=lambda *args: run)
         assert result["red"] == []
         assert result["night_age_h"] == 0.1
+
+
+# ---------------------------------------------------------------------------
+# A FAILED READ IS NOT A VERDICT — the 2026-09-08/09 incident.
+#
+# For two mornings this report told six projects they were RED because the
+# schedule had "NEVER fired". Every one of those crons had fired; anat's
+# thirteen times. `gh` had no usable auth inside the workflow, every call
+# failed, and a failed call was indistinguishable from an API that answered
+# "no scheduled runs".
+#
+# The damage was not the wrong sentence — it is that a report reading RED for
+# everything, every morning, for the same reason, cannot be read at all. Inside
+# those two days of noise sat anat's staging refresh, dead for three weeks, and
+# five projects' runners offline for nine hours with their uptime alerts among
+# the jobs that never ran. Both would have been obvious against a green board.
+# ---------------------------------------------------------------------------
+
+def test_an_unreadable_schedule_does_not_become_a_claim_that_the_cron_never_fired():
+    """The exact historical failure. Still RED — a morning nobody can see is not
+    a morning that is fine — but it must accuse the instrument, not the cron.
+
+    Mutation: return None instead of UNREADABLE from the fetch and this fails,
+    which is the old behaviour verbatim.
+    """
+    r = _row(sched=lambda repo, wf: report.UNREADABLE)
+    assert r["red"], "an unreadable schedule must still be red"
+    assert any("could not read the schedule" in x for x in r["red"]), r["red"]
+    assert not any("NEVER fired" in x or "never fired" in x for x in r["red"]), (
+        "a failed read was reported as a fact about the schedule: " + "; ".join(r["red"]))
+
+
+def test_a_genuinely_absent_schedule_is_still_named_as_such():
+    """The claim the fix must NOT swallow. When the API really does answer with
+    no scheduled runs, that is a fact about the project and has to keep being
+    reported — otherwise this change trades a false alarm for a blind spot.
+
+    Mutation: make the UNREADABLE branch catch None too — red here.
+    """
+    r = _row(sched=lambda repo, wf: None)
+    assert any("scheduled-run evidence unavailable" in x for x in r["red"]), r["red"]
+    assert not any("gh failed" in x for x in r["red"]), r["red"]
+
+
+def test_the_table_says_question_mark_for_unreadable_and_never_for_absent():
+    """The table is what a person actually reads at 06:30. The distinction has
+    to survive into the column, not live only in the verdict sentence."""
+    unreadable = report.row_for(P, MON, fetch_run=lambda r, w: _run(), fetch_tip=lambda r, b: "a" * 40,
+                                fetch_health=lambda u: "a" * 12, fetch_compare=lambda r, b, h: "identical",
+                                fetch_scheduled=lambda r, w: report.UNREADABLE)
+    absent = report.row_for(P, MON, fetch_run=lambda r, w: _run(), fetch_tip=lambda r, b: "a" * 40,
+                            fetch_health=lambda u: "a" * 12, fetch_compare=lambda r, b, h: "identical",
+                            fetch_scheduled=lambda r, w: None)
+    assert "| ? |" in report.render([unreadable]), report.render([unreadable])
+    assert "| never |" in report.render([absent]), report.render([absent])
+
+
+def test_an_unreadable_night_run_is_not_reported_as_having_no_runs():
+    """Same shape on the other fetch: `gh` failing must not read as a project
+    whose night workflow has never run."""
+    r = _row(run=lambda repo, wf: report.UNREADABLE)
+    assert any("could not read the night workflow" in x for x in r["red"]), r["red"]
+    assert not any("no runs at all" in x for x in r["red"]), r["red"]
+
+
+def test_unreadable_is_falsy_so_every_existing_guard_still_treats_it_as_nothing():
+    """The sentinel is introduced into code full of `if not d` and `(run or {})`.
+    If it were truthy, those would start treating a failed read as real data —
+    a worse bug than the one being fixed."""
+    assert not report.UNREADABLE
+    assert (report.UNREADABLE or {}) == {}
+
+
+def test_gh_json_returns_unreadable_when_the_command_fails(monkeypatch):
+    """The origin of the sentinel: the failure has to be born at the boundary,
+    or every caller has to remember to check — and one of them will not."""
+    import subprocess as sp
+
+    def boom(*a, **k):
+        raise sp.CalledProcessError(1, "gh")
+
+    monkeypatch.setattr(report.subprocess, "run", boom)
+    assert report.gh_json("repos/o/r/actions/runs") is report.UNREADABLE
