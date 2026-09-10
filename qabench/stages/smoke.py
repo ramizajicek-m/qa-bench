@@ -18,6 +18,7 @@ import os
 
 import httpx
 
+from qabench.deployable import running_this_code
 from .. import core
 from ..manifest import Bench
 
@@ -39,9 +40,13 @@ def main(cfg: Bench, argv: list[str]) -> int:
             f"HTTP {r.status_code}, {cfg.commit_field}={commit[:12] or 'MISSING'}")
     expect = (os.environ.get("QA_EXPECT_SHA") or "").strip()
     if expect and commit:
-        ok = commit.startswith(expect[: len(commit)]) or expect.startswith(commit)
-        L.check("the deployment is the SHA this run was asked about", ok,
-                f"serving {commit[:12]}, expected {expect[:12]}")
+        # NOT string equality. A host that skips a deploy whose build input is
+        # unchanged never serves a commit that touched only CI, docs or tests —
+        # so demanding the exact SHA blocks the night on changes that cannot
+        # affect what runs. Three projects hit that on 2026-09-10; see
+        # qabench/deployable.py for the incident and what still refuses.
+        ok, why = running_this_code(commit, expect)
+        L.check("the deployment is running the code this run was asked about", ok, why)
     L.extra["swept_sha"] = commit
 
     # 2. every role signs in
