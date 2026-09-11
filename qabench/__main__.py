@@ -2,13 +2,14 @@
     python -m qabench stage <smoke|pages_by_role|endpoints_by_role> [stage args]
     python -m qabench show          # the resolved config, credentials as presence only
     python -m qabench report [--estate FILE] [--json]   # every project, every morning: did the night run, is production the swept build
+    python -m qabench gap [--repo DIR] [--slug OWNER/NAME] [--workflow F] [--since "1 day ago"] [--json]
 """
 from __future__ import annotations
 
 import sys
 from pathlib import Path
 
-from . import __version__, core, manifest, nightly, report
+from . import __version__, core, gap, manifest, nightly, report
 from .stages import endpoints_by_role, pages_by_role, smoke
 
 STAGES = {"smoke": smoke.main, "pages_by_role": pages_by_role.main, "endpoints_by_role": endpoints_by_role.main}
@@ -35,6 +36,12 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if cmd == "report":                     # no manifest, no pin: it reads the estate, not one repo
         return report.run(rest)
+
+    # Tier 4, the portable half: did anything ship untested? Reads git and the CI
+    # history, so it needs no per-project data model -- which is why this half
+    # generalises and anat's "was it what was asked" half does not.
+    if cmd == "gap":
+        return gap.run(rest)
     cfg = _cfg(rest)
     if cmd == "nightly":
         return nightly.run(cfg, rest)
