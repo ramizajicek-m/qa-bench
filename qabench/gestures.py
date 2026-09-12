@@ -343,8 +343,21 @@ def lift_with_scripts(template_root: Path, glob: str = "**/*.html"
 # We resolve it the only way markup allows: find the handler that selects this
 # control and ask whether that handler reaches a mutating call.
 
+#: A call that CHANGES something, as opposed to any call at all.
+#:
+#: The first version matched `fetch(` outright, so every read counted. anat's
+#: `ae-refresh`, `ap-refresh` and `next-btn` — a refresh and a pagination
+#: button — were reported as MUTATING, and the `mutating` ceiling, which exists
+#: to be the number that matters, inherited the overclaim.
+#:
+#: Demoting an unproven call to `unknown` is safe in the way this module
+#: requires: `unknown` stays in the population and still owes a test. What must
+#: never happen is calling a mutating control `no`, which would remove it
+#: silently, and nothing here does that.
 _MUTATING_CALL = re.compile(
-    r"""(fetch|apiFetch|axios)\s*\([^)]*|method\s*:\s*['"](POST|PUT|PATCH|DELETE)['"]""",
+    r"""method\s*:\s*['"](POST|PUT|PATCH|DELETE)['"]"""
+    r"""|\.(post|put|patch|delete)\s*\("""
+    r"""|(apiFetch|axios)\s*\(\s*['"][^'"]*['"]\s*,\s*\{[^}]*method""",
     re.I)
 
 
