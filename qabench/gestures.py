@@ -368,6 +368,16 @@ _MUTATING_CALL = re.compile(
     re.I)
 
 
+#: A path literal in a handler, with the placeholder a template would have
+#: written. `fetch(`/api/clients/${id}/portal-invite`, {method: 'POST'})` becomes
+#: `/api/clients/{}/portal-invite`, which is the same shape a form action has —
+#: so one matcher serves both and a recorded request can be attributed to the
+#: control that sends it.
+_HANDLER_URL = re.compile(
+    r"""['"`](?P<path>/[A-Za-z0-9_\-./]*(?:\$\{[^}]*\}[A-Za-z0-9_\-./]*)*)['"`]"""
+    r"""(?P<verb>)""")
+
+
 def classify_with_js(gestures: list[Gesture], js_sources: dict[str, str]) -> list[Gesture]:
     """Upgrade `unknown` candidates by reading the scripts that wire them.
 
@@ -410,6 +420,17 @@ def classify_with_js(gestures: list[Gesture], js_sources: dict[str, str]) -> lis
             if _MUTATING_CALL.search(window):
                 g.mutates = "yes"
                 g.why = "its handler reaches a mutating call"
+                # AND WHERE IT SENDS. Without this a request recording can
+                # attribute almost nothing on an SPA-style admin: anat has 973
+                # controls and only SEVEN declare an action in markup, because
+                # its forms carry an id and the URL is built in the handler. The
+                # measure was not weak there, it was blind — so take the path
+                # from the same window that proved the call mutates.
+                if not g.action:
+                    url = _HANDLER_URL.search(window)
+                    if url:
+                        g.action = re.sub(r"\$\{[^}]*\}", PLACEHOLDER, url.group("path"))
+                        g.method = (url.group("verb") or "POST").upper()
                 break
     return gestures
 
@@ -804,8 +825,13 @@ def refusals(m: Measurement, old: dict) -> list:
                 "    A control that changes something and that nothing has ever "
                 "pressed is the defect this register exists for. Drive it, or add "
                 "the row BY HAND with a reason you are willing to sign.")
-    for stale in sorted(listed - rows_now):
-        out.append(f"now driven, remove it: {stale}")
+    # A control that GOT DRIVEN is the good direction, and regeneration heals
+    # the row rather than refusing. Refusing here was a design error of mine: it
+    # made `make gestures` fail on the one outcome the register exists to
+    # produce, so fixing something meant fighting the generator. The guard still
+    # asserts the register matches the sweep — a stale exemption is how a list
+    # stops describing the thing it exempts — but that is the READER's job, not
+    # the writer's.
 
     # The second ratchet, and only when a recording exists. Without one the
     # answer is UNKNOWN and refusing on an unknown teaches people to pass a

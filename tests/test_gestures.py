@@ -488,14 +488,23 @@ def test_a_row_keeps_the_reason_a_person_wrote(tmp_path):
     assert register_rows(m, {})[0]["reason"] in BOILERPLATE_REASONS
 
 
-def test_a_control_that_got_driven_must_leave_the_register(tmp_path):
-    """A stale exemption is how a list stops describing the thing it exempts."""
+def test_regeneration_HEALS_a_row_that_got_driven_rather_than_refusing(tmp_path):
+    """Fixing something must not mean fighting the generator.
+
+    An earlier version refused to regenerate when a listed control had become
+    driven — so `make gestures` failed on the one outcome the register exists to
+    produce. The guard still asserts the register matches the sweep, because a
+    stale exemption is how a list stops describing the thing it exempts, but
+    that is the reader's job and healing is the writer's.
+    """
     _repo(tmp_path, {"a.html": '<button id="b" onclick="go()">x</button>'},
           {"t.py": "page.click('#b')"})
     m = measure(tmp_path, min_controls=1, min_corpus=1)
     old = {"ceiling": 1, "mutating": 0,
            "undriven": [{"id": "a.html::button[id=b]", "mutates": "unknown", "reason": "r"}]}
-    assert any("now driven, remove it" in r for r in refusals(m, old))
+    assert not [r for r in refusals(m, old) if "now driven" in r], \
+        "regeneration must heal a healed row, not refuse"
+    assert register_rows(m, {}) == [], "the healed control is gone from the rows"
 
 
 def test_a_project_whose_controls_are_not_markup_uses_the_same_register(tmp_path):
