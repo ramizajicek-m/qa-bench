@@ -495,3 +495,48 @@ def test_a_control_that_got_driven_must_leave_the_register(tmp_path):
     old = {"ceiling": 1, "mutating": 0,
            "undriven": [{"id": "a.html::button[id=b]", "mutates": "unknown", "reason": "r"}]}
     assert any("now driven, remove it" in r for r in refusals(m, old))
+
+
+def test_a_project_whose_controls_are_not_markup_uses_the_same_register(tmp_path):
+    """ONE PROGRAM, SIX REPOS. The population source is the only thing that differs.
+
+    ana-log is a React SPA: every button routes through `api.action(category,
+    name)` to a single endpoint, so there is no markup to lift and its
+    population is the action REGISTRY. That is a better population than markup
+    would be — each entry declares `writes` itself rather than leaving a sweep
+    to guess from a verb.
+
+    What it must NOT mean is a second guard with a second matcher and a
+    different register format, which is what it had: a bespoke copy that had
+    already drifted from the other five. A provider keeps the register, the
+    ratchets, the refusals and the integrity rules identical, exactly as
+    `bench.routes` already works for the page sweep.
+
+    `names` carries the tokens that count as naming a registry entry — the
+    declared name and the handler — so ONE matcher serves both populations.
+
+    Mutation: drop `names` from `driven_by_corpus` and the driven one reads
+    undriven.
+    """
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "t.py").write_text(
+        'def test_it():\n    create_shipment(db, payload)\n', encoding="utf-8")
+
+    def provider(root):
+        return [
+            Gesture(template="app/api/actions.py", kind="action",
+                    selector="action[name=shipments.create]", mutates="yes",
+                    why="declared writes=True", names=("create_shipment",)),
+            Gesture(template="app/api/actions.py", kind="action",
+                    selector="action[name=shipments.purge]", mutates="yes",
+                    why="declared writes=True", names=("purge_shipment",)),
+        ]
+
+    m = measure(tmp_path, corpus_dirs=("tests",), min_controls=1, min_corpus=1,
+                population_fn=provider)
+    assert len(m.population) == 2
+    assert [g.id for g in m.undriven] == ["app/api/actions.py::action[name=shipments.purge]"]
+    assert m.mutating == 1
+    # and the shared rules apply unchanged
+    assert any("new MUTATING control" in r
+               for r in refusals(m, {"ceiling": 0, "mutating": 0, "undriven": []}))

@@ -88,7 +88,14 @@ class Gesture:
     method: str = ""          # for forms
     action: str = ""          # for forms
     mutates: str = "unknown"  # "yes" | "no" | "unknown"
-    why: str = ""             # why it is classified that way
+    why: str = ""
+    #: Extra literal tokens that count as NAMING this control, for populations
+    #: that are not markup. A template control is named by its id or its action;
+    #: a registry entry is named by its declared name or its handler function.
+    #: Supplying them here keeps ONE matcher for every project rather than a
+    #: second guard with a second rule — which is how ana-log ended up with a
+    #: bespoke copy that drifted.
+    names: tuple = ()
 
     @property
     def id(self) -> str:
@@ -483,6 +490,17 @@ def _action_pattern(action: str):
     return re.compile(_GAP.join(parts))
 
 
+def _identifier_pattern(token: str):
+    """A bare identifier, bounded. For tokens a PROVIDER chose deliberately.
+
+    A handler function name like `create_shipment` is written bare in the code
+    that calls it, so it carries no quote or `#`. It also does not collide with
+    prose the way a markup id like `submit` does, which is why the two rules are
+    different and the strict one is reserved for ids scraped out of markup.
+    """
+    return re.compile(r"(?<![\w-])" + re.escape(token) + r"(?![\w-])")
+
+
 def _token_pattern(token: str):
     """The token as an author writes it in a selector or a string, not as prose.
 
@@ -517,9 +535,19 @@ def driven_by_corpus(gestures: list[Gesture], corpus: dict[str, str]) -> set[str
     for g in pop:
         if g.kind == "form" and g.action:
             continue
+        # BOTH, not either: a registry entry is named by its handler (a bare
+        # identifier in the code that calls it) OR by its declared name (a
+        # quoted string in the client call). Requiring only the handler made 29
+        # of ana-log's 55 writers read undriven when every one of them is named
+        # by a quoted `"cancelTransfer"` — a guard that cannot pass is a guard
+        # that gets overridden.
+        for tok in g.names:
+            tokens.append((g, _identifier_pattern(tok)))
         m = re.search(r"\[(?:data-action|id|name|data-testid)=([^\]{]+)", g.selector)
         if m:
-            tokens.append((g, _token_pattern(m.group(1))))
+            tok = m.group(1).lstrip(".")
+            if tok:
+                tokens.append((g, _token_pattern(tok)))
     for text in corpus.values():
         for g, pat in forms:
             if g.id not in out and pat.search(text):
@@ -593,21 +621,37 @@ class Measurement:
 
 def measure(root, templates="templates", static="static",
             corpus_dirs=("tests", "scripts"),
-            min_controls: int = 20, min_corpus: int = 20) -> Measurement:
+            min_controls: int = 20, min_corpus: int = 20,
+            population_fn=None) -> Measurement:
     """One sweep: every control, and which of them something names.
+
+    `population_fn` is how a project whose controls are not in markup joins the
+    same program instead of forking it. ana-log is a React SPA: every button
+    routes through `api.action(category, name)` to one endpoint, so its
+    population is the ACTION REGISTRY — which is better evidence than markup
+    would be, since each entry declares `writes` itself. It supplies a provider
+    and gets the identical register, the identical rules and the identical
+    guard. Before this it had a second guard with a second matcher and a
+    different register format, and the two had already drifted apart.
+
+    The contract is the one this kit already uses for `bench.routes`: a
+    `module:function` the project names, returning `Gesture` rows.
 
     `min_controls` / `min_corpus` are a DID-NOT-RUN detector, not a target. A
     scan that walked nothing agrees with everything, so the floors are measured
     per repo and passed in; the failure text says treat it as did not run.
     """
     root = Path(root)
-    gestures, inline = lift_with_scripts(root / templates)
-    js = dict(inline)          # a control's handler is looked up in ITS template first
-    static_dir = root / static
-    if static_dir.exists():
-        for p in static_dir.rglob("*.js"):
-            js[p.name] = p.read_text(encoding="utf-8", errors="replace")
-    gestures = classify_with_js(gestures, js)
+    if population_fn is not None:
+        gestures = list(population_fn(root))
+    else:
+        gestures, inline = lift_with_scripts(root / templates)
+        js = dict(inline)      # a control's handler is looked up in ITS template first
+        static_dir = root / static
+        if static_dir.exists():
+            for p in static_dir.rglob("*.js"):
+                js[p.name] = p.read_text(encoding="utf-8", errors="replace")
+        gestures = classify_with_js(gestures, js)
     corpus = read_corpus([root / d for d in corpus_dirs])
     if len(gestures) < min_controls or len(corpus) < min_corpus:
         raise RuntimeError(
