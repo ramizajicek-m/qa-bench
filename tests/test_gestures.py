@@ -415,7 +415,7 @@ def test_a_token_is_not_driven_by_the_english_word(tmp_path):
 # --- the register as a document ---------------------------------------------
 
 from qabench.gestures import (BOILERPLATE_REASONS, integrity, measure,  # noqa: E402
-                              refusals, register_rows)
+                              pin_disagreements, refusals, register_rows)
 
 
 def _repo(tmp_path, templates: dict, corpus: dict):
@@ -540,3 +540,36 @@ def test_a_project_whose_controls_are_not_markup_uses_the_same_register(tmp_path
     # and the shared rules apply unchanged
     assert any("new MUTATING control" in r
                for r in refusals(m, {"ceiling": 0, "mutating": 0, "undriven": []}))
+
+
+def test_a_repo_naming_two_qa_bench_refs_is_reported(tmp_path):
+    """One kit, one commit, everywhere the repo names it.
+
+    Three instances in one day: a repo pinning three different refs across its
+    workflows and Makefile; another installing with no ref at all on a runner
+    holding staging secrets; and a repin sweep that missed
+    `requirements-dev.txt`, which is the file CI installs from — so a job ran
+    the old kit against the new guard and died on an ImportError, a symptom
+    that names a test rather than a pin.
+
+    Mutation: return `found` unconditionally and the agreeing case reports a
+    disagreement.
+    """
+    import subprocess
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    (tmp_path / "ci.yml").write_text("pip install qa-bench@aaaa111\n")
+    (tmp_path / "requirements-dev.txt").write_text("qabench @ git+x/qa-bench@bbbb222\n")
+    (tmp_path / "doc.md").write_text("example: qa-bench@v0.1.10\n")
+    subprocess.run(["git", "add", "-A"], cwd=tmp_path, check=True)
+
+    bad = pin_disagreements(tmp_path)
+    assert set(bad) == {"aaaa111", "bbbb222", "v0.1.10"}
+    assert bad["bbbb222"] == ["requirements-dev.txt"]
+
+    # an example in prose is declared, not silently tolerated
+    assert set(pin_disagreements(tmp_path, ignore=("doc.md",))) == {"aaaa111", "bbbb222"}
+
+    # and the agreeing case reports nothing at all
+    (tmp_path / "requirements-dev.txt").write_text("qabench @ git+x/qa-bench@aaaa111\n")
+    subprocess.run(["git", "add", "-A"], cwd=tmp_path, check=True)
+    assert pin_disagreements(tmp_path, ignore=("doc.md",)) == {}

@@ -6,4 +6,4 @@ login) and tharros' scripts/qa/pages_by_role.py (two viewports, status equals
 the declared guard, console clean), so six projects run ONE copy instead of
 maintaining six that drift.
 """
-__version__ = "0.1.18"
+__version__ = "0.1.19"
