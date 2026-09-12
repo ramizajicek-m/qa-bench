@@ -578,3 +578,192 @@ def test_a_repo_naming_two_qa_bench_refs_is_reported(tmp_path):
     (tmp_path / "requirements-dev.txt").write_text("qabench @ git+x/qa-bench@aaaa111\n")
     subprocess.run(["git", "add", "-A"], cwd=tmp_path, check=True)
     assert pin_disagreements(tmp_path, ignore=("doc.md",)) == {}
+
+
+# --- named is not pressed ----------------------------------------------------
+
+from qabench import hits as _hits                                    # noqa: E402
+from qabench.gestures import (hit_by_recording,                      # noqa: E402
+                              judgeable_by_recording)
+
+
+def test_a_docstring_names_a_control_but_a_recording_does_not(tmp_path):
+    """THE WHOLE POINT OF THE STRONGER HALF.
+
+    `driven_by_corpus` counts a mention — a comment saying "posts to
+    /admin/x/1/delete" satisfies it, and that is the weakest evidence standard
+    of the approaches in the field. A recording of what the suite ACTUALLY sent
+    cannot be satisfied that way.
+
+    Mutation: feed the recording the matching request and it is hit.
+    """
+    write(tmp_path, "t.html",
+          '<form method="post" action="/admin/x/{{ i }}/delete"></form>')
+    g = lift(tmp_path)
+    gid = "t.html::form[POST /admin/x/{}/delete]"
+
+    corpus = {"t.py": '"""this test posts to /admin/x/1/delete."""'}
+    assert driven_by_corpus(g, corpus) == {gid}, "the weak half still counts a mention"
+    assert hit_by_recording(g, {"GET /admin/x/1/delete"}) == set(), "a GET is not this control"
+    assert hit_by_recording(g, {"POST /admin/y/1/delete"}) == set(), "another route is not it"
+    assert hit_by_recording(g, {"POST /admin/x/17/delete"}) == {gid}
+
+
+def test_an_absent_recording_is_unknown_and_never_reported_as_no(tmp_path):
+    """A repo that has not opted in is not in a failing state.
+
+    Treating "no recording" as "nothing is hit" would put every control in
+    every repo into the worst bucket on the day this ships, which is how a
+    guard gets switched off in its first week.
+    """
+    write(tmp_path, "t.html", '<form method="post" action="/a/b"></form>')
+    assert hit_by_recording(lift(tmp_path), set()) == set()
+    assert _hits.read(tmp_path / "nope.json") == set()
+
+
+def test_the_judgeable_subset_is_reportable(tmp_path):
+    """A verdict must say how much of the population it could decide.
+
+    Only a form declares a method and a path. A button wired in JS is the
+    browser recorder's job, and until that runs its verdict is UNKNOWN — a
+    coverage number over the whole population would quietly count those as
+    failures.
+    """
+    write(tmp_path, "t.html",
+          '<form method="post" action="/a/b"></form>'
+          '<button id="js-only" onclick="go()">x</button>')
+    g = lift(tmp_path)
+    assert len(population(g)) == 2
+    assert judgeable_by_recording(g) == {"t.html::form[POST /a/b]"}
+
+
+def test_the_recorder_refuses_to_write_an_empty_recording(tmp_path):
+    """An empty file is indistinguishable from "the suite drives nothing".
+
+    Written, it would mark every control unhit on the next read and the count
+    would leap for a reason that looks like a product regression.
+    """
+    _hits._seen.clear()
+    with pytest.raises(RuntimeError, match="DID NOT RUN"):
+        _hits.write(tmp_path / "hits.json")
+
+
+def test_the_recorder_writes_what_it_saw(tmp_path):
+    _hits._seen.clear()
+    _hits.record("post", "/admin/x/1/delete", 303)
+    _hits.record("GET", "/admin/x", 200)
+    _hits.record("POST", "/admin/x/2/delete", 403)      # a CSRF refusal probe
+    doc = _hits.write(tmp_path / "hits.json")
+    assert doc["count"] == 3
+    assert _hits.read(tmp_path / "hits.json") == {
+        "POST /admin/x/1/delete", "GET /admin/x"}, "a refusal is not an exercise"
+    assert "POST /admin/x/2/delete" in _hits.read(tmp_path / "hits.json",
+                                                  accepted_only=False)
+    _hits._seen.clear()
+
+
+def test_the_recorder_catches_a_real_httpx_request(tmp_path):
+    """Patching `httpx.Client.send` is the claim; this is the proof.
+
+    Starlette's TestClient subclasses httpx.Client, so one patch covers every
+    suite in the estate rather than a fixture each project must remember to
+    apply — and a fixture nobody applies is the failure this whole program
+    keeps finding.
+    """
+    httpx = pytest.importorskip("httpx")
+    _hits._seen.clear()
+    _hits._installed = False
+    assert _hits.install()
+
+    def handler(request):
+        return httpx.Response(204)
+
+    with httpx.Client(transport=httpx.MockTransport(handler),
+                      base_url="http://t") as c:
+        c.post("/admin/x/9/delete")
+    assert "POST /admin/x/9/delete 204" in _hits._seen
+    _hits._seen.clear()
+
+
+def test_a_refused_request_is_not_an_exercise_of_the_control(tmp_path):
+    """MEASURED ON A LIVE REPO, WITHIN MINUTES OF THE RECORDER WORKING.
+
+    IGA's register listed six destructive admin controls as driven by nothing.
+    The first recording said all six were posted to — and the poster was
+    `test_every_field_is_accounted_for`, which walks the route table posting to
+    every route WITHOUT a CSRF token and with required fields missing, asserting
+    each refuses. The route is reached; nothing has ever successfully deleted
+    anything.
+
+    Counting that as a hit would have replaced a measure that UNDERCOUNTS with
+    one that OVERCOUNTS, and that is the worse direction: an undercount leaves a
+    to-do, an overcount retires it.
+
+    Mutation: drop the status filter in `read` and the refusal counts.
+    """
+    write(tmp_path, "t.html",
+          '<form method="post" action="/admin/x/{{ i }}/delete"></form>')
+    g = lift(tmp_path)
+    gid = "t.html::form[POST /admin/x/{}/delete]"
+    _hits._seen.clear()
+    _hits.record("POST", "/admin/x/1/delete", 403)       # the CSRF probe
+    _hits.write(tmp_path / "h.json")
+    assert hit_by_recording(g, _hits.read(tmp_path / "h.json")) == set()
+
+    _hits.record("POST", "/admin/x/1/delete", 303)       # a real delete
+    _hits.write(tmp_path / "h.json")
+    assert hit_by_recording(g, _hits.read(tmp_path / "h.json")) == {gid}
+    _hits._seen.clear()
+
+
+def test_a_control_that_is_named_but_never_accepted_gets_its_own_ratchet(tmp_path):
+    """TWO REGISTERS, because they are two different failures.
+
+    A control can be named by six tests and never once have been ACCEPTED by
+    the app. my8200 had sixteen of those and they were not obscure: marking an
+    invoice paid, receiving goods against a purchase order, moving stock,
+    cancelling a customer order. Every one was credited as driven because a
+    test mentioned its URL.
+
+    Mixing them into the undriven list would let a repo work down the cheap
+    half and call it progress, so `unhit_mutating` ratchets separately.
+
+    Mutation: drop the `if m.recorded` block in `refusals` and this returns [].
+    """
+    write(tmp_path / "templates", "t.html",
+          '<form method="post" action="/admin/pay/{{ i }}/paid"></form>')
+    (tmp_path / "tests").mkdir(exist_ok=True)
+    (tmp_path / "tests" / "t.py").write_text(
+        'client.post(f"/admin/pay/{x}/paid")\n', encoding="utf-8")
+
+    refused = {"POST /admin/pay/1/paid"}          # touched, but only refusals
+    m = measure(tmp_path, corpus_dirs=("tests",), min_controls=1, min_corpus=1,
+                recording=set())                  # nothing accepted
+    m.recorded = True
+    assert m.undriven == [], "the weak measure is satisfied: a test names the URL"
+    assert [g.id for g in m.unhit_mutating] == ["t.html::form[POST /admin/pay/{}/paid]"]
+
+    why = refusals(m, {"ceiling": 0, "mutating": 0, "undriven": [],
+                       "unhit_mutating": 0, "unhit": []})
+    assert any("never been accepted" in r for r in why), why
+
+    # and with the request accepted, it leaves
+    ok = measure(tmp_path, corpus_dirs=("tests",), min_controls=1, min_corpus=1,
+                 recording={"POST /admin/pay/1/paid"})
+    assert ok.unhit_mutating == []
+
+
+def test_without_a_recording_the_hit_verdict_is_unknown_not_clean(tmp_path):
+    """Refusing on an unknown teaches people to pass a flag to get past it."""
+    write(tmp_path / "templates", "t.html",
+          '<form method="post" action="/a/b"></form>')
+    (tmp_path / "tests").mkdir(exist_ok=True)
+    (tmp_path / "tests" / "t.py").write_text("pass\n", encoding="utf-8")
+    m = measure(tmp_path, corpus_dirs=("tests",), min_controls=1, min_corpus=1)
+    assert m.recorded is False
+    assert m.unhit_mutating == []
+    assert not [r for r in refusals(m, {"ceiling": 1, "mutating": 1,
+                                        "undriven": [{"id": "t.html::form[POST /a/b]",
+                                                      "mutates": "yes", "reason": "r"}],
+                                        "unhit_mutating": 0, "unhit": []})
+                if "accepted" in r]

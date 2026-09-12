@@ -558,6 +558,47 @@ def driven_by_corpus(gestures: list[Gesture], corpus: dict[str, str]) -> set[str
     return out
 
 
+def hit_by_recording(gestures: list, hits: set) -> set:
+    """Ids of gestures a RECORDED request actually reached.
+
+    The stronger half of the measure. `driven_by_corpus` asks whether any file
+    mentions the control; this asks whether the suite, when it ran, sent a
+    request the control would have sent. A docstring cannot satisfy it.
+
+    Only form-shaped gestures can be judged here — they declare a method and a
+    path. A button wired in JS is answered by the browser recorder, and until
+    that has run its verdict is UNKNOWN, which is not the same as "no" and must
+    never be reported as one.
+    """
+    out: set = set()
+    if not hits:
+        return out
+    by_method: dict = {}
+    for h in hits:
+        method, _, path = h.partition(" ")
+        by_method.setdefault(method, []).append(path)
+    for g in population(gestures):
+        if g.kind != "form" or not g.action:
+            continue
+        method = (g.method or "GET").upper()
+        pat = _action_pattern(g.action)
+        for path in by_method.get(method, ()):
+            if pat.fullmatch(path) or pat.search(path):
+                out.add(g.id)
+                break
+    return out
+
+
+def judgeable_by_recording(gestures: list) -> set:
+    """Ids a recording COULD decide, so a caller can report the subset size.
+
+    A verdict over a population where only a tenth is judgeable is a different
+    claim from one over all of it, and the number has to be stated or the
+    reader supplies an optimistic one.
+    """
+    return {g.id for g in population(gestures) if g.kind == "form" and g.action}
+
+
 #: Files that TALK ABOUT gestures rather than driving them. A register's own
 #: consumer names every undriven control in its failure message and docstring,
 #: so leaving it in the corpus makes each one read as driven — by the very file
@@ -609,6 +650,15 @@ class Measurement:
     driven: set
     undriven: list
     mutating_undriven: list
+    #: Ids a RECORDING says the app accepted a request for. Empty when no
+    #: recording exists, which is UNKNOWN and must never be read as "none".
+    hit: set = field(default_factory=set)
+    #: Ids a recording could decide at all. A verdict has to say how much of
+    #: the population it speaks for, or the reader supplies an optimistic
+    #: number.
+    judgeable: set = field(default_factory=set)
+    #: False when no recording was supplied.
+    recorded: bool = False
 
     @property
     def ceiling(self) -> int:
@@ -618,11 +668,27 @@ class Measurement:
     def mutating(self) -> int:
         return len(self.mutating_undriven)
 
+    @property
+    def unhit_mutating(self) -> list:
+        """Mutating controls a recording COULD have decided and did not.
+
+        The strongest claim this kit makes, and the narrowest: the control
+        changes something, a request recording can judge it, and no request the
+        suite made was ever accepted. `driven_by_corpus` counts a mention and
+        says nothing about whether the thing has ever worked.
+
+        Empty when nothing was recorded — an unknown, not a clean bill.
+        """
+        if not self.recorded:
+            return []
+        return [g for g in self.population
+                if g.mutates == "yes" and g.id in self.judgeable and g.id not in self.hit]
+
 
 def measure(root, templates="templates", static="static",
             corpus_dirs=("tests", "scripts"),
             min_controls: int = 20, min_corpus: int = 20,
-            population_fn=None) -> Measurement:
+            population_fn=None, recording=None) -> Measurement:
     """One sweep: every control, and which of them something names.
 
     `population_fn` is how a project whose controls are not in markup joins the
@@ -663,7 +729,10 @@ def measure(root, templates="templates", static="static",
     undriven = sorted((g for g in pop if g.id not in driven), key=lambda g: g.id)
     return Measurement(population=pop, corpus_files=len(corpus), driven=driven,
                        undriven=undriven,
-                       mutating_undriven=[g for g in undriven if g.mutates == "yes"])
+                       mutating_undriven=[g for g in undriven if g.mutates == "yes"],
+                       hit=hit_by_recording(gestures, recording or set()),
+                       judgeable=judgeable_by_recording(gestures),
+                       recorded=bool(recording))
 
 
 def register_rows(m: Measurement, previous_reasons: dict) -> list:
@@ -674,6 +743,27 @@ def register_rows(m: Measurement, previous_reasons: dict) -> list:
             BOILERPLATE_REASONS[0] if g.mutates == "yes" else BOILERPLATE_REASONS[1])
         rows.append({"id": g.id, "mutates": g.mutates, "reason": reason})
     return rows
+
+
+def unhit_rows(m: Measurement, previous_reasons: dict) -> list:
+    """The second register: controls a recording says have never WORKED.
+
+    Separate from the undriven rows on purpose. A control can be named by six
+    tests and still have never once been accepted by the app — my8200 had
+    sixteen of those, including marking an invoice paid, receiving goods
+    against a purchase order and cancelling a customer order. Those are not
+    "undriven"; they are a different and worse thing, and a list that mixed the
+    two would let a repo work down the cheap half and call it progress.
+    """
+    rows = []
+    for g in sorted(m.unhit_mutating, key=lambda g: g.id):
+        rows.append({"id": g.id,
+                     "reason": previous_reasons.get(g.id) or UNHIT_REASON})
+    return rows
+
+
+UNHIT_REASON = ("a recording of the suite shows no request to this control was "
+                "ever ACCEPTED — only refusals, or nothing at all")
 
 
 def refusals(m: Measurement, old: dict) -> list:
@@ -716,6 +806,24 @@ def refusals(m: Measurement, old: dict) -> list:
                 "the row BY HAND with a reason you are willing to sign.")
     for stale in sorted(listed - rows_now):
         out.append(f"now driven, remove it: {stale}")
+
+    # The second ratchet, and only when a recording exists. Without one the
+    # answer is UNKNOWN and refusing on an unknown teaches people to pass a
+    # flag to get past it.
+    if m.recorded:
+        was = old.get("unhit_mutating")
+        now = len(m.unhit_mutating)
+        if was is not None and now > was:
+            out.append(
+                f"unhit_mutating: {now} mutating controls have never had a request "
+                f"ACCEPTED, above the recorded {was}. Named is not pressed: a "
+                "control can be mentioned by six tests and never once have worked.")
+        listed_unhit = {r["id"] for r in old.get("unhit", [])}
+        for g in m.unhit_mutating:
+            if g.id not in listed_unhit and old.get("unhit_mutating") is not None:
+                out.append(
+                    f"new control that changes something and has never been "
+                    f"accepted: {g.id}")
     return out
 
 
