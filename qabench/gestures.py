@@ -744,3 +744,53 @@ def integrity(m: Measurement, old: dict, slack: int = 5) -> list:
             out.append(f"{name} is {old[name]} but only {live} are undriven — "
                        f"lower it; a ceiling that far above the count is decoration")
     return out
+
+
+# --- the pin ----------------------------------------------------------------
+
+#: How this kit is named wherever a project installs it.
+_PIN = re.compile(r"qa-bench@([0-9A-Za-z._-]+)")
+
+
+def pin_refs(root, ignore=()) -> dict:
+    """{ref: [tracked files naming it]}. Every ref, so a caller can prove it read some.
+
+    Only TRACKED files are read — a `.venv` full of vendored copies is not the
+    repo's claim about anything. `ignore` takes paths whose refs are examples
+    rather than installs; each needs its reason where it is declared.
+    """
+    import subprocess
+    root = Path(root)
+    files = subprocess.run(["git", "ls-files"], cwd=root, capture_output=True,
+                           text=True).stdout.split("\n")
+    found: dict = {}
+    for rel in files:
+        if not rel or rel in ignore:
+            continue
+        try:
+            text = (root / rel).read_text(encoding="utf-8", errors="replace")
+        except (OSError, IsADirectoryError):
+            continue
+        for ref in _PIN.findall(text):
+            found.setdefault(ref, []).append(rel)
+    return found
+
+
+def pin_disagreements(root, ignore=()) -> dict:
+    """Only the refs, when a repo names more than one. `{}` when it agrees.
+
+    THREE TIMES IN ONE DAY, which is a design decision rather than a
+    coincidence. A review found one repo pinning qa-bench at three different
+    refs across its workflows and Makefile, and another installing it with no
+    ref at all on a runner holding staging secrets — beneath a comment
+    explaining why a floating pin is forbidden. Then a sweep that repinned the
+    workflows and the Makefile missed `requirements-dev.txt`, which is the file
+    CI actually installs from, so a job ran the OLD kit against the NEW guard
+    and died on an import.
+
+    The failure is quiet in the direction that matters: the pin that is wrong is
+    the one nobody looked at, and the symptom arrives as an ImportError in an
+    unrelated test rather than as "your pins disagree".
+    """
+    found = pin_refs(root, ignore)
+    return found if len(found) > 1 else {}

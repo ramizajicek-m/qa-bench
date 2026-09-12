@@ -415,7 +415,8 @@ def test_a_token_is_not_driven_by_the_english_word(tmp_path):
 # --- the register as a document ---------------------------------------------
 
 from qabench.gestures import (BOILERPLATE_REASONS, integrity, measure,  # noqa: E402
-                              pin_disagreements, refusals, register_rows)
+                              pin_disagreements, pin_refs,  # noqa: E402
+                              refusals, register_rows)
 
 
 def _repo(tmp_path, templates: dict, corpus: dict):
@@ -568,6 +569,10 @@ def test_a_repo_naming_two_qa_bench_refs_is_reported(tmp_path):
 
     # an example in prose is declared, not silently tolerated
     assert set(pin_disagreements(tmp_path, ignore=("doc.md",))) == {"aaaa111", "bbbb222"}
+
+    # a repo that names NO ref must be visible as such, or a guard over it is
+    # vacuous: it would agree with everything by having read nothing.
+    assert set(pin_refs(tmp_path)) == {"aaaa111", "bbbb222", "v0.1.10"}
 
     # and the agreeing case reports nothing at all
     (tmp_path / "requirements-dev.txt").write_text("qabench @ git+x/qa-bench@aaaa111\n")
