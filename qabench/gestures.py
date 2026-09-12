@@ -118,7 +118,7 @@ def _stable_selector(tag, attrs) -> tuple[str, str]:
 
 
 class _Lifter(HTMLParser):
-    """Collects controls, tracking whether we are inside a mutating form.
+    """Collects controls, tracking the forms we are inside.
 
     `convert_charrefs` is left on: entity text does not affect which controls
     exist, and turning it off changes nothing here except noise.
@@ -128,8 +128,10 @@ class _Lifter(HTMLParser):
         super().__init__()
         self.template = template
         self.found: list[Gesture] = []
-        self._form_depth = 0          # >0 while inside any form
-        self._mutating_form = 0       # >0 while inside a MUTATING form
+        #: One record per OPEN form. A form's row is emitted at its END tag, not
+        #: its start, because its identity depends on what is inside it — see
+        #: `_finish_form`.
+        self._forms: list[dict] = []
         self._counter: dict[str, int] = {}
         self._in_script = False
         #: Inline handler source from THIS template. anat wires 907 of its 914
@@ -138,6 +140,7 @@ class _Lifter(HTMLParser):
         #: a population of 900 unknowns is a wall, not a signal.
         self.scripts: list[str] = []
 
+    # -- helpers ------------------------------------------------------------
     def _key(self, tag, attrs) -> str:
         sel, how = _stable_selector(tag, attrs)
         if sel:
@@ -149,39 +152,90 @@ class _Lifter(HTMLParser):
         self._counter[tag] = n + 1
         return f"{tag}#{n}?positional"
 
+    def _open_form(self):
+        return self._forms[-1] if self._forms else None
+
+    # -- tags ---------------------------------------------------------------
     def handle_starttag(self, tag, attrs):
         if tag == "script":
             self._in_script = True
             return
+
         if tag == "form":
-            self._form_depth += 1
             method = (_attr(attrs, "method") or "GET").upper()
-            action = _attr(attrs, "action") or ""
-            if method in MUTATING_METHODS:
-                self._mutating_form += 1
-                sel, _ = _stable_selector(tag, attrs)
-                # A form's identity is its action and method — that is what it
-                # does, and it survives every cosmetic edit.
-                selector = sel or f"form[{method} {action or '(self)'}]"
-                self.found.append(Gesture(
-                    template=self.template, kind="form", selector=selector,
-                    method=method, action=action, mutates="yes",
-                    why=f"<form method={method}> submits to {action or 'its own URL'}"))
+            sel, _ = _stable_selector(tag, attrs)
+            self._forms.append({
+                "method": method,
+                "action": _attr(attrs, "action") or "",
+                "selector": sel,
+                "mutating": method in MUTATING_METHODS,
+                #: Hidden fields carrying a LITERAL value. Five forms posting to
+                #: the same route with hidden action=rename/up/down/delete are
+                #: five controls, not one; without this they share an id and
+                #: driving `rename` reports `delete` as driven. Found on my8200,
+                #: where 33 controls collapsed into 20 ids and one of the hidden
+                #: values was `delete`.
+                "hidden": [],
+                #: Whether this form will produce a row of its own. When it will
+                #: not, its submit buttons must be lifted instead of swallowed.
+                "lifted": method in MUTATING_METHODS or bool(sel),
+            })
+            return
+
+        form = self._open_form()
+
+        if tag == "input":
+            if (_attr(attrs, "type") or "").lower() == "hidden" and form is not None:
+                name, value = _attr(attrs, "name"), _attr(attrs, "value")
+                # A value built by Jinja is the PLACEHOLDER after neutralisation
+                # and distinguishes nothing, so only literals count.
+                if name and value and PLACEHOLDER not in value:
+                    form["hidden"].append(f"{name}={value}")
+            btype = (_attr(attrs, "type") or "").lower()
+            if btype in ("button", "image", "submit"):
+                self._maybe_button(tag, attrs, btype)
             return
 
         if tag == "button":
-            btype = (_attr(attrs, "type") or "submit").lower()
-            if self._mutating_form and btype == "submit":
-                return  # the form above already IS this gesture
-            if btype == "submit" and self._form_depth:
-                return  # submits a non-mutating (GET) form; the form is the thing
-            self.found.append(self._candidate(tag, attrs))
+            self._maybe_button(tag, attrs, (_attr(attrs, "type") or "submit").lower())
             return
 
         if _attr(attrs, "data-action") is not None or _attr(attrs, "onclick") is not None:
-            if tag in ("button", "form"):
+            if tag in ("button", "form", "input"):
                 return  # already handled
             self.found.append(self._candidate(tag, attrs))
+
+    def _maybe_button(self, tag, attrs, btype):
+        """A submit is usually its form; a `formaction` submit never is."""
+        form = self._open_form()
+        formaction = _attr(attrs, "formaction")
+        if formaction:
+            # `<button type=submit formaction="/admin/x/{}/delete">` inside a
+            # save form posts somewhere ELSE entirely. Swallowing it into the
+            # parent hid three DELETEs in tharros and two in my8200 — the
+            # routes exist, and the population did not know the buttons did.
+            method = (_attr(attrs, "formmethod")
+                      or (form or {}).get("method") or "GET").upper()
+            sel, _ = _stable_selector(tag, attrs)
+            self.found.append(Gesture(
+                template=self.template, kind="form",
+                selector=sel or f"{tag}[{method} {formaction}]",
+                method=method, action=formaction,
+                mutates="yes" if method in MUTATING_METHODS else "unknown",
+                why=f"<{tag} formaction> submits to {formaction}, not to its form"))
+            return
+        if btype == "submit" and form is not None:
+            # Either the form above IS this gesture, or the form is a plain GET
+            # search box with nothing to intercept it — in both cases the button
+            # is not a separate control.
+            #
+            # THE LIMIT, stated: a form with no method, no id, no name and no
+            # data-* attribute that is nonetheless submitted from JS is invisible
+            # to this lifter, and so is its button. Nothing selects it, so there
+            # is no key to give it. Giving such a form an id is the fix, and that
+            # is also what a Playwright locator would need.
+            return
+        self.found.append(self._candidate(tag, attrs))
 
     def _candidate(self, tag, attrs) -> Gesture:
         onclick = _attr(attrs, "onclick") or ""
@@ -194,8 +248,11 @@ class _Lifter(HTMLParser):
             mutates, why = "no", f"onclick is a browser-local call: {onclick.strip()}"
         elif data_action is None and not onclick:
             mutates, why = "unknown", "a button with no handler in the markup (wired in JS)"
-        return Gesture(template=self.template, kind="button" if tag == "button" else "action",
+        return Gesture(template=self.template, kind="button" if tag in ("button", "input") else "action",
                        selector=self._key(tag, attrs), mutates=mutates, why=why)
+
+    def handle_startendtag(self, tag, attrs):
+        self.handle_starttag(tag, attrs)
 
     def handle_data(self, data):
         if self._in_script:
@@ -204,11 +261,42 @@ class _Lifter(HTMLParser):
     def handle_endtag(self, tag):
         if tag == "script":
             self._in_script = False
-        if tag == "form":
-            if self._mutating_form:
-                self._mutating_form -= 1
-            if self._form_depth:
-                self._form_depth -= 1
+        if tag == "form" and self._forms:
+            self._finish_form(self._forms.pop())
+
+    def close(self):
+        super().close()
+        # An UNCLOSED form — `{% if %}<form>{% else %}<div>{% endif %}` becomes
+        # unbalanced tags once Jinja is neutralised — must still produce its row.
+        # Left open, it also swallowed every later submit in the template.
+        while self._forms:
+            self._finish_form(self._forms.pop())
+
+    def _finish_form(self, form: dict):
+        if not form["lifted"]:
+            return
+        method, action = form["method"], form["action"]
+        # A form's identity is what it DOES — its method, where it posts, and
+        # any literal hidden field that decides which operation it is.
+        base = form["selector"] or f"form[{method} {action or '(self)'}]"
+        if form["hidden"]:
+            base += "{" + ",".join(sorted(form["hidden"])) + "}"
+        if form["mutating"]:
+            mutates = "yes"
+            why = f"<form method={method}> submits to {action or 'its own URL'}"
+        else:
+            # NOT a GET search box: a form with no mutating method but with a
+            # stable attribute is the shape a script intercepts. anat has 75
+            # form tags and only 7 declare a mutating method; 58 of the other 68
+            # carry an id and are submitted by `fetch(..., {method: 'POST'})`.
+            # Calling those non-mutating removed the DOMINANT way that product
+            # changes state from the population entirely.
+            mutates = "unknown"
+            why = ("a form with no mutating method but a stable attribute — "
+                   "submitted from JS, or a genuine GET; the classifier decides")
+        self.found.append(Gesture(
+            template=self.template, kind="form", selector=base,
+            method=method, action=action, mutates=mutates, why=why))
 
 
 def lift_template(path: Path, root: Path) -> tuple[list[Gesture], str]:
@@ -353,6 +441,48 @@ def _static_segments(action: str) -> list[str]:
     return [s for s in action.split(PLACEHOLDER) if s.strip("/ ")]
 
 
+#: How far apart the literal halves of an action may sit and still count as one
+#: call. Wide enough for `f"/admin/courses/{c.id}/delete"` and for
+#: `"/admin/courses/" + cid + "/delete"`; far too narrow to bridge two unrelated
+#: URLs on different lines, which is what made the segments-anywhere test wrong.
+_GAP = r"[^\n]{0,120}?"
+
+
+def _action_pattern(action: str):
+    """One regex the whole action must match, in order, on ONE line.
+
+    THE DEFECT THIS REPLACES. The first version asked whether every static
+    SEGMENT appeared somewhere in one concatenated blob, each independently.
+    `/admin/courses/{}/archive` was therefore "driven" by an unrelated public
+    `/archive` page test plus any mention of `/admin/courses/`. Measured on
+    IGA, a single probe file whose entire content was the docstring
+    "posts to /issue/passkeys/1/delete" healed THREE rows at once — passkeys
+    delete, courses delete and documents delete — because `/delete` is a
+    segment they share. my8200 had four live examples, two of them destructive:
+    `/admin/vouchers/{}/cancel` was satisfied by `/booking/{token}/cancel`.
+
+    A test that drives a control writes that control's URL. Requiring the whole
+    path, with the placeholder standing for one run of non-whitespace, asks for
+    exactly that and nothing weaker.
+    """
+    action = action.split("?", 1)[0].rstrip("/")
+    parts = [re.escape(p) for p in action.split(PLACEHOLDER)]
+    return re.compile(_GAP.join(parts))
+
+
+def _token_pattern(token: str):
+    """The token as an author writes it in a selector or a string, not as prose.
+
+    Two live failures made this necessary. anat's `button[id=ai-btn]` was
+    "driven" by `#bp-ai-btn`, `#fn-ai-btn` and `#tr-ai-btn` with zero
+    whole-token hits — a substring of three OTHER controls' ids. And
+    `button[id=submit]` was driven by the English word "submit" appearing in a
+    sentence. So the token must be bounded at both ends AND carry the mark of a
+    selector or a string literal: `#id`, `'id'`, `"id"`, `[data-action=id]`.
+    """
+    return re.compile(r"""(?:\#|["'\[=])""" + re.escape(token) + r"""(?![-\w])""")
+
+
 def driven_by_corpus(gestures: list[Gesture], corpus: dict[str, str]) -> set[str]:
     """Ids of gestures some file in `corpus` appears to drive.
 
@@ -363,20 +493,27 @@ def driven_by_corpus(gestures: list[Gesture], corpus: dict[str, str]) -> set[str
     browser pressed it and the stored row changed — is P5's job, and this
     function is deliberately the weaker half so the two can be reported apart.
 
-    Every static segment of a form's action must appear, not merely one, or
-    `/lead` matches `/lead-intake` and a whole surface reads as covered.
+    Matching is PER FILE, not over one concatenated blob: the halves of an
+    action must be in the same file and on the same line, or two unrelated
+    tests jointly "drive" a control neither of them has heard of.
     """
-    blob = "\n".join(corpus.values())
     out: set[str] = set()
-    for g in population(gestures):
+    pop = population(gestures)
+    forms = [(g, _action_pattern(g.action)) for g in pop if g.kind == "form" and g.action]
+    tokens = []
+    for g in pop:
         if g.kind == "form" and g.action:
-            segs = _static_segments(g.action)
-            if segs and all(s in blob for s in segs):
-                out.add(g.id)
             continue
-        token = re.search(r"\[(?:data-action|id|name|data-testid)=([^\]]+)\]", g.selector)
-        if token and token.group(1) in blob:
-            out.add(g.id)
+        m = re.search(r"\[(?:data-action|id|name|data-testid)=([^\]{]+)", g.selector)
+        if m:
+            tokens.append((g, _token_pattern(m.group(1))))
+    for text in corpus.values():
+        for g, pat in forms:
+            if g.id not in out and pat.search(text):
+                out.add(g.id)
+        for g, pat in tokens:
+            if g.id not in out and pat.search(text):
+                out.add(g.id)
     return out
 
 

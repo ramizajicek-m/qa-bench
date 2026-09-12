@@ -250,3 +250,163 @@ def test_the_population_is_unique_by_id(tmp_path):
     pop = population(lift(tmp_path))
     assert len(pop) == 1, f"the same control counted {len(pop)} times"
     assert len(pop) == len({g.id for g in pop}), "list and set disagree"
+
+
+# --- the population the review found missing (2026-09-12) --------------------
+#
+# An adversarial review of the register in six repos found five confirmed
+# defects in what this module counts as a control and what it counts as driven.
+# Each test below is one of them, and each was watched red against the code as
+# it stood before the fix.
+
+
+def test_a_form_with_no_method_but_an_id_is_a_candidate(tmp_path):
+    """THE DOMINANT SHAPE, and it was invisible.
+
+    A form emitted a row only when its method was POST/PUT/PATCH/DELETE. anat's
+    admin is SPA-style: 75 form tags, 7 with a mutating method, 68 without, and
+    58 of those carry an id and are submitted by `fetch(..., {method:'POST'})`
+    from an inline handler. So the way that product mostly changes state was not
+    in the population at all — not undriven, ABSENT.
+
+    It is `unknown`, not `yes`: markup alone cannot tell a JS-posted form from a
+    genuine GET. The classifier decides, and unknown stays in the population.
+
+    Mutation: with `"lifted": method in MUTATING_METHODS` this returns [].
+    """
+    write(tmp_path, "t.html",
+          '<form id="portal-invite-form"><button>Send</button></form>')
+    pop = population(lift(tmp_path))
+    assert [g.id for g in pop] == ["t.html::form[id=portal-invite-form]"]
+    assert pop[0].mutates == "unknown"
+
+
+def test_a_plain_get_search_form_is_still_not_a_candidate(tmp_path):
+    """And the button inside it is not one either.
+
+    The pair matters: if the form is not a row, its submit must be swallowed all
+    the same, or every search box on the site arrives as an unresolved control
+    needing a reason. The stated limit is that a JS-submitted form with NO
+    stable attribute is invisible — nothing selects it, so there is no key.
+    """
+    write(tmp_path, "t.html",
+          '<form method="get" action="/search"><button>Go</button></form>')
+    assert population(lift(tmp_path)) == []
+
+
+def test_a_formaction_submit_is_its_own_control(tmp_path):
+    """It posts somewhere its parent form never does.
+
+    `<button type=submit formaction="/admin/x/{}/delete">` inside a SAVE form
+    was swallowed as "the form above already IS this gesture". tharros had three
+    such DELETEs and my8200 two, all with live routes, none in the population.
+
+    Mutation: delete the `formaction` branch in `_maybe_button` and only the
+    parent form survives.
+    """
+    write(tmp_path, "t.html",
+          '<form method="post" action="/admin/products/{{ id }}/save">'
+          '<button type="submit">Save</button>'
+          '<button type="submit" formaction="/admin/products/{{ id }}/delete">Delete</button>'
+          '</form>')
+    ids = sorted(g.id for g in population(lift(tmp_path)))
+    assert ids == ["t.html::button[POST /admin/products/{}/delete]",
+                   "t.html::form[POST /admin/products/{}/save]"]
+
+
+def test_hidden_literal_fields_keep_multiplexed_forms_apart(tmp_path):
+    """Same route, different operation, and one of them was `delete`.
+
+    my8200's library_tags.html has five forms posting to the same path with a
+    hidden `action` of rename / up / down / on-off / delete. They shared one id,
+    so driving `rename` reported `delete` as driven. 33 controls collapsed into
+    20 ids in that repo alone.
+
+    A Jinja-valued hidden field is NOT used: after neutralisation it is the same
+    placeholder in every copy and would distinguish nothing.
+
+    Mutation: drop the `hidden` key from the selector and this returns one id.
+    """
+    write(tmp_path, "t.html",
+          '<form method="post" action="/admin/tags/{{ id }}">'
+          '<input type="hidden" name="op" value="rename"></form>'
+          '<form method="post" action="/admin/tags/{{ id }}">'
+          '<input type="hidden" name="op" value="delete"></form>')
+    ids = sorted(g.id for g in population(lift(tmp_path)))
+    assert ids == ["t.html::form[POST /admin/tags/{}]{op=delete}",
+                   "t.html::form[POST /admin/tags/{}]{op=rename}"]
+
+
+def test_an_unclosed_form_still_emits_its_row(tmp_path):
+    """`{% if %}<form>{% else %}<div>{% endif %}` leaves unbalanced tags.
+
+    The row is emitted at the END tag, so a form that never closes would be
+    dropped entirely. Four templates in the estate parse this way.
+    """
+    write(tmp_path, "t.html",
+          '<form method="post" action="/admin/x/go"><button>Go</button>')
+    assert [g.id for g in population(lift(tmp_path))] == ["t.html::form[POST /admin/x/go]"]
+
+
+# --- what counts as DRIVEN --------------------------------------------------
+
+def test_two_unrelated_files_do_not_jointly_drive_one_control(tmp_path):
+    """THE MEASURE WAS SATISFIED BY COINCIDENCE.
+
+    The old test asked whether every static SEGMENT appeared somewhere in one
+    concatenated blob, each independently. So `/admin/courses/{}/archive` was
+    driven by an unrelated public `/archive` page test plus any mention of
+    `/admin/courses/`. Measured on IGA: a probe file whose entire content was
+    the docstring "posts to /issue/passkeys/1/delete" healed THREE rows at once,
+    two of them destructive, because `/delete` is a segment they share.
+
+    Mutation: restore `all(s in blob for s in segs)` and this control reads
+    driven.
+    """
+    write(tmp_path, "t.html",
+          '<form method="post" action="/admin/courses/{{ id }}/archive"></form>')
+    g = lift(tmp_path)
+    corpus = {"a.py": "client.get('/admin/courses/')",
+              "b.py": "client.get('/archive')"}
+    assert driven_by_corpus(g, corpus) == set()
+    assert driven_by_corpus(g, {"c.py": "client.post(f'/admin/courses/{c.id}/archive')"})
+
+
+def test_a_url_built_by_concatenation_still_counts(tmp_path):
+    """The rule must not be so tight that real drivers stop counting.
+
+    Both halves on one line, with anything between them, is how tests write it.
+    A guard that refuses the healthy case gets overridden, and then it is gone.
+    """
+    write(tmp_path, "t.html",
+          '<form method="post" action="/admin/users/{{ id }}/deactivate"></form>')
+    g = lift(tmp_path)
+    for driver in ('client.post("/admin/users/" + uid + "/deactivate")',
+                   'client.post(f"/admin/users/{u.id}/deactivate")',
+                   'url = "/admin/users/%s/deactivate" % uid'):
+        assert driven_by_corpus(g, {"t.py": driver}), driver
+    assert not driven_by_corpus(g, {"t.py": '"/admin/users/"\n"/deactivate"'})
+
+
+def test_a_token_is_not_driven_by_a_longer_id_that_contains_it(tmp_path):
+    """anat's `ai-btn` was driven by `#bp-ai-btn`, `#fn-ai-btn`, `#tr-ai-btn`.
+
+    Zero whole-token hits; three other controls' ids. The register said the
+    control was covered by the existence of its neighbours.
+    """
+    write(tmp_path, "t.html", '<button id="ai-btn" onclick="go()">AI</button>')
+    g = lift(tmp_path)
+    assert driven_by_corpus(g, {"t.py": "page.click('#bp-ai-btn')"}) == set()
+    assert driven_by_corpus(g, {"t.py": "page.click('#ai-btn')"})
+
+
+def test_a_token_is_not_driven_by_the_english_word(tmp_path):
+    """`button[id=submit]` was driven by the word "submit" in a sentence.
+
+    The token must carry the mark of a selector or a string literal, or every
+    control named after a common verb is covered by prose.
+    """
+    write(tmp_path, "t.html", '<button id="submit" onclick="go()">Go</button>')
+    g = lift(tmp_path)
+    assert driven_by_corpus(g, {"t.py": "# then submit the form and wait"}) == set()
+    assert driven_by_corpus(g, {"t.py": 'page.click("#submit")'})
