@@ -410,3 +410,88 @@ def test_a_token_is_not_driven_by_the_english_word(tmp_path):
     g = lift(tmp_path)
     assert driven_by_corpus(g, {"t.py": "# then submit the form and wait"}) == set()
     assert driven_by_corpus(g, {"t.py": 'page.click("#submit")'})
+
+
+# --- the register as a document ---------------------------------------------
+
+from qabench.gestures import (BOILERPLATE_REASONS, integrity, measure,  # noqa: E402
+                              refusals, register_rows)
+
+
+def _repo(tmp_path, templates: dict, corpus: dict):
+    for name, body in templates.items():
+        write(tmp_path / "templates", name, body)
+    for name, body in corpus.items():
+        write(tmp_path / "tests", name, body)
+    return tmp_path
+
+
+def test_a_sweep_that_walked_nothing_refuses(tmp_path):
+    """A scan of nothing agrees with everything."""
+    _repo(tmp_path, {"t.html": "<p>nothing</p>"}, {"t.py": "pass"})
+    with pytest.raises(RuntimeError, match="DID NOT RUN"):
+        measure(tmp_path, min_controls=5, min_corpus=1)
+
+
+def test_a_new_mutating_control_cannot_be_enrolled_by_regenerating(tmp_path):
+    """THE HOLE THE TOTAL COULD NOT SEE.
+
+    Drive one unclassified control in the same change that adds an undriven
+    DELETE and the total nets down, so a ceiling-only refusal never fires. The
+    new row was then enrolled carrying a sentence a GENERATOR wrote — "MUTATING
+    and undriven — no test or journey posts to it" — which restates the finding
+    instead of deciding anything. Demonstrated live in IGA and in anat's copy:
+    ceilings unchanged, guard green, a `/purge` route silently exempted.
+
+    Mutating rows may LEAVE the register by being driven. They may not ENTER it
+    by regeneration. A control that must be tolerated is added by hand, with a
+    reason a person signs.
+
+    Mutation: delete the `for g in m.mutating_undriven` loop in `refusals` and
+    this returns [].
+    """
+    tmpl = {"a.html": '<form method="post" action="/admin/x/{{ i }}/purge"></form>'
+                      '<button id="old-btn" onclick="go()">x</button>'}
+    _repo(tmp_path, tmpl, {"t.py": "page.click('#old-btn')  # drives the old one"})
+    m = measure(tmp_path, min_controls=1, min_corpus=1)
+    old = {"ceiling": 1, "mutating": 0,
+           "undriven": [{"id": "gone.html::button[id=x]", "mutates": "unknown",
+                         "reason": "written by a person"}]}
+    why = refusals(m, old)
+    assert any("new MUTATING control" in r and "/admin/x/{}/purge" in r for r in why), why
+
+
+def test_a_ceiling_that_disagrees_with_its_rows_is_a_number_nobody_measured(tmp_path):
+    """A hand-edited ceiling bought five undriven controls with no row.
+
+    `test_the_ceiling_is_not_slack` tolerates a gap of five and nothing compared
+    the ceiling to the rows beneath it, so editing `ceiling: 16` to `20` passed
+    in four repos.
+    """
+    _repo(tmp_path, {"a.html": '<button id="b" onclick="go()">x</button>'},
+          {"t.py": "pass"})
+    m = measure(tmp_path, min_controls=1, min_corpus=1)
+    old = {"ceiling": 20, "mutating": 0,
+           "undriven": [{"id": "a.html::button[id=b]", "mutates": "unknown",
+                         "reason": "r"}]}
+    assert any("nobody measured" in c for c in integrity(m, old))
+
+
+def test_a_row_keeps_the_reason_a_person_wrote(tmp_path):
+    """Regeneration must not overwrite a human sentence with boilerplate."""
+    _repo(tmp_path, {"a.html": '<button id="b" onclick="go()">x</button>'},
+          {"t.py": "pass"})
+    m = measure(tmp_path, min_controls=1, min_corpus=1)
+    rows = register_rows(m, {"a.html::button[id=b]": "Ofir signs off: demo only"})
+    assert rows[0]["reason"] == "Ofir signs off: demo only"
+    assert register_rows(m, {})[0]["reason"] in BOILERPLATE_REASONS
+
+
+def test_a_control_that_got_driven_must_leave_the_register(tmp_path):
+    """A stale exemption is how a list stops describing the thing it exempts."""
+    _repo(tmp_path, {"a.html": '<button id="b" onclick="go()">x</button>'},
+          {"t.py": "page.click('#b')"})
+    m = measure(tmp_path, min_controls=1, min_corpus=1)
+    old = {"ceiling": 1, "mutating": 0,
+           "undriven": [{"id": "a.html::button[id=b]", "mutates": "unknown", "reason": "r"}]}
+    assert any("now driven, remove it" in r for r in refusals(m, old))

@@ -542,3 +542,148 @@ def read_corpus(paths, glob: str = "**/*.py") -> dict[str, str]:
                 continue
             out[str(p)] = p.read_text(encoding="utf-8", errors="replace")
     return out
+
+
+# --- the register, assembled once -------------------------------------------
+#
+# WHY THIS IS HERE AND NOT IN SIX REPOS. The lift -> merge static JS -> classify
+# -> read corpus -> subtract assembly was retyped in every guard fixture and
+# every regen script: twelve copies of the same twenty lines. They had already
+# drifted — one repo grew two ceilings, floor constants and an integrity test
+# while the other five kept none of them — so a fix to the shared idea had to be
+# hand-applied in twelve places, which is how five of them stay wrong.
+
+BOILERPLATE_REASONS = (
+    "MUTATING and undriven — no test or journey posts to it",
+    "handler not resolved from markup or JS; classify it or drive it",
+)
+
+
+@dataclass
+class Measurement:
+    """What one sweep of a repo found. Carries its own sizes so a caller can
+    refuse a sweep that walked nothing rather than reporting a clean repo."""
+    population: list
+    corpus_files: int
+    driven: set
+    undriven: list
+    mutating_undriven: list
+
+    @property
+    def ceiling(self) -> int:
+        return len(self.undriven)
+
+    @property
+    def mutating(self) -> int:
+        return len(self.mutating_undriven)
+
+
+def measure(root, templates="templates", static="static",
+            corpus_dirs=("tests", "scripts"),
+            min_controls: int = 20, min_corpus: int = 20) -> Measurement:
+    """One sweep: every control, and which of them something names.
+
+    `min_controls` / `min_corpus` are a DID-NOT-RUN detector, not a target. A
+    scan that walked nothing agrees with everything, so the floors are measured
+    per repo and passed in; the failure text says treat it as did not run.
+    """
+    root = Path(root)
+    gestures, inline = lift_with_scripts(root / templates)
+    js = dict(inline)          # a control's handler is looked up in ITS template first
+    static_dir = root / static
+    if static_dir.exists():
+        for p in static_dir.rglob("*.js"):
+            js[p.name] = p.read_text(encoding="utf-8", errors="replace")
+    gestures = classify_with_js(gestures, js)
+    corpus = read_corpus([root / d for d in corpus_dirs])
+    if len(gestures) < min_controls or len(corpus) < min_corpus:
+        raise RuntimeError(
+            f"the sweep lifted {len(gestures)} controls from {templates}/ and read "
+            f"{len(corpus)} corpus files, under the floors ({min_controls}/"
+            f"{min_corpus}). Treat this as DID NOT RUN, not as a clean repo.")
+    driven = driven_by_corpus(gestures, corpus)
+    pop = population(gestures)
+    undriven = sorted((g for g in pop if g.id not in driven), key=lambda g: g.id)
+    return Measurement(population=pop, corpus_files=len(corpus), driven=driven,
+                       undriven=undriven,
+                       mutating_undriven=[g for g in undriven if g.mutates == "yes"])
+
+
+def register_rows(m: Measurement, previous_reasons: dict) -> list:
+    """The register's rows, keeping any reason a human has already written."""
+    rows = []
+    for g in m.undriven:
+        reason = previous_reasons.get(g.id) or (
+            BOILERPLATE_REASONS[0] if g.mutates == "yes" else BOILERPLATE_REASONS[1])
+        rows.append({"id": g.id, "mutates": g.mutates, "reason": reason})
+    return rows
+
+
+def refusals(m: Measurement, old: dict) -> list:
+    """Why a regeneration must not be written. Empty means go ahead.
+
+    TWO RULES, and the second is the one the review found missing.
+
+      1. A ceiling may only fall. Obvious, and it was there.
+      2. A MUTATING control may LEAVE the register and may not ENTER it by
+         regeneration — whatever the totals do. Without this, driving one
+         unclassified control pays for a new undriven DELETE: the count nets
+         down, the refusal never fires, and the new row is enrolled carrying a
+         sentence a generator wrote. Demonstrated in IGA and in anat: ceilings
+         unchanged, guard green, `/purge` silently exempted with the reason
+         "MUTATING and undriven — no test or journey posts to it", which is a
+         restatement of the finding rather than a decision about it.
+
+    A genuinely new mutating control that must be tolerated is added BY HAND,
+    with a reason a person wrote. That is the point: the cost of exempting a
+    destructive control should be a sentence somebody signs.
+    """
+    out = []
+    if not old:
+        return out
+    listed = {r["id"] for r in old.get("undriven", [])}
+    rows_now = {g.id for g in m.undriven}
+    for name, now in (("ceiling", m.ceiling), ("mutating", m.mutating)):
+        was = old.get(name)
+        if was is not None and now > was:
+            out.append(f"{name}: {now} undriven, above the recorded {was}. "
+                       "Drive it or justify it by hand — regenerating is not how "
+                       "a ratchet is raised.")
+    for g in m.mutating_undriven:
+        if g.id not in listed:
+            out.append(
+                f"new MUTATING control not in the register: {g.id}\n"
+                f"    ({g.why})\n"
+                "    A control that changes something and that nothing has ever "
+                "pressed is the defect this register exists for. Drive it, or add "
+                "the row BY HAND with a reason you are willing to sign.")
+    for stale in sorted(listed - rows_now):
+        out.append(f"now driven, remove it: {stale}")
+    return out
+
+
+def integrity(m: Measurement, old: dict, slack: int = 5) -> list:
+    """Complaints about the register as a DOCUMENT, independent of the sweep.
+
+    `ceiling` must equal the rows beneath it. Nothing checked that, so a ceiling
+    edited by hand from 16 to 20 bought five undriven controls with no row and
+    no reason — verified in IGA, tharros, my8200 and eliad, where the slack
+    tolerance was the only thing standing in the way and it allows exactly five.
+    """
+    out = []
+    rows = old.get("undriven", [])
+    if old.get("ceiling") != len(rows):
+        out.append(f"ceiling says {old.get('ceiling')} but {len(rows)} rows are listed — "
+                   "a number nobody measured")
+    listed_mutating = sum(1 for r in rows if r.get("mutates") == "yes")
+    if old.get("mutating") != listed_mutating:
+        out.append(f"mutating says {old.get('mutating')} but {listed_mutating} rows "
+                   "are marked mutates: yes")
+    for r in rows:
+        if not str(r.get("reason", "")).strip():
+            out.append(f"{r['id']} is listed with no reason")
+    for name, live in (("ceiling", m.ceiling), ("mutating", m.mutating)):
+        if old.get(name) is not None and old[name] - live > slack:
+            out.append(f"{name} is {old[name]} but only {live} are undriven — "
+                       f"lower it; a ceiling that far above the count is decoration")
+    return out
