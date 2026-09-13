@@ -34,6 +34,12 @@ def main(argv: list[str] | None = None) -> int:
     if cmd == "version":
         print(__version__)
         return 0
+    if cmd == "mutate":
+        # No manifest and no version pin: this is a hand tool for watching a
+        # guard go red, and it must work in a repo mid-edit — which is exactly
+        # the state in which `git checkout --` eats your work.
+        from qabench import mutate as _mutate
+        return _mutate.main(rest)
     if cmd == "report":                     # no manifest, no pin: it reads the estate, not one repo
         return report.run(rest)
 
