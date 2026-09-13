@@ -660,7 +660,7 @@ def test_the_recorder_refuses_to_write_an_empty_recording(tmp_path):
 
 def test_the_recorder_writes_what_it_saw(tmp_path):
     _hits._seen.clear()
-    _hits.record("post", "/admin/x/1/delete", 303)
+    _hits.record("post", "/admin/x/1/delete", 303, location="/admin/x?deleted=1")
     _hits.record("GET", "/admin/x", 200)
     _hits.record("POST", "/admin/x/2/delete", 403)      # a CSRF refusal probe
     doc = _hits.write(tmp_path / "hits.json")
@@ -691,7 +691,7 @@ def test_the_recorder_catches_a_real_httpx_request(tmp_path):
     with httpx.Client(transport=httpx.MockTransport(handler),
                       base_url="http://t") as c:
         c.post("/admin/x/9/delete")
-    assert "POST /admin/x/9/delete 204" in _hits._seen
+    assert any(r.startswith("POST /admin/x/9/delete 204") for r in _hits._seen)
     _hits._seen.clear()
 
 
@@ -720,7 +720,8 @@ def test_a_refused_request_is_not_an_exercise_of_the_control(tmp_path):
     _hits.write(tmp_path / "h.json")
     assert hit_by_recording(g, _hits.read(tmp_path / "h.json")) == set()
 
-    _hits.record("POST", "/admin/x/1/delete", 303)       # a real delete
+    _hits.record("POST", "/admin/x/1/delete", 303,
+                 location="/admin/x?saved=1")            # a real delete
     _hits.write(tmp_path / "h.json")
     assert hit_by_recording(g, _hits.read(tmp_path / "h.json")) == {gid}
     _hits._seen.clear()
@@ -798,7 +799,7 @@ def test_a_directory_of_recordings_is_unioned_per_tier(tmp_path):
     (d / "unit.json").write_text(json.dumps(
         {"recorded": ["POST /a/b 200", "POST /refused 403"]}))
     (d / "integration.json").write_text(json.dumps(
-        {"recorded": ["POST /c/d 303"]}))
+        {"recorded": ["POST /c/d 303\t/c?saved=1\t"]}))
 
     assert _hits.read(d) == {"POST /a/b", "POST /c/d"}
     assert _hits.read(d, accepted_only=False) == {
@@ -947,3 +948,79 @@ def test_a_non_form_gesture_that_declares_its_path_is_judgeable(tmp_path):
                 recording={"POST /api/actions/intake#receiveCase"})
     assert m.judgeable == {"app/api/actions.py::action[name=intake.receiveCase]"}
     assert m.hit == {"app/api/actions.py::action[name=intake.receiveCase]"}
+
+
+# --- what "the app acted on it" actually means --------------------------------
+
+
+def test_a_redirect_to_the_login_page_is_not_an_acceptance(tmp_path):
+    """MEASURED, NOT IMAGINED — this credited real controls for months.
+
+    On my8200, 2026-09-13:
+
+        POST /admin/crm/2   unauthenticated   ->   303  Location: /login?next=...
+
+    byte-identical in status to a successful form post. With `status < 400` as
+    the rule, 42 of my8200's 220 write targets and 78 of tharros' 381 were
+    credited ONLY by a 3xx. tharros reporting 103 judgeable / 103 accepted / 0
+    never-accepted was a saturated measure, not a covered application.
+
+    A 3xx now earns credit on evidence: a Location that is not a sign-in bounce.
+
+    Mutation: drop the login-path check in `_acted` and the bounce counts.
+    """
+    assert _hits._acted(303, "/admin/x?saved=1") is True
+    assert _hits._acted(303, "/login?next=/admin/crm/2") is False
+    assert _hits._acted(302, "/login") is False
+    assert _hits._acted(303, "") is False, "a redirect with no Location decides nothing"
+    assert _hits._acted(200, "") is True
+
+
+def test_a_307_never_counts_because_the_body_was_never_read(tmp_path):
+    """13 of tharros' write targets were credited ONLY by a 307 or 308.
+
+    Those statuses re-issue the request before the handler reads the body, so the
+    control did nothing at all. They were outright false hits, and no Location
+    makes them true.
+
+    Mutation: let 307 fall through to the generic 3xx branch and it passes.
+    """
+    assert _hits._acted(307, "/admin/accessory-fulfilment/x") is False
+    assert _hits._acted(308, "/admin/anything") is False
+
+
+def test_a_third_party_sharing_a_path_cannot_credit_a_control(tmp_path, monkeypatch):
+    """my8200's own recording carries six Google Cloud Storage rows.
+
+        DELETE /storage/v1/b/bucket/o/daily/old.gz 204
+
+    The recorder keyed on the path alone, so any third party a test happens to
+    call could credit a control that shares its path. Hosts are DECLARED by the
+    repo — guessing which host is "the app" is how a measure invents a different
+    rule per project.
+
+    Mutation: drop the host filter in `read` and the foreign row is returned.
+    """
+    f = tmp_path / "unit.json"
+    f.write_text(json.dumps({"recorded": [
+        "DELETE /storage/v1/b/bucket/o/old.gz 204\t\tstorage.googleapis.com",
+        "POST /admin/thing 200\t\tapp.my8200.com",
+    ]}))
+    assert _hits.read(f) == {"DELETE /storage/v1/b/bucket/o/old.gz",
+                             "POST /admin/thing"}, "undeclared: everything is kept"
+
+    monkeypatch.setenv(_hits.HOSTS_ENV, "app.my8200.com")
+    assert _hits.read(f) == {"POST /admin/thing"}
+
+
+def test_an_older_recording_without_statuses_still_parses(tmp_path):
+    """The committed files predate the trailer; they must not crash a reader.
+
+    They are treated as status-unknown, which `accepted_only` then drops — so an
+    old recording reports NOTHING accepted rather than everything, and the next
+    real run replaces it. Silent optimism is the failure to avoid here.
+    """
+    f = tmp_path / "unit.json"
+    f.write_text(json.dumps({"recorded": ["POST /admin/legacy"]}))
+    assert _hits.read(f) == set()
+    assert _hits.read(f, accepted_only=False) == {"POST /admin/legacy"}

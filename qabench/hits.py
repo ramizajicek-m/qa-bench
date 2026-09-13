@@ -84,7 +84,8 @@ def _body_discriminator(request) -> str:
     return ""
 
 
-def record(method: str, path: str, status: int = 0) -> None:
+def record(method: str, path: str, status: int = 0, location: str = "",
+           host: str = "") -> None:
     """One request the suite made, and what the app answered.
 
     THE STATUS IS NOT DECORATION, and a live run proved it within minutes. IGA's
@@ -99,7 +100,9 @@ def record(method: str, path: str, status: int = 0) -> None:
     that overcounts, which is worse: the first leaves a to-do, the second
     retires it.
     """
-    _seen.add(f"{method.upper()} {path} {int(status)}")
+    # TAB-separated trailer so a path containing a space cannot shift the fields,
+    # and so an older two-field row still parses.
+    _seen.add(f"{method.upper()} {path} {int(status)}\t{location}\t{host}")
 
 
 def install() -> bool:
@@ -123,7 +126,9 @@ def install() -> bool:
         response = original(self, request, *a, **kw)
         try:
             record(request.method, request.url.path + _body_discriminator(request),
-                   response.status_code)
+                   response.status_code,
+                   location=response.headers.get("location", ""),
+                   host=request.url.host or "")
         except Exception:       # never let bookkeeping break a suite
             pass
         return response
@@ -138,7 +143,9 @@ def install() -> bool:
             response = await original_async(self, request, *a, **kw)
             try:
                 record(request.method, request.url.path + _body_discriminator(request),
-                       response.status_code)
+                       response.status_code,
+                       location=response.headers.get("location", ""),
+                       host=request.url.host or "")
             except Exception:
                 pass
             return response
@@ -170,46 +177,100 @@ def write(path) -> dict:
 
 #: Below this, the app ACTED on the request. At or above it, the app refused,
 #: and a refusal says nothing about whether the control works.
-ACCEPTED = 400
+#: What counts as the app having ACTED on the request.
+#:
+#: 2xx only, and that is a correction. The first version used `status < 400`,
+#: which counts every redirect — and in these apps a redirect is ambiguous by
+#: construction. Measured on my8200, 2026-09-13:
+#:
+#:     POST /admin/crm/2  unauthenticated  ->  303  Location: /login?next=...
+#:
+#: byte-identical in status to a successful form post. 42 of my8200's 220 write
+#: targets and 78 of tharros' 381 were credited ONLY by a 3xx, and 13 of
+#: tharros' only by 307/308 — where the handler never processed the body at all,
+#: so those were outright false hits. tharros reporting "103 judgeable, 103
+#: accepted, 0 never accepted" was the signature of a saturated measure, not a
+#: covered application.
+#:
+#: A 3xx can still earn credit, but only on evidence rather than on its number:
+#: it must carry a Location that is not a sign-in bounce, and 307/308 never
+#: qualify because they are re-issued before the body is read.
+ACCEPTED_MIN, ACCEPTED_MAX = 200, 300
+
+#: Paths a redirect lands on that mean "you are not signed in", not "done".
+#: Declared rather than guessed: a repo that signs in somewhere else says so.
+LOGIN_ENV = "QABENCH_LOGIN_PATHS"
+DEFAULT_LOGIN_PATHS = ("/login", "/signin", "/sign-in", "/auth/login", "/accounts/login")
+
+#: Hosts whose traffic belongs to the app under test. Without this every
+#: third-party call a test makes can credit a control that shares its path —
+#: my8200's own recording carries six Google Cloud Storage rows
+#: (`DELETE /storage/v1/b/bucket/o/daily/old.gz 204`), and nothing distinguished
+#: them from the app's own writes.
+HOSTS_ENV = "QABENCH_RECORD_HOSTS"
+
+
+def _login_paths() -> tuple:
+    declared = tuple(p for p in os.environ.get(LOGIN_ENV, "").split(",") if p)
+    return declared or DEFAULT_LOGIN_PATHS
+
+
+def _acted(status: int, location: str) -> bool:
+    """Did the app ACT on this request, as opposed to answering it?"""
+    if ACCEPTED_MIN <= status < ACCEPTED_MAX:
+        return True
+    if status in (307, 308):
+        return False            # re-issued before the body was read
+    if 300 <= status < 400:
+        target = (location or "").split("?", 1)[0]
+        if not target:
+            return False        # a redirect with no Location decides nothing
+        return not any(target.rstrip("/").endswith(p) or target == p
+                       for p in _login_paths())
+    return False
 
 
 def read(path, accepted_only: bool = True) -> set:
     """The recorded hits as "METHOD path", or an empty set if none recorded yet.
 
-    A repo with no hits file is not in a failing state — it has not opted in.
+    A DIRECTORY unions every *.json recording inside it, one file per tier: the
+    unit and integration tiers are separate commands, and a single file meant the
+    second overwrote the first — a control driven in integration then read as
+    never accepted, so work done looked like no progress.
+
+    A repo with no recording is not in a failing state — it has not opted in.
     Callers must report the difference rather than treating "unknown" as "no".
 
-    `accepted_only` drops the refusals, which is the default because a probe
-    that asserts a route refuses without CSRF is not an exercise of the control.
-    Pass False to see everything the suite touched, refusals included — useful
-    for the opposite question, which routes no test has ever so much as knocked
-    on.
+    `accepted_only` keeps only the requests the app ACTED on (see `_acted`),
+    which is the default because a probe asserting a route refuses is not an
+    exercise of the control. Pass False to see everything the suite touched,
+    refusals included — the opposite question, and the one that says which routes
+    nothing has ever so much as knocked on.
+
+    When QABENCH_RECORD_HOSTS names the app's hosts, traffic to any other host is
+    dropped: a third party sharing a path must not credit a control.
     """
     p = Path(path)
     if p.is_dir():
-        # ONE RECORDING PER TIER. anat's unit and integration tiers are separate
-        # commands with separate databases; a single file meant the second
-        # overwrote the first, so a control driven in integration still read as
-        # never accepted and work done looked like no progress.
-        #
-        # Per-tier FILES rather than merge-on-write, so staleness stays bounded:
-        # a tier's run replaces its own file, and a route that no longer exists
-        # stops being claimed as hit. A merge would keep every hit forever, which
-        # is the degenerate direction — the number could only improve.
         out: set = set()
         for f in sorted(p.glob("*.json")):
             out |= read(f, accepted_only=accepted_only)
         return out
     if not p.exists():
         return set()
+    hosts = tuple(h for h in os.environ.get(HOSTS_ENV, "").split(",") if h)
     out = set()
     for row in json.loads(p.read_text(encoding="utf-8")).get("recorded", []):
-        parts = row.rsplit(" ", 1)
+        head, _, trailer = row.partition("\t")
+        location, _, host = trailer.partition("\t")
+        parts = head.rsplit(" ", 1)
         if len(parts) == 2 and parts[1].isdigit():
             where, status = parts[0], int(parts[1])
-        else:                                   # a pre-status recording
-            where, status = row, 0
-        if accepted_only and status >= ACCEPTED:
+        else:                                   # a recording made before statuses
+            where, status = head, 0
+        if hosts and host and host not in hosts:
+            continue
+        if accepted_only and not _acted(status, location):
             continue
         out.add(where)
     return out
