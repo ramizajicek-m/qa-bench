@@ -1579,3 +1579,52 @@ def test_the_union_reads_per_worker_files_back(tmp_path):
     assert hits.read(d) == {"POST /a", "POST /b"}, (
         "the per-worker files did not union — a worker's share would be lost at "
         "READ time instead of at write time, which is the same defect moved")
+
+
+def test_the_per_worker_files_merge_into_one_and_vanish(tmp_path):
+    """Per-worker names solve the overwrite; committing them recreates it.
+
+    `-n auto` reads the machine, so a fourteen-core laptop writes `unit.gw0..13`
+    and an eight-core runner writes `unit.gw0..7` — leaving six stale files the
+    directory union keeps reading as current, indefinitely. A recording whose
+    staleness is invisible is the whole defect being fixed today; putting it in
+    the filenames would be reintroducing it one layer out.
+
+    Mutation: drop the `f.unlink()` loop and this goes red on the leftovers.
+    """
+    import json
+
+    from qabench import hits
+
+    d = tmp_path / "hits"
+    d.mkdir()
+    for w, row in (("gw0", "POST /a 200"), ("gw1", "POST /b 200"), ("gw11", "POST /a 200")):
+        (d / f"unit.{w}.json").write_text(json.dumps(
+            {"format": hits.FORMAT, "recorded": [f"{row}\t\tapp"], "count": 1}))
+
+    out = hits.merge_workers(str(d / "unit.json"))
+    assert out["workers"] == 3
+    assert out["count"] == 2, f"duplicates across workers must collapse: {out}"
+    assert (d / "unit.json").is_file()
+    assert not list(d.glob("unit.gw*.json")), (
+        "the per-worker files survived — a later run on a machine with fewer "
+        "workers would inherit the extras and read them as current")
+    assert hits.read(d) == {"POST /a", "POST /b"}
+
+
+def test_merging_nothing_is_a_refusal_not_an_empty_file(tmp_path):
+    """Absent per-worker files mean serial, or a plugin that never loaded.
+
+    Either way the answer is a sentence, not a zero — writing an empty recording
+    would mark every control unhit on the next read.
+    """
+    import pytest as _pytest
+
+    from qabench import hits
+
+    d = tmp_path / "hits"
+    d.mkdir()
+    with _pytest.raises(RuntimeError) as e:
+        hits.merge_workers(str(d / "unit.json"))
+    assert "DID NOT RUN" in str(e.value)
+    assert not (d / "unit.json").exists(), "it wrote a file anyway"

@@ -399,6 +399,45 @@ def worker_target(target: str) -> str:
     return str(p.with_name(f"{p.stem}.{worker}{p.suffix}"))
 
 
+def merge_workers(target: str) -> dict:
+    """Fold `<stem>.gwN.<suffix>` files into `<stem>.<suffix>` and delete them.
+
+    The per-worker names solve the overwrite; they must not be what gets
+    COMMITTED. `-n auto` picks a worker count from the machine, so a laptop with
+    fourteen cores writes `unit.gw0..gw13` and a runner with eight writes
+    `unit.gw0..gw7` — leaving six stale files that the directory union would keep
+    reading as current, forever. A recording whose staleness is invisible is the
+    defect this module spent the day fixing; shipping it in the filenames would
+    be reintroducing it.
+
+    So: one committed file per tier, merged here, with the per-worker files gone
+    afterwards so a later run cannot inherit them.
+
+    Refuses an empty merge for the same reason `write` does.
+    """
+    p = Path(target)
+    parts = sorted(p.parent.glob(f"{p.stem}.gw*{p.suffix}"))
+    if not parts:
+        raise RuntimeError(
+            f"no per-worker recordings beside {target} — either the run was "
+            f"serial (in which case {p.name} is already the recording) or the "
+            f"plugin never loaded. Treat this as DID NOT RUN.")
+
+    rows: set = set()
+    for f in parts:
+        rows |= set(json.loads(f.read_text(encoding="utf-8")).get("recorded", []))
+    if not rows:
+        raise RuntimeError(
+            f"{len(parts)} per-worker file(s) beside {target} and not one request "
+            f"between them. Refusing to write an empty recording.")
+
+    doc = {"format": FORMAT, "recorded": sorted(rows), "count": len(rows)}
+    p.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
+    for f in parts:
+        f.unlink()
+    return {**doc, "workers": len(parts)}
+
+
 def pytest_sessionfinish(session, exitstatus):   # pragma: no cover
     target = os.environ.get(ENV)
     if not target:
