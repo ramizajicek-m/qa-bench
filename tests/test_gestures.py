@@ -1479,3 +1479,48 @@ def test_measure_does_not_infer_the_touched_set_from_the_accepted_one(tmp_path):
                    recording={"POST /admin/x"}, touched={"POST /admin/x"})
     assert both.split_measured
     assert both.touched == both.hit, "both sets were given and both were read"
+
+
+@pytest.mark.parametrize(
+    "location,acted,why",
+    [
+        ("/login?reset=1", True,
+         "my8200's password reset: it WORKED and ends at the login page"),
+        ("/login?changed=1&ok", True, "any flow that finishes at the login page"),
+        ("/login?next=/admin/x", False, "the commonest refusal there is"),
+        ("/accounts/login/?next=/x", False, "the same, with a trailing slash"),
+        ("/login?next=", False, "a bounce with an empty next is still a bounce"),
+        ("/login", False, "a bare bounce to the login page"),
+        ("/login/", False, "the same, trailing slash"),
+        ("/admin/purchase-orders/1", True, "the thing that was just created"),
+        ("", False, "a redirect with no Location decides nothing"),
+    ],
+)
+def test_a_flow_that_ENDS_at_the_login_page_is_not_a_refusal(location, acted, why):
+    """A login redirect is a refusal when it carries "come back afterwards".
+
+    The rule was "any redirect to a login path is a refusal", and that is wrong
+    for every flow whose SUCCESS ends at the login page. Measured on my8200,
+    2026-09-13: `POST /reset/<token>` answered `303 -> /login?reset=1` — the
+    password reset worked — and the register reported the control as never once
+    accepted. A false negative that reads as a defect, which costs the same as the
+    false positive this line of work started from.
+
+    The distinction is the bounce parameter, not the presence of a query:
+    `/login?next=/admin/x` is the commonest refusal in the estate and a rule that
+    read "has a query" as success would credit every unauthenticated probe.
+
+    Mutation: drop the `BOUNCE_PARAMS` test from `_is_login_bounce` and the
+    refusal rows go red; make it `return True` and the success rows do.
+    """
+    from qabench.hits import _acted
+
+    assert _acted(303, location) is acted, why
+
+
+def test_a_307_is_still_not_the_app_acting():
+    """Unchanged by the above: the body had not been read yet."""
+    from qabench.hits import _acted
+
+    assert _acted(307, "/login?reset=1") is False
+    assert _acted(308, "/admin/x") is False

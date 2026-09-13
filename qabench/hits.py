@@ -226,6 +226,44 @@ DEFAULT_LOGIN_PATHS = ("/login", "/signin", "/sign-in", "/auth/login", "/account
 HOSTS_ENV = "QABENCH_RECORD_HOSTS"
 
 
+#: Query parameters that mean "come back here after you sign in". Their presence
+#: is what makes a redirect to a login page a REFUSAL: the app is bouncing the
+#: caller and remembering where they were going.
+#:
+#: Without this the rule was "any redirect to a login path is a refusal", and that
+#: is wrong for every flow whose SUCCESS ends at the login page. Measured on
+#: my8200, 2026-09-13: `POST /reset/<token>` answered `303 -> /login?reset=1` —
+#: the password reset WORKED, and the register counted the control as never once
+#: accepted. A false negative that reads as a defect, which is the same cost as
+#: the false positive this whole line of work started from.
+BOUNCE_PARAMS = ("next=", "next_url=", "redirect=", "redirect_to=", "return=",
+                 "return_to=", "returnTo=", "continue=", "from=")
+
+
+def _is_login_bounce(location: str) -> bool:
+    """Whether this redirect is the app REFUSING, rather than a flow finishing.
+
+    A login path plus a "come back after signing in" parameter, or a login path
+    with no query at all. A login path carrying anything else is the end of a
+    flow — a reset, a logout, an email change — and the app acted.
+
+    Deliberately not "any query means success": `/login?next=/admin/x` is the
+    commonest refusal there is, and a rule that read it as a flow finishing would
+    credit every unauthenticated probe in the estate.
+    """
+    target, _, query = (location or "").partition("?")
+    target = target.rstrip("/")
+    if not target:
+        return False
+    at_login = any(target.endswith(p.rstrip("/")) or target == p.rstrip("/")
+                   for p in _login_paths())
+    if not at_login:
+        return False
+    if not query:
+        return True
+    return any(b in query for b in BOUNCE_PARAMS)
+
+
 def _login_paths() -> tuple:
     declared = tuple(p for p in os.environ.get(LOGIN_ENV, "").split(",") if p)
     return declared or DEFAULT_LOGIN_PATHS
@@ -238,11 +276,9 @@ def _acted(status: int, location: str) -> bool:
     if status in (307, 308):
         return False            # re-issued before the body was read
     if 300 <= status < 400:
-        target = (location or "").split("?", 1)[0]
-        if not target:
+        if not (location or ""):
             return False        # a redirect with no Location decides nothing
-        return not any(target.rstrip("/").endswith(p) or target == p
-                       for p in _login_paths())
+        return not _is_login_bounce(location)
     return False
 
 
