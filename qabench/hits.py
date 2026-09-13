@@ -374,10 +374,36 @@ def pytest_configure(config):            # pragma: no cover - exercised by a liv
         install()
 
 
+def worker_target(target: str) -> str:
+    """Under xdist, each WORKER writes its own file.
+
+    Every worker is a separate process with its own `_seen`, and every one of
+    them runs `pytest_sessionfinish`. Writing them all to one path means the last
+    to finish wins and the rest are lost — silently, and in the direction that
+    reads as a product regression.
+
+    Measured on anat, 2026-09-13: a serial recording held 973 distinct requests
+    and the same suite under `-n auto` wrote **61**, one worker's share of
+    13,175 tests. Nothing failed. The register would have reported hundreds of
+    controls as never accepted, and the estate had been recording this way in
+    every repo whose `hits` target inherits `WORKERS ?= auto`.
+
+    `read()` on a DIRECTORY already unions every `*.json` inside it, so a
+    per-worker name needs no reader change — which is why the fix is a filename
+    and not a merge protocol with a lock.
+    """
+    worker = os.environ.get("PYTEST_XDIST_WORKER")
+    if not worker:
+        return target
+    p = Path(target)
+    return str(p.with_name(f"{p.stem}.{worker}{p.suffix}"))
+
+
 def pytest_sessionfinish(session, exitstatus):   # pragma: no cover
     target = os.environ.get(ENV)
     if not target:
         return
+    target = worker_target(target)
     try:
         doc = write(target)
         print(f"\nqabench: recorded {doc['count']} distinct requests -> {target}")

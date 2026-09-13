@@ -1524,3 +1524,58 @@ def test_a_307_is_still_not_the_app_acting():
 
     assert _acted(307, "/login?reset=1") is False
     assert _acted(308, "/admin/x") is False
+
+
+def test_each_xdist_worker_writes_its_own_recording(monkeypatch):
+    """One path plus many workers means the last to finish wins.
+
+    Every xdist worker is a separate process with its own `_seen`, and every one
+    runs `pytest_sessionfinish`. Measured on anat, 2026-09-13: 973 distinct
+    requests recorded serially, **61** from the same suite under `-n auto` — one
+    worker's share of 13,175 tests. Nothing failed; the register would simply
+    have reported hundreds of controls as never accepted, which is the shape of a
+    product regression rather than of a lost file.
+
+    Every repo in the estate whose `hits` target inherits `WORKERS ?= auto` was
+    recording this way.
+
+    Mutation: make `worker_target` return its argument unchanged and this goes
+    red — both workers claim the same path.
+    """
+    from qabench.hits import worker_target
+
+    monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
+    assert worker_target("qa/hits/unit.json") == "qa/hits/unit.json", (
+        "a serial run must keep the plain name, or every committed recording is "
+        "orphaned by this change")
+
+    seen = set()
+    for w in ("gw0", "gw1", "gw11"):
+        monkeypatch.setenv("PYTEST_XDIST_WORKER", w)
+        got = worker_target("qa/hits/unit.json")
+        assert got != "qa/hits/unit.json", f"{w} would overwrite the shared file"
+        assert got.endswith(".json"), got
+        assert w in got, got
+        seen.add(got)
+    assert len(seen) == 3, f"two workers share a path: {seen}"
+
+
+def test_the_union_reads_per_worker_files_back(tmp_path):
+    """The per-worker names are only safe because a DIRECTORY read unions them.
+
+    That is why the fix is a filename rather than a merge protocol with a lock:
+    `read()` already had the behaviour this depends on.
+    """
+    import json
+
+    from qabench import hits
+
+    d = tmp_path / "hits"
+    d.mkdir()
+    for w, path in (("gw0", "POST /a 200"), ("gw1", "POST /b 200")):
+        (d / f"unit.{w}.json").write_text(json.dumps(
+            {"format": hits.FORMAT, "recorded": [f"{path}\t\tapp"], "count": 1}))
+
+    assert hits.read(d) == {"POST /a", "POST /b"}, (
+        "the per-worker files did not union — a worker's share would be lost at "
+        "READ time instead of at write time, which is the same defect moved")
