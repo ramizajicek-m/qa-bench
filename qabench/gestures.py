@@ -707,6 +707,10 @@ class Measurement:
     #: the population it speaks for, or the reader supplies an optimistic
     #: number.
     judgeable: set = field(default_factory=set)
+    #: Ids some request reached AT ALL, whatever the app answered. The third
+    #: count, and the estate reported only two: "reached and refused" is a to-do,
+    #: "never reached" is an unknown, and collapsing them hides which is which.
+    touched: set = field(default_factory=set)
     #: False when no recording was supplied.
     recorded: bool = False
 
@@ -717,6 +721,29 @@ class Measurement:
     @property
     def mutating(self) -> int:
         return len(self.mutating_undriven)
+
+    @property
+    def never_touched(self) -> list:
+        """Judgeable controls no request has ever reached, accepted or refused.
+
+        Distinct from `unhit_mutating` on purpose. A control that was reached and
+        refused has a test aimed at it; one nothing has ever knocked on does not,
+        and the second is the weaker position. ACCEPTED IS NOT CORRECT and
+        neither of these says anything about correctness — a 200 proves the
+        handler did not raise.
+        """
+        if not self.recorded:
+            return []
+        return [g for g in self.population
+                if g.id in self.judgeable and g.id not in self.touched]
+
+    @property
+    def touched_not_accepted(self) -> list:
+        """Reached, and the app never acted on it. A refusal probe looks like this."""
+        if not self.recorded:
+            return []
+        return [g for g in self.population
+                if g.id in self.touched and g.id not in self.hit]
 
     @property
     def unhit_mutating(self) -> list:
@@ -738,7 +765,7 @@ class Measurement:
 def measure(root, templates="templates", static="static",
             corpus_dirs=("tests", "scripts"),
             min_controls: int = 20, min_corpus: int = 20,
-            population_fn=None, recording=None) -> Measurement:
+            population_fn=None, recording=None, touched=None) -> Measurement:
     """One sweep: every control, and which of them something names.
 
     `population_fn` is how a project whose controls are not in markup joins the
@@ -781,6 +808,7 @@ def measure(root, templates="templates", static="static",
                        undriven=undriven,
                        mutating_undriven=[g for g in undriven if g.mutates == "yes"],
                        hit=hit_by_recording(gestures, recording or set()),
+                       touched=hit_by_recording(gestures, touched or recording or set()),
                        judgeable=judgeable_by_recording(gestures),
                        recorded=bool(recording))
 

@@ -1024,3 +1024,52 @@ def test_an_older_recording_without_statuses_still_parses(tmp_path):
     f.write_text(json.dumps({"recorded": ["POST /admin/legacy"]}))
     assert _hits.read(f) == set()
     assert _hits.read(f, accepted_only=False) == {"POST /admin/legacy"}
+
+
+def test_the_three_counts_are_reported_separately(tmp_path):
+    """NEVER TOUCHED, TOUCHED-BUT-REFUSED, ACCEPTED — and they are not the same.
+
+    The estate reported two counts and collapsed the first pair. "Reached and
+    refused" means a test is aimed at the control and the app said no; "never
+    reached" means nothing has knocked on it at all. The second is the weaker
+    position, and a single number hid which was which.
+
+    And ACCEPTED IS NOT CORRECT. A 200 proves the handler did not raise; it says
+    nothing about whether the right row changed. That is the journeys' standard
+    and it is kept separate on purpose.
+
+    Mutation: make `never_touched` fall back to `hit` and the middle row vanishes.
+    """
+    def provider(root):
+        return [
+            Gesture(template="t.html", kind="form", selector="form[POST /a]",
+                    method="POST", action="/a", mutates="yes", why="declared"),
+            Gesture(template="t.html", kind="form", selector="form[POST /b]",
+                    method="POST", action="/b", mutates="yes", why="declared"),
+            Gesture(template="t.html", kind="form", selector="form[POST /c]",
+                    method="POST", action="/c", mutates="yes", why="declared"),
+        ]
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "t.py").write_text("pass\n", encoding="utf-8")
+
+    m = measure(tmp_path, corpus_dirs=("tests",), min_controls=1, min_corpus=1,
+                population_fn=provider,
+                recording={"POST /a"},                 # accepted
+                touched={"POST /a", "POST /b"})        # /b reached and refused
+    assert len(m.judgeable) == 3
+    assert [g.action for g in m.touched_not_accepted] == ["/b"]
+    assert [g.action for g in m.never_touched] == ["/c"]
+    assert [g.action for g in m.unhit_mutating] == ["/b", "/c"]
+
+
+def test_without_a_recording_all_three_counts_are_unknown(tmp_path):
+    """An absent recording must not read as "nothing was ever touched"."""
+    def provider(root):
+        return [Gesture(template="t.html", kind="form", selector="form[POST /a]",
+                        method="POST", action="/a", mutates="yes", why="declared")]
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "t.py").write_text("pass\n", encoding="utf-8")
+    m = measure(tmp_path, corpus_dirs=("tests",), min_controls=1, min_corpus=1,
+                population_fn=provider)
+    assert m.recorded is False
+    assert m.never_touched == [] and m.touched_not_accepted == [] and m.unhit_mutating == []
