@@ -140,6 +140,14 @@ def broken(request: Request):
     if g:
         return g
     js = "<script>throw new Error('boom: the wiring below never runs')</script>" if os.environ.get("FAKE_BROKEN") == "1" else ""
+    # FAKE_WIRE: the console line a real transport failure produces, copied
+    # verbatim from my8200's bench log of 2026-09-12 — a sub-resource of a page
+    # that had already answered 200. Playwright reports it as a console message
+    # of type `error`, which is the only way the stage can see one, so this is
+    # the same input the stage got that night rather than an invented shape.
+    if os.environ.get("FAKE_WIRE") == "1":
+        js += ("<script>console.error('Failed to load resource: "
+               "net::ERR_NETWORK_CHANGED')</script>")
     return _page("Broken?", js)
 
 

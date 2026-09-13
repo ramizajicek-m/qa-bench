@@ -22,6 +22,32 @@ from .. import core
 from ..manifest import Bench
 
 
+#: Chromium's own transport failures. A console error carrying one of these is
+#: a statement about the WIRE, not about the code — the browser never got the
+#: bytes, so nothing was measured about what the page would have done with them.
+#:
+#: my8200, 2026-09-12: one cell failed with `net::ERR_NETWORK_CHANGED` on a
+#: sub-resource of a page that had already answered HTTP 200. The bench went
+#: red, the night refused the promotion, and production sat a day behind over a
+#: laptop changing networks. A check that cannot tell "the code is wrong" from
+#: "the wire was slow" is not a check.
+#:
+#: These become a SKIP, never a pass: the cell's central claim is that the page
+#: raised zero console errors, and after a transport failure that claim is
+#: UNKNOWN. A skip puts the stage on exit 3 (did not run) rather than 0, so a
+#: night on a bad network reports "nothing was decided here" instead of green.
+#:
+#: ERR_CONNECTION_REFUSED and ERR_NAME_NOT_RESOLVED are deliberately NOT here.
+#: Those say the host is not answering at all, which is a real finding about a
+#: deploy, and the cell's own HTTP status already carries it.
+TRANSPORT = re.compile(r"""net::(
+      ERR_NETWORK_CHANGED | ERR_INTERNET_DISCONNECTED | ERR_NETWORK_IO_SUSPENDED
+    | ERR_CONNECTION_RESET | ERR_CONNECTION_CLOSED | ERR_CONNECTION_TIMED_OUT
+    | ERR_CONNECTION_ABORTED | ERR_ADDRESS_UNREACHABLE | ERR_TIMED_OUT
+    | ERR_SOCKET_NOT_CONNECTED | ERR_EMPTY_RESPONSE | ERR_NETWORK_ACCESS_DENIED
+)""", re.VERBOSE)
+
+
 def _page_routes(cfg: Bench, rows: list[dict]) -> list[dict]:
     out = []
     for row in rows:
@@ -269,6 +295,9 @@ def main(cfg: Bench, argv: list[str]) -> int:
                         status = 200                   # a redirect to a default page is the page
                     errs = [c for c in console if not any(rx.search(c) for rx in ignore)]
                     bad = [f for f in failed if not any(rx.search(f) for rx in ignore)]
+                    # The wire, separated from the code, before either is judged.
+                    wire = [c for c in errs if TRANSPORT.search(c)]
+                    errs = [c for c in errs if not TRANSPORT.search(c)]
                     if not want_open:
                         errs = [c for c in errs if "status of 40" not in c]
                         bad = [f for f in bad if not f.startswith(f"{status} GET {cfg.origin}{path}")]
@@ -293,6 +322,22 @@ def main(cfg: Bench, argv: list[str]) -> int:
                     if sideways:
                         detail += f"; the page scrolls sideways at {w}px"
                     ok = ok_status and not errs and not (want_open and bad) and not sideways
+                    if wire and ok:
+                        # Everything this cell COULD decide came out clean, and
+                        # the one thing it could not is the console claim. Not a
+                        # pass: the page may well have been left half-wired by
+                        # the resource that never arrived, and we cannot know.
+                        L.skip(cell, f"a transport failure, not a finding — {wire[0][:120]}"
+                                     + (f" (+{len(wire) - 1})" if len(wire) > 1 else "")
+                                     + "; the browser never got the bytes, so the "
+                                       "console claim is UNKNOWN for this cell")
+                        cells_total += 1
+                        core.shot(page, cfg.shots, f"{role}__{label}__{tmpl.strip('/').replace('/', '_').replace('{', '').replace('}', '')}")
+                        continue
+                    if wire:
+                        # It failed for a REAL reason as well. Report both, so
+                        # nobody spends the morning on the network error.
+                        detail += f"; (also a transport failure, ignored: {wire[0][:80]})"
                     L.check(cell, ok, detail)
                     cells_total += 1
                     core.shot(page, cfg.shots, f"{role}__{label}__{tmpl.strip('/').replace('/', '_').replace('{', '').replace('}', '')}")
