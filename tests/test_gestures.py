@@ -1399,3 +1399,83 @@ def test_a_written_recording_declares_its_format(tmp_path, monkeypatch):
     doc = hits.write(tmp_path / "out.json")
     assert doc["format"] == hits.FORMAT
     assert json.loads((tmp_path / "out.json").read_text())["format"] == hits.FORMAT
+
+
+def test_the_split_is_NOT_MEASURED_rather_than_zero_when_only_accepted_is_given():
+    """Two of the three counts were fabricated by a default argument.
+
+    `measure(recording=...)` used to default `touched` to the ACCEPTED set — and
+    every consumer passed only `recording`, so `touched_not_accepted` was always
+    0 and `never_touched` absorbed both. eliad printed "7 never touched, 0
+    touched but never accepted" on 2026-09-13 while its own recording held a
+    `403` and a `307 -> /login` for six of the seven: the suite proves the guard
+    refuses and has never proved the control works, which is the WORSE of the two
+    states and the one that was being hidden.
+
+    In the release that added the three counts. A default argument is enough to
+    make a measure agree with itself.
+
+    Mutation: restore `touched or recording` in `measure` and this goes red.
+    """
+    from qabench.gestures import header, manifest_coverage, register_doc
+
+    m = _measurement(hit={"c0"}, judgeable={"c0", "c1", "c2"})
+    m.touched = None                      # a caller that gave only `recording`
+    assert not m.split_measured
+    assert m.never_touched == [] and m.touched_not_accepted == []
+
+    doc, cov = register_doc(m, {}), manifest_coverage(m)
+    for key in ("never_touched", "touched_not_accepted"):
+        assert doc[key] is None, f"register {key} claims {doc[key]!r}, not unknown"
+        assert cov[key] is None, f"manifest {key} claims {cov[key]!r}, not unknown"
+    assert doc["accepted"] == 1, "the accepted count IS measured and must survive"
+
+    # Word-wise: the header wraps, so a sentence is not a contiguous string.
+    flat = " ".join(line.lstrip("# ") for line in header(m).splitlines())
+    assert "WAS NOT MEASURED" in flat
+    assert "They are not zero; they are unknown." in flat
+    assert "NEVER TOUCHED (no request" not in flat, "it reported a split it does not have"
+
+
+def test_the_split_IS_reported_when_both_sets_are_given():
+    """Or the guard above is a way of never reporting the split at all."""
+    from qabench.gestures import header, manifest_coverage, register_doc
+
+    m = _measurement(hit={"c0"}, touched={"c0", "c1"},
+                     judgeable={"c0", "c1", "c2", "d1"})
+    assert m.split_measured
+    doc, cov = register_doc(m, {}), manifest_coverage(m)
+    assert doc["never_touched"] == len(m.never_touched) > 0
+    assert doc["touched_not_accepted"] == len(m.touched_not_accepted) > 0
+    assert cov["never_touched"] == doc["never_touched"]
+    assert "NEVER TOUCHED" in header(m)
+    assert "WAS NOT MEASURED" not in header(m)
+
+
+def test_measure_does_not_infer_the_touched_set_from_the_accepted_one(tmp_path):
+    """Through `measure` itself, which is where the default argument lived.
+
+    The test above proves the PROPERTIES are tri-state; it sets `touched` on the
+    object and so never exercises `measure`'s signature — and a mutation
+    restoring `touched or recording or set()` passed it. This one drives the
+    actual path: a caller giving only `recording` must get `touched=None`, and a
+    caller giving both must get both.
+
+    Mutation: restore `touched or recording or set()` in `measure` and the first
+    assertion goes red.
+    """
+    tmpl = {"a.html": '<form id="f" method="post" action="/admin/x"></form>'}
+    _repo(tmp_path, tmpl, {"t.py": "# names #f"})
+
+    only_accepted = measure(tmp_path, min_controls=1, min_corpus=1,
+                            recording={"POST /admin/x"})
+    assert only_accepted.touched is None, (
+        "measure inferred the touched set from the accepted one — two of the "
+        "three counts are then fabricated, which is what eliad reported")
+    assert not only_accepted.split_measured
+    assert only_accepted.hit, "the accepted set must still be read"
+
+    both = measure(tmp_path, min_controls=1, min_corpus=1,
+                   recording={"POST /admin/x"}, touched={"POST /admin/x"})
+    assert both.split_measured
+    assert both.touched == both.hit, "both sets were given and both were read"

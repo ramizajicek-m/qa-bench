@@ -710,7 +710,17 @@ class Measurement:
     #: Ids some request reached AT ALL, whatever the app answered. The third
     #: count, and the estate reported only two: "reached and refused" is a to-do,
     #: "never reached" is an unknown, and collapsing them hides which is which.
-    touched: set = field(default_factory=set)
+    #:
+    #: **None means NOT MEASURED, and that is not the same as empty.** It used to
+    #: default to the ACCEPTED set when a caller passed only `recording`, which
+    #: every consumer did — so `touched_not_accepted` was always 0 and
+    #: `never_touched` absorbed both. eliad printed "7 never touched, 0 touched
+    #: but never accepted" while its own recording held a `403` and a
+    #: `307 -> /login` for six of the seven. Two of the three counts were
+    #: fabricated by a default argument, in the release that added them.
+    #:
+    #: The caller reads it as `hits.read(path, accepted_only=False)`.
+    touched: set | None = None
     #: False when no recording was supplied.
     recorded: bool = False
 
@@ -723,6 +733,15 @@ class Measurement:
         return len(self.mutating_undriven)
 
     @property
+    def split_measured(self) -> bool:
+        """Whether the never-touched / touched-but-refused split was MEASURED.
+
+        False when the caller gave no `touched` set. Every count below that
+        depends on it then reports nothing rather than zero.
+        """
+        return self.recorded and self.touched is not None
+
+    @property
     def never_touched(self) -> list:
         """Judgeable controls no request has ever reached, accepted or refused.
 
@@ -732,7 +751,7 @@ class Measurement:
         neither of these says anything about correctness — a 200 proves the
         handler did not raise.
         """
-        if not self.recorded:
+        if not self.split_measured:
             return []
         return [g for g in self.population
                 if g.id in self.judgeable and g.id not in self.touched]
@@ -740,7 +759,7 @@ class Measurement:
     @property
     def touched_not_accepted(self) -> list:
         """Reached, and the app never acted on it. A refusal probe looks like this."""
-        if not self.recorded:
+        if not self.split_measured:
             return []
         return [g for g in self.population
                 if g.id in self.touched and g.id not in self.hit]
@@ -812,7 +831,8 @@ def measure(root, templates="templates", static="static",
                        undriven=undriven,
                        mutating_undriven=[g for g in undriven if g.mutates == "yes"],
                        hit=hit_by_recording(gestures, recording or set()),
-                       touched=hit_by_recording(gestures, touched or recording or set()),
+                       touched=(hit_by_recording(gestures, touched)
+                                if touched is not None else None),
                        judgeable=judgeable_by_recording(gestures),
                        recorded=bool(recording))
 
@@ -1030,7 +1050,7 @@ def header(m: "Measurement", *, register: str = "qa/gestures.yml",
     fraction judgeable, is the single most important fact about anat's register
     and it was recorded where nobody working the list would see it.
     """
-    if m.recorded:
+    if m.recorded and m.split_measured:
         judged = _wrap(
             f"Of {len(m.population)} controls, a recording could judge "
             f"{len(m.judgeable)}. Of those: {len(m.never_touched)} NEVER TOUCHED "
@@ -1039,6 +1059,16 @@ def header(m: "Measurement", *, register: str = "qa/gestures.yml",
             f"refuses), {len(m.hit)} accepted. The "
             f"{len(m.population) - len(m.judgeable)} a recording cannot judge are "
             f"an UNKNOWN, not a pass."
+        )
+    elif m.recorded:
+        judged = _wrap(
+            f"Of {len(m.population)} controls, a recording could judge "
+            f"{len(m.judgeable)}, and {len(m.hit)} were accepted. THE SPLIT "
+            f"BETWEEN 'never touched' AND 'touched but never accepted' WAS NOT "
+            f"MEASURED: this regeneration passed only the accepted set, so the "
+            f"two cannot be told apart. Pass the touched set as well — "
+            f"`hits.read(path, accepted_only=False)` — and the two numbers appear. "
+            f"They are not zero; they are unknown."
         )
     else:
         judged = _wrap(
@@ -1119,8 +1149,9 @@ def register_doc(m: "Measurement", old: dict, *, today=None) -> dict:
         "recorded": m.recorded,
         "judgeable": len(m.judgeable),
         # The three, never one. See `header`.
-        "never_touched": len(m.never_touched),
-        "touched_not_accepted": len(m.touched_not_accepted),
+        "never_touched": len(m.never_touched) if m.split_measured else None,
+        "touched_not_accepted": (len(m.touched_not_accepted)
+                                 if m.split_measured else None),
         "accepted": len(m.hit),
         "unhit_mutating": len(m.unhit_mutating),
         "undriven": register_rows(m, reasons),
@@ -1133,12 +1164,17 @@ def summary_lines(m: "Measurement", register: str = "qa/gestures.yml") -> list:
     """What the regeneration prints. One wording in seven repos, not seven."""
     out = [f"{register}: population {len(m.population)}, ceiling {m.ceiling} "
            f"({m.mutating} mutating), corpus {m.corpus_files} files"]
-    if m.recorded:
+    if m.recorded and m.split_measured:
         out.append(
             f"  recording: {len(m.judgeable)} of {len(m.population)} judgeable — "
             f"{len(m.never_touched)} never touched, "
             f"{len(m.touched_not_accepted)} touched but never accepted, "
             f"{len(m.hit)} accepted ({m.mutating_unhit_note()})")
+    elif m.recorded:
+        out.append(
+            f"  recording: {len(m.judgeable)} of {len(m.population)} judgeable, "
+            f"{len(m.hit)} accepted ({m.mutating_unhit_note()}) — the never-touched "
+            f"/ touched-but-refused split was NOT MEASURED; pass the touched set")
     else:
         out.append("  no recording — the HIT half is UNKNOWN here, not clean. "
                    "`make hits` records it.")
@@ -1176,8 +1212,10 @@ def manifest_coverage(m: "Measurement", *, register: str = "qa/gestures.yml",
         "measured": (today or _dt.date.today()).isoformat(),
         "population": len(m.population),
         "judgeable": len(m.judgeable) if m.recorded else None,
-        "never_touched": len(m.never_touched) if m.recorded else None,
-        "touched_not_accepted": len(m.touched_not_accepted) if m.recorded else None,
+        # null, never 0, when the split was not measured — see `Measurement.touched`.
+        "never_touched": len(m.never_touched) if m.split_measured else None,
+        "touched_not_accepted": (len(m.touched_not_accepted)
+                                 if m.split_measured else None),
         "accepted": len(m.hit) if m.recorded else None,
         "mutating_never_accepted": len(m.unhit_mutating) if m.recorded else None,
         "caveat": ACCEPTED_IS_NOT_CORRECT,
