@@ -163,6 +163,13 @@ def wide(request: Request):
     # a real shape (tharros 2026-09-05: 22 pages scrolled for some roles, not all).
     wide_for = os.environ.get("FAKE_WIDE", "")
     block = "<div style='width:600px;height:10px;background:#ccc'></div>" if wide_for in ("1", _role(request)) else ""
+    # FAKE_FONTS_HANG=1: `document.fonts.ready` never settles. A real page does
+    # this when a webfont request stalls, and `evaluate` awaits a returned
+    # promise with no timeout — so the stage used to hang here rather than
+    # report. The sweep must still produce a verdict for this page.
+    if os.environ.get("FAKE_FONTS_HANG") == "1":
+        block += ("<script>Object.defineProperty(document.fonts, 'ready', "
+                  "{get: () => new Promise(() => {})});</script>")
     return _page("Wide?", block)
 
 

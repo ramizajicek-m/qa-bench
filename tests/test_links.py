@@ -166,3 +166,30 @@ def test_the_same_destination_linked_many_times_is_one_link(tmp_path):
       <a href="/admin/clients">Three</a>
     """)
     assert len(lift_links(tmp_path)) == 1
+
+
+def test_a_literal_id_in_a_link_resolves_against_a_parameterised_route(tmp_path):
+    """STRING EQUALITY IS NOT ROUTE RESOLUTION — the fourth false-positive round.
+
+    ana-log declares ONE route, `/cards/:card/:id`, and 25 descriptor link
+    targets shaped `/cards/customers/{Orders.customer}`. Comparing normalised
+    strings called all 25 dead when every one resolves. The same trap was latent
+    for anat: a link written with a literal id would never equal a route written
+    with a parameter.
+
+    Mutation: compare `link.href` to the normalised route keys again and both
+    assertions below fail.
+    """
+    write(tmp_path, "t.html", """
+      <a href="/admin/clients/7/edit">Literal id</a>
+      <a href="/cards/customers/{{ c.id }}">Placeholder id</a>
+    """)
+    links = lift_links(tmp_path)
+    assert unresolved(links, ["/admin/clients/{client_id}/edit",
+                              "/cards/{card}/{id}"]) == []
+    # a colon-style route, which is how a front-end router writes it
+    assert unresolved(links, ["/admin/clients/:client_id/edit",
+                              "/cards/:card/:id"]) == []
+    # and a genuinely absent route is still reported
+    dead = unresolved(links, ["/cards/:card/:id"])
+    assert [link.href for link in dead] == ["/admin/clients/7/edit"]

@@ -6,6 +6,7 @@ stage names it — not merely that the exit code is non-zero.
 from __future__ import annotations
 
 import json
+import time
 
 import pytest
 
@@ -571,3 +572,34 @@ def test_an_application_error_is_never_forgiven_as_transport():
                 "TypeError: Cannot read properties of undefined",
                 "Page crashed"):
         assert not _is_transport(Exception(msg)), f"wrongly forgiven: {msg}"
+
+
+def test_a_page_whose_fonts_never_settle_still_gets_a_verdict(bench_env, server_factory):
+    """A stall must be a slow cell, never a hung stage.
+
+    `_scrolls_sideways` waits for `document.fonts.ready` — a PROMISE, which
+    Playwright's `evaluate` awaits with no timeout of its own. A font that never
+    settles therefore hung the whole sweep, silently and indefinitely: on this
+    machine no local `pytest tests/` had completed in weeks, and the stage that
+    hangs is worse than one that fails, because a failure is a result.
+
+    The irony is the point — `_scrolls_sideways` exists because a verdict that
+    depends on how fast the page loaded is a coin, and its own fix for that
+    introduced an unbounded wait.
+
+    Mutation: drop the `Promise.race` from `qabench/stages/pages_by_role.py` and
+    this test hangs instead of passing (which is why it carries its own timeout
+    rather than trusting the suite's).
+    """
+    server_factory(FAKE_WIDE="1", FAKE_FONTS_HANG="1")
+    started = time.monotonic()
+    code = cli.main(["stage", "pages_by_role"])
+    elapsed = time.monotonic() - started
+
+    assert code in (0, 1, 3), code
+    led = _ledger(bench_env, "pages_by_role")
+    judged = len(led["failed"]) + int(led.get("passed") or 0) + len(led["not_run"])
+    assert judged > 10, f"the stage judged {judged} cells — treat this as did not run"
+    # Bounded: the whole sweep, not one cell. Generous on purpose — the claim is
+    # that it TERMINATES, not that it is fast.
+    assert elapsed < 120, f"the sweep took {elapsed:.0f}s — the font wait is unbounded again"

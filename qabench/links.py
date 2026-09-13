@@ -226,14 +226,38 @@ def lift_links(template_root, glob: str = "**/*.html") -> list[Link]:
     return sorted(seen.values(), key=lambda link: link.id)
 
 
+def _matcher(path: str):
+    """A route as a pattern: every parameter matches ONE concrete segment.
+
+    STRING EQUALITY IS NOT ROUTE RESOLUTION, and assuming it was produced a
+    fourth round of false defects. ana-log declares one route `/cards/:card/:id`
+    and 25 descriptor link targets like `/cards/customers/{Orders.customer}`;
+    comparing normalised strings called all 25 dead when every one resolves. The
+    same trap was latent for anat: a link written with a literal id,
+    `/admin/clients/7/edit`, would never equal `/admin/clients/{}/edit`.
+
+    A placeholder on the LINK side matches a concrete route segment too, because
+    the id it stands for is concrete at runtime.
+    """
+    parts = re.split(r"\{[^}]*\}|:[A-Za-z_][A-Za-z0-9_]*", path)
+    return re.compile("".join(re.escape(x) if i == 0 else r"[^/]+" + re.escape(x)
+                              for i, x in enumerate(parts)) + r"/?$")
+
+
 def unresolved(links: list[Link], route_paths) -> list[Link]:
     """Links naming no mounted route. A defect list; its ceiling is zero.
 
-    Compares on the normalised shape, so a link to `/admin/clients/7/edit` and a
-    mounted `/admin/clients/{client_id}/edit` agree.
+    Resolves each link against the route PATTERNS, so `/admin/clients/7/edit` and
+    a mounted `/admin/clients/{client_id}/edit` agree — and so does a link whose
+    own dynamic segment is a placeholder.
     """
-    mounted = {route_key(p) for p in route_paths}
-    return [link for link in links if link.href not in mounted]
+    patterns = [_matcher(p) for p in route_paths]
+    out = []
+    for link in links:
+        probe = link.href.replace(PLACEHOLDER, "1")
+        if not any(pat.fullmatch(probe) for pat in patterns):
+            out.append(link)
+    return out
 
 
 def orphans(route_paths, links: list[Link], *, is_page=None) -> list[str]:

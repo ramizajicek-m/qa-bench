@@ -73,6 +73,12 @@ def _admits(row: dict, role: str) -> bool:
     return True     # no declaration: every authenticated role may open it
 
 
+#: How long a font may take before the sample is taken anyway. Two seconds is
+#: an order of magnitude above a warm local load and well under the stage's own
+#: per-cell budget; the point is that it is FINITE, not that it is exactly this.
+FONT_SETTLE_MS = 2000
+
+
 def _scrolls_sideways(page) -> bool:
     """Does the DOCUMENT overflow the viewport — measured after the page has
     settled, twice, and only when both samples agree.
@@ -84,7 +90,18 @@ def _scrolls_sideways(page) -> bool:
     (tharros, 2026-09-05). So: wait for fonts, sample, wait, sample again.
     """
     try:
-        page.evaluate("document.fonts && document.fonts.ready")
+        # **Bounded.** `document.fonts.ready` is a PROMISE, and `evaluate`
+        # awaits a returned promise with no timeout of its own — so a font that
+        # never settles hangs the stage rather than failing it, which is the
+        # exact failure this function's own docstring is about, one level down.
+        # It hung the kit's suite on this machine for long enough that no local
+        # run of `pytest tests/` had completed in weeks. Race it against a
+        # ceiling: fonts if they come, on regardless if they do not.
+        page.evaluate(
+            "() => Promise.race(["
+            "  (document.fonts && document.fonts.ready) || Promise.resolve(),"
+            f"  new Promise(r => setTimeout(r, {FONT_SETTLE_MS})),"
+            "])")
         page.wait_for_timeout(400)
         first = bool(page.evaluate("document.documentElement.scrollWidth > window.innerWidth + 1"))
         if not first:

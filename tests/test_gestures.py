@@ -1073,3 +1073,214 @@ def test_without_a_recording_all_three_counts_are_unknown(tmp_path):
                 population_fn=provider)
     assert m.recorded is False
     assert m.never_touched == [] and m.touched_not_accepted == [] and m.unhit_mutating == []
+
+
+# ---------------------------------------------------------------------------
+# The header. It carries the three counts and the accepted-is-not-correct
+# sentence, because they had lived only in a commit message and a docstring.
+
+
+def _measurement(recorded=True, hit=(), touched=(), judgeable=(), population=12):
+    from qabench.gestures import Gesture, Measurement
+
+    pop = [Gesture(template="t.html", kind="button", selector=f"c{i}", mutates="no")
+           for i in range(population - 2)]
+    pop += [Gesture(template="t.html", kind="form", selector="d1", mutates="yes"),
+            Gesture(template="t.html", kind="form", selector="d2", mutates="yes")]
+    q = "t.html::".__add__  # ids are template-qualified
+    return Measurement(
+        population=pop, corpus_files=30, driven={q("c0")}, undriven=[pop[1]],
+        mutating_undriven=[pop[-1]], hit={q(x) for x in hit},
+        judgeable={q(x) for x in judgeable}, touched={q(x) for x in touched},
+        recorded=recorded)
+
+
+def test_the_header_reports_the_three_counts_separately():
+    """One number lets a repo work down the cheap half and call it progress.
+
+    Mutation: collapse `never_touched` and `touched_not_accepted` into one
+    count in `qabench/gestures.py::header` and this goes red.
+    """
+    from qabench.gestures import header
+
+    m = _measurement(hit={"c0", "c1"}, touched={"c0", "c1", "c2"},
+                     judgeable={"c0", "c1", "c2", "d1"})
+    assert m.never_touched and m.touched_not_accepted, "the fixture proves nothing"
+    text = header(m)
+    assert "NEVER TOUCHED" in text
+    assert "TOUCHED BUT NEVER ACCEPTED" in text
+    # Each count appears as its own figure, and the unjudgeable remainder is
+    # named as an unknown rather than folded into a total.
+    assert f"{len(m.never_touched)} NEVER TOUCHED" in text
+    assert f"{len(m.touched_not_accepted)} TOUCHED BUT NEVER ACCEPTED" in text
+    assert f"{len(m.hit)} accepted" in text
+    assert "UNKNOWN, not a pass" in text
+
+
+def test_the_header_says_accepted_is_not_correct():
+    """Rami asked for this sentence where it would be read, not in a commit.
+
+    Mutation: delete the `ACCEPTED_IS_NOT_CORRECT` block from `header` and this
+    goes red.
+    """
+    from qabench.gestures import ACCEPTED_IS_NOT_CORRECT, header
+
+    text = header(_measurement(judgeable={"c0"}, hit={"c0"}, touched={"c0"}))
+    # Wrapped, so compare word-wise rather than as one string.
+    stripped = " ".join(line.lstrip("# ") for line in text.splitlines())
+    for phrase in ("ACCEPTED IS NOT CORRECT", "does NOT mean the control did the "
+                   "right thing", "STORED ROW"):
+        assert phrase in stripped, phrase
+    assert ACCEPTED_IS_NOT_CORRECT.split(".")[0] in stripped
+
+
+def test_an_unrecorded_register_says_unknown_not_none():
+    """A repo with no recording must not read as a clean one.
+
+    Mutation: make `header` emit the recorded branch unconditionally and this
+    goes red.
+    """
+    from qabench.gestures import header
+
+    text = header(_measurement(recorded=False))
+    assert "NO RECORDING" in text
+    assert "must never be read as 'none'" in text
+    assert "NEVER TOUCHED" not in text, "an unrecorded sweep cannot report counts"
+
+
+def test_the_measured_limit_reaches_the_register():
+    """anat's 373 unidentified controls belong here, not in a commit message."""
+    from qabench.gestures import header
+
+    limits = "373 of 973 controls carry no stable identifier."
+    text = header(_measurement(judgeable={"c0"}), limits=limits)
+    assert "WHAT THIS MEASURE CANNOT REACH IN THIS REPO" in text
+    assert "373 of 973" in text
+    # And absent when a repo declares none, rather than an empty heading.
+    assert "CANNOT REACH" not in header(_measurement(judgeable={"c0"}))
+
+
+def test_the_header_never_cuts_a_word():
+    """Rami's standing rule. A register nobody can read is one nobody reads."""
+    from qabench.gestures import header
+
+    m = _measurement(hit={"c0"}, touched={"c0", "c1"}, judgeable={"c0", "c1", "d1"})
+    text = header(m, limits="A" * 30 + " " + "B" * 40 + " short tail.")
+    words = " ".join(line.lstrip("#").strip() for line in text.splitlines()).split()
+    assert "A" * 30 in words and "B" * 40 in words, "a word was split across lines"
+    assert all(len(line) <= 80 for line in text.splitlines()), "a line ran long"
+
+
+def test_the_register_doc_carries_the_three_counts_as_data():
+    """A count in a comment cannot be asserted by a guard; one in the doc can.
+
+    Mutation: remove `never_touched` or `touched_not_accepted` from
+    `register_doc` and this goes red.
+    """
+    from qabench.gestures import register_doc
+
+    m = _measurement(hit={"c0"}, touched={"c0", "c1"},
+                     judgeable={"c0", "c1", "c2", "d1"})
+    doc = register_doc(m, {})
+    assert doc["never_touched"] == len(m.never_touched)
+    assert doc["touched_not_accepted"] == len(m.touched_not_accepted)
+    assert doc["accepted"] == len(m.hit)
+    # And they must actually differ here, or the fixture proves nothing.
+    assert doc["never_touched"] and doc["touched_not_accepted"]
+    assert doc["never_touched"] != doc["touched_not_accepted"]
+    # The two sum to the unaccepted judgeable half — the invariant that makes
+    # splitting them safe rather than just more numbers.
+    assert doc["never_touched"] + doc["touched_not_accepted"] == (
+        doc["judgeable"] - doc["accepted"])
+
+
+def test_the_register_doc_keeps_a_reason_somebody_wrote():
+    """A regeneration must not overwrite a human's sentence with a generated one."""
+    from qabench.gestures import register_doc
+
+    m = _measurement(judgeable={"c0"}, hit={"c0"}, touched={"c0"})
+    mine = "Meir signs off: this one is driven from the handset, not the suite."
+    old = {"undriven": [{"id": m.undriven[0].id, "reason": mine}]}
+    doc = register_doc(m, old)
+    assert doc["undriven"][0]["reason"] == mine
+
+
+def test_the_summary_reports_three_numbers_not_one():
+    """What a person reads in the terminal after `make gestures`.
+
+    Mutation: drop `never_touched` from `summary_lines` and this goes red.
+    """
+    from qabench.gestures import summary_lines
+
+    m = _measurement(hit={"c0"}, touched={"c0", "c1"},
+                     judgeable={"c0", "c1", "c2", "d1"})
+    text = " ".join(summary_lines(m))
+    assert "never touched" in text
+    assert "touched but never accepted" in text
+    assert "accepted" in text
+    assert "MUTATING never accepted" in text
+
+    unrecorded = " ".join(summary_lines(_measurement(recorded=False)))
+    assert "UNKNOWN here, not clean" in unrecorded
+    assert "never touched" not in unrecorded
+
+
+def test_the_manifest_block_carries_the_counts_and_the_caveat():
+    """Gap 2's manifest half, generated so it cannot rot.
+
+    Mutation: drop `caveat` from `manifest_coverage` and this goes red.
+    """
+    from qabench.gestures import COVERAGE_KEYS, manifest_coverage
+
+    m = _measurement(hit={"c0"}, touched={"c0", "c1"},
+                     judgeable={"c0", "c1", "c2", "d1"})
+    cov = manifest_coverage(m, limits="373 of 973 carry no identifier.")
+    for key in COVERAGE_KEYS:
+        assert key in cov, key
+    assert "ACCEPTED IS NOT CORRECT" in cov["caveat"]
+    assert cov["limits"] == "373 of 973 carry no identifier."
+    assert cov["never_touched"] == len(m.never_touched)
+    assert cov["touched_not_accepted"] == len(m.touched_not_accepted)
+    assert cov["mutating_never_accepted"] == len(m.unhit_mutating)
+
+
+def test_an_unrecorded_manifest_block_is_null_not_zero():
+    """Zero is a claim. Unknown is not, and the two must not look alike.
+
+    Mutation: make `manifest_coverage` emit `len(...)` unconditionally and this
+    goes red, because an unrecorded sweep would then claim zero of everything.
+    """
+    from qabench.gestures import manifest_coverage
+
+    cov = manifest_coverage(_measurement(recorded=False))
+    for key in ("judgeable", "never_touched", "touched_not_accepted", "accepted",
+                "mutating_never_accepted"):
+        assert cov[key] is None, f"{key} claims {cov[key]!r} with no recording"
+    assert "NO RECORDING" in cov["caveat"]
+
+
+def test_the_manifest_and_the_register_are_held_to_each_other():
+    """Two files each internally consistent and disagreeing is the silent one.
+
+    Mutation: make `coverage_disagreements` return `[]` unconditionally and the
+    disagreement cases below go red.
+    """
+    from qabench.gestures import (coverage_disagreements, manifest_coverage,
+                                  register_doc)
+
+    m = _measurement(hit={"c0"}, touched={"c0", "c1"},
+                     judgeable={"c0", "c1", "c2", "d1"})
+    cov, reg = manifest_coverage(m), register_doc(m, {})
+    assert coverage_disagreements({"coverage": cov}, reg) == []
+
+    for key, wrong in (("accepted", 99), ("never_touched", 99),
+                       ("touched_not_accepted", 99),
+                       ("mutating_never_accepted", 99), ("population", 99)):
+        broken = dict(cov, **{key: wrong})
+        why = coverage_disagreements({"coverage": broken}, reg)
+        assert any(key in line for line in why), (key, why)
+
+    assert coverage_disagreements({}, reg), "a missing block must be a failure"
+    assert coverage_disagreements(
+        {"coverage": dict(cov, caveat="looks fine")}, reg), (
+        "a block without the caveat must be a failure — it is the point of it")
