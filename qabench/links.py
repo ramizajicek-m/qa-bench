@@ -71,14 +71,31 @@ def route_key(path: str) -> str:
     return out.rstrip("/") if len(out) > 1 else out
 
 
+#: Navigation written in JavaScript rather than in markup. anat builds most of
+#: its table rows with innerHTML, so 12 of 12 links to /admin/collection/ live
+#: inside a <script> block — and HTMLParser hands script content over as CDATA,
+#: so a markup-only sweep cannot see any of them. Reported 44 "unreachable"
+#: pages on anat, every one of which was reachable. Found by checking the list
+#: before filing it.
+_JS_LINK = re.compile(
+    r"""href\s*=\s*[\"'`](?P<href>/[^\"'`\s>]*)"""              # href in a JS string
+    r"""|(?:location\.href|location\.assign|window\.open)\s*[=(]\s*[\"'`](?P<nav>/[^\"'`\s)]*)""",
+    re.I)
+
+
 class _Lifter(HTMLParser):
     def __init__(self, template: str):
         super().__init__()
         self.template = template
         self.found: list[Link] = []
         self._open: Link | None = None
+        self._in_script = False
+        self.scripts: list[str] = []
 
     def handle_starttag(self, tag, attrs):
+        if tag == "script":
+            self._in_script = True
+            return
         if tag != "a":
             return
         href = ""
@@ -99,14 +116,96 @@ class _Lifter(HTMLParser):
         self.found.append(self._open)
 
     def handle_data(self, data):
+        if self._in_script:
+            self.scripts.append(data)
+            return
         if self._open is not None and not self._open.text:
             text = " ".join(data.split())[:60]
             if text:
                 self._open.text = text
 
     def handle_endtag(self, tag):
+        if tag == "script":
+            self._in_script = False
         if tag == "a":
             self._open = None
+
+    #: A character that cannot appear in a path, so the URL has ended. Without
+    #: this the walk ran on into the rest of an innerHTML string and produced
+    #: `/admin/clients/{}{} \u2192</a>` — markup appended to a path.
+    _PATH_END = re.compile(r"""["'`<>\s]""")
+
+    @classmethod
+    def _follow_concat(cls, line: str, after: int) -> str:
+        """Continue a path across `' + expr + '` — the SUFFIX, not just the prefix.
+
+        THE FALSE DEFECTS THIS EXISTS FOR. All three "dead links" the first
+        version reported on anat were real routes whose path continues after the
+        id:
+
+            '/admin/estimates/' + estimateId + '/proposal-preview'
+            '/admin/customer/'  + row.get(...)  + '/billing'
+
+        Stopping at the prefix produced `/admin/estimates/{}`, which matches no
+        route, in a list whose ceiling is zero — the most expensive place for a
+        false positive. anat's own scripts/qa_week/template_paths._follow_chain
+        does this walk; the idea is borrowed rather than reinvented.
+
+        Returns one PLACEHOLDER per interpolated expression plus each following
+        literal, and STOPS at the first character a path cannot contain. Reads
+        the rest of one LINE only — a path assembled across several lines is not
+        followed, and that is stated rather than guessed at.
+        """
+        out = ""
+        pos = 0
+        rest = line[after:]
+        while True:
+            m = re.match(r"""["'`]?\s*\+\s*[^+]*?\+\s*["'`]""", rest[pos:])
+            if not m:
+                break
+            out += PLACEHOLDER
+            pos += m.end()
+            stop = cls._PATH_END.search(rest[pos:])
+            literal = rest[pos:pos + stop.start()] if stop else rest[pos:]
+            out += literal
+            if stop:                      # the closing quote: the URL ends here
+                break
+            pos += len(literal)
+        if not out and re.match(r"""["'`]?\s*\+""", rest):
+            out = PLACEHOLDER             # `'/a/' + id` and nothing after it
+        return out
+
+    def links_in_script(self) -> list[Link]:
+        """Navigation built in JS: an href inside a string, or a location assignment.
+
+        No label is available — the text is assembled at runtime — so these carry
+        the source kind instead, which is what a reader needs to find them.
+        """
+        out: list[Link] = []
+        blob = "\n".join(self.scripts)
+        for m in _JS_LINK.finditer(blob):
+            raw = m.group("href") or m.group("nav") or ""
+            # `${...}` is JS interpolation; the Jinja pass has already handled
+            # `{{ }}`. Both become the placeholder a route key uses.
+            here = re.sub(r"\$\{[^}]*\}", PLACEHOLDER, raw)
+            # A JS string ENDING in a slash is a prefix the code concatenates onto
+            # — `'/admin/estimates/' + id + '/proposal-preview'`. Follow the chain
+            # so the SUFFIX comes too; naming only the prefix invented three dead
+            # links on anat that were all real routes.
+            if here.endswith("/") and len(here) > 1:
+                line_start = blob.rfind("\n", 0, m.start()) + 1
+                line_end = blob.find("\n", m.start())
+                line = blob[line_start:line_end if line_end != -1 else len(blob)]
+                # The trailing slash is NOT itself a placeholder — the walk emits
+                # one per interpolated expression. Adding one here too produced
+                # `/admin/breakdown/{}{}`.
+                here = here[:-1] + "/" + self._follow_concat(line, m.end() - line_start).lstrip("/")
+            norm = normalise(here)
+            if not norm or norm == PLACEHOLDER or not norm.startswith("/"):
+                continue
+            out.append(Link(template=self.template, href=norm, raw=raw,
+                            text="(built in JavaScript)"))
+        return out
 
 
 def lift_links(template_root, glob: str = "**/*.html") -> list[Link]:
@@ -118,7 +217,13 @@ def lift_links(template_root, glob: str = "**/*.html") -> list[Link]:
         lifter.feed(neutralise_jinja(p.read_text(encoding="utf-8", errors="replace")))
         lifter.close()
         out.extend(lifter.found)
-    return sorted(out, key=lambda link: link.id)
+        out.extend(lifter.links_in_script())
+    # Unique by id: the same destination linked from three rows of one table is
+    # one link, and counting it three times would inflate every report.
+    seen: dict = {}
+    for link in out:
+        seen.setdefault(link.id, link)
+    return sorted(seen.values(), key=lambda link: link.id)
 
 
 def unresolved(links: list[Link], route_paths) -> list[Link]:

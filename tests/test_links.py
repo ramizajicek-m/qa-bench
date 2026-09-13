@@ -123,3 +123,46 @@ def test_normalise_and_route_key_agree_on_the_root(tmp_path):
     assert route_key("/") == "/"
     write(tmp_path, "nav.html", '<a href="/">Home</a>')
     assert unresolved(lift_links(tmp_path), ["/"]) == []
+
+
+def test_navigation_built_in_javascript_is_lifted_too(tmp_path):
+    """44 FALSE ORPHANS came from missing this.
+
+    anat builds most of its table rows with innerHTML, so 12 of 12 links to
+    /admin/collection/ live inside a <script> block. HTMLParser hands script
+    content over as CDATA, so a markup-only sweep sees none of them — and the
+    orphan list then reported 44 pages as unreachable when every one was
+    reachable. A defect list with a ceiling of zero cannot afford that.
+
+    Mutation: drop `links_in_script()` from `lift_links` and all three below
+    disappear from the population.
+    """
+    write(tmp_path, "rows.html", """
+      <a href="/admin/clients">Clients</a>
+      <script>
+        row.innerHTML = '<a href="/admin/collection/' + c.id + '">Open</a>';
+        el.innerHTML = `<a href="/admin/projects/${p.id}">Project</a>`;
+        function go(id) { location.href = '/admin/estimates/' + id; }
+        window.open('https://example.com/external');
+      </script>
+    """)
+    hrefs = {link.href for link in lift_links(tmp_path)}
+    assert "/admin/clients" in hrefs, "markup links must still be lifted"
+    assert "/admin/collection/" in hrefs or "/admin/collection/{}" in hrefs
+    assert "/admin/projects/{}" in hrefs, "a JS template literal must normalise"
+    assert "/admin/estimates/" in hrefs or "/admin/estimates/{}" in hrefs
+    assert not any(h.startswith("http") for h in hrefs), "external stays out"
+
+
+def test_the_same_destination_linked_many_times_is_one_link(tmp_path):
+    """A table of thirty rows links one destination thirty times.
+
+    Counting them separately would inflate every report and make the orphan
+    arithmetic wrong.
+    """
+    write(tmp_path, "t.html", """
+      <a href="/admin/clients">One</a>
+      <a href="/admin/clients">Two</a>
+      <a href="/admin/clients">Three</a>
+    """)
+    assert len(lift_links(tmp_path)) == 1
