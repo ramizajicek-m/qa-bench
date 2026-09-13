@@ -7,6 +7,7 @@ that improves when the classifier gets worse.
 """
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -776,3 +777,30 @@ def test_without_a_recording_the_hit_verdict_is_unknown_not_clean(tmp_path):
                                                       "mutates": "yes", "reason": "r"}],
                                         "unhit_mutating": 0, "unhit": []})
                 if "accepted" in r]
+
+
+def test_a_directory_of_recordings_is_unioned_per_tier(tmp_path):
+    """ONE RECORDING PER TIER, because a suite is not one run.
+
+    anat's unit tier and its integration tier are separate commands. With a
+    single hits file the second overwrote the first: the proposal approval was
+    driven in INTEGRATION, the register regenerated from the UNIT recording, and
+    the control still read as never accepted. Work done looked like no progress,
+    which is the fastest way to make somebody stop doing it.
+
+    Per-tier files rather than merge-on-write keeps staleness bounded — a tier's
+    run replaces its own file, so a deleted route stops being claimed as hit.
+
+    Mutation: drop the is_dir branch in `read` and the union is empty.
+    """
+    d = tmp_path / "hits"
+    d.mkdir()
+    (d / "unit.json").write_text(json.dumps(
+        {"recorded": ["POST /a/b 200", "POST /refused 403"]}))
+    (d / "integration.json").write_text(json.dumps(
+        {"recorded": ["POST /c/d 303"]}))
+
+    assert _hits.read(d) == {"POST /a/b", "POST /c/d"}
+    assert _hits.read(d, accepted_only=False) == {
+        "POST /a/b", "POST /refused", "POST /c/d"}
+    assert _hits.read(tmp_path / "nothing-here") == set()
