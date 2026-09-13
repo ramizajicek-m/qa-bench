@@ -866,3 +866,58 @@ def test_a_handler_naming_two_urls_yields_no_action_rather_than_the_first(tmp_pa
     assert row.id in {x.id for x in population(g)}, "it must stay in the population"
     assert judgeable_by_recording(g) == set(), \
         "a control with no action cannot be judged by a request log, and must say so"
+
+
+def test_a_body_key_discriminates_controls_that_share_one_path(tmp_path, monkeypatch):
+    """A WHOLE PROJECT had nothing to measure without this.
+
+    ana-log dispatches all 55 of its write actions through
+    `POST /api/actions/<category>` with `{"function": "<name>", ...}` in the body.
+    A path-based recording cannot tell them apart, so its judgeable subset was
+    ZERO — the measure said nothing about that repo rather than something weak,
+    which is the worse of the two.
+
+    The key is NAMED by the repo, not guessed. A recorder that rummaged for
+    something discriminating would invent a different answer per project.
+
+    Mutation: unset the env var and the two calls collapse to one entry.
+    """
+    httpx = pytest.importorskip("httpx")
+    monkeypatch.setenv(_hits.BODY_KEYS_ENV, "function")
+    _hits._seen.clear()
+    _hits._installed = False
+    assert _hits.install()
+
+    with httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(200)),
+                      base_url="http://t") as c:
+        c.post("/api/actions/intake", json={"function": "receiveCase", "case_id": 1})
+        c.post("/api/actions/intake", json={"function": "startUnloading", "case_id": 1})
+        c.post("/api/actions/intake", json={"case_id": 1})       # no key: no suffix
+
+    seen = {r.rsplit(" ", 1)[0] for r in _hits._seen}
+    assert seen == {
+        "POST /api/actions/intake#receiveCase",
+        "POST /api/actions/intake#startUnloading",
+        "POST /api/actions/intake",
+    }, seen
+    _hits._seen.clear()
+
+
+def test_an_unreadable_body_never_fails_the_suite(tmp_path, monkeypatch):
+    """A recorder that raises is worse than one that records nothing.
+
+    Bookkeeping must not decide whether a test passes, so a body that is not
+    JSON, not a dict, or implausibly large simply does not discriminate.
+    """
+    httpx = pytest.importorskip("httpx")
+    monkeypatch.setenv(_hits.BODY_KEYS_ENV, "function")
+    _hits._seen.clear()
+    _hits._installed = False
+    _hits.install()
+    with httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(204)),
+                      base_url="http://t") as c:
+        c.post("/api/actions/x", content=b"not json at all")
+        c.post("/api/actions/y", json=["a", "list", "not", "a", "dict"])
+    assert {r.rsplit(" ", 1)[0] for r in _hits._seen} == {
+        "POST /api/actions/x", "POST /api/actions/y"}
+    _hits._seen.clear()

@@ -38,9 +38,50 @@ from pathlib import Path
 
 ENV = "QABENCH_RECORD_HITS"
 
+#: Comma-separated JSON body keys whose VALUE discriminates the control, for an
+#: app that dispatches many operations through one path.
+#:
+#: ana-log is the case that needed it: all 55 of its write actions post to
+#: `POST /api/actions/<category>` with `{"function": "<name>", ...}` in the body.
+#: A path-based recording cannot tell them apart at all — its judgeable subset was
+#: ZERO — so the measure had nothing to say about a whole project rather than
+#: saying something weak.
+#:
+#: Off unless set, and the key is named by the repo rather than guessed: a
+#: recorder that rummaged through every body looking for something
+#: discriminating would invent a different answer per project.
+BODY_KEYS_ENV = "QABENCH_RECORD_BODY_KEYS"
+
 #: {"METHOD path", ...} for the current process.
 _seen: set = set()
 _installed = False
+
+
+def _body_discriminator(request) -> str:
+    """`#<value>` for the first configured body key present, else "".
+
+    Reads the request's OWN body bytes, which httpx has already encoded, so this
+    sees exactly what the server will. Anything unparseable is not an error here:
+    a recorder must never fail a suite, and a body it cannot read simply does not
+    discriminate.
+    """
+    keys = [k for k in os.environ.get(BODY_KEYS_ENV, "").split(",") if k]
+    if not keys:
+        return ""
+    try:
+        raw = request.content
+        if not raw or len(raw) > 200_000:
+            return ""
+        body = json.loads(raw)
+        if not isinstance(body, dict):
+            return ""
+        for key in keys:
+            value = body.get(key)
+            if isinstance(value, str) and value:
+                return "#" + value
+    except Exception:
+        return ""
+    return ""
 
 
 def record(method: str, path: str, status: int = 0) -> None:
@@ -81,7 +122,8 @@ def install() -> bool:
     def send(self, request, *a, **kw):
         response = original(self, request, *a, **kw)
         try:
-            record(request.method, request.url.path, response.status_code)
+            record(request.method, request.url.path + _body_discriminator(request),
+                   response.status_code)
         except Exception:       # never let bookkeeping break a suite
             pass
         return response
@@ -95,7 +137,8 @@ def install() -> bool:
         async def asend(self, request, *a, **kw):
             response = await original_async(self, request, *a, **kw)
             try:
-                record(request.method, request.url.path, response.status_code)
+                record(request.method, request.url.path + _body_discriminator(request),
+                       response.status_code)
             except Exception:
                 pass
             return response
