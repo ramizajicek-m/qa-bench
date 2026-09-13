@@ -143,6 +143,20 @@ def read(path, accepted_only: bool = True) -> set:
     on.
     """
     p = Path(path)
+    if p.is_dir():
+        # ONE RECORDING PER TIER. anat's unit and integration tiers are separate
+        # commands with separate databases; a single file meant the second
+        # overwrote the first, so a control driven in integration still read as
+        # never accepted and work done looked like no progress.
+        #
+        # Per-tier FILES rather than merge-on-write, so staleness stays bounded:
+        # a tier's run replaces its own file, and a route that no longer exists
+        # stops being claimed as hit. A merge would keep every hit forever, which
+        # is the degenerate direction — the number could only improve.
+        out: set = set()
+        for f in sorted(p.glob("*.json")):
+            out |= read(f, accepted_only=accepted_only)
+        return out
     if not p.exists():
         return set()
     out = set()
