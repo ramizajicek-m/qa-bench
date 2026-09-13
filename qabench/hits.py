@@ -156,6 +156,22 @@ def install() -> bool:
     return True
 
 
+#: The recording's own format, because a row's SHAPE decides which questions it
+#: can answer and the reader could not tell an old file from a new one.
+#:
+#: 1 — "METHOD path" only. Cannot answer "accepted".
+#: 2 — "METHOD path STATUS". Cannot answer "accepted" for a redirect, because
+#:     whether a 303 went to a login page is the whole question.
+#: 3 — "METHOD path STATUS\tLocation\tHost". Answers it.
+#:
+#: Measured 2026-09-13 on IGA: its committed recording was format 2, and reading
+#: it with the current `_acted` turned every 3xx into "never accepted" — 3
+#: never-accepted mutating controls became 20. That looked exactly like a
+#: product finding and was a fact about the file's age. `POST /admin/courses/create`
+#: had recorded 303, 307, 403 and 422 and no Location column to judge the 303 by.
+FORMAT = 3
+
+
 def write(path) -> dict:
     """Persist what was recorded. Refuses to write an empty recording.
 
@@ -170,7 +186,7 @@ def write(path) -> dict:
             "this as DID NOT RUN; refusing to write an empty hits file.")
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
-    doc = {"recorded": sorted(_seen), "count": len(_seen)}
+    doc = {"format": FORMAT, "recorded": sorted(_seen), "count": len(_seen)}
     p.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
     return doc
 
@@ -230,6 +246,25 @@ def _acted(status: int, location: str) -> bool:
     return False
 
 
+class StaleRecording(RuntimeError):
+    """A recording whose rows cannot answer the question being asked of them."""
+
+
+def _inferred_format(rows) -> int:
+    """The format of a file that does not declare one, from its rows' shape.
+
+    Every recording committed before 2026-09-13 is undeclared, and guessing is
+    better than assuming the newest: a file whose rows carry no tab cannot have
+    a Location in it, whatever it claims.
+    """
+    if not rows:
+        return FORMAT          # nothing to misread
+    if any("\t" in r for r in rows):
+        return 3
+    head = rows[0].rsplit(" ", 1)
+    return 2 if len(head) == 2 and head[1].isdigit() else 1
+
+
 def read(path, accepted_only: bool = True) -> set:
     """The recorded hits as "METHOD path", or an empty set if none recorded yet.
 
@@ -259,8 +294,28 @@ def read(path, accepted_only: bool = True) -> set:
     if not p.exists():
         return set()
     hosts = tuple(h for h in os.environ.get(HOSTS_ENV, "").split(",") if h)
+    doc = json.loads(p.read_text(encoding="utf-8"))
+    rows = doc.get("recorded", [])
+
+    # **A RECORDING TOO OLD TO ANSWER THIS QUESTION IS REFUSED, not reinterpreted.**
+    # The reader already knew about a recording made before statuses; it did not
+    # know about one made before Locations, and a bare 3xx from such a file fell
+    # through `_acted` as "not accepted". Silent, plausible, and wrong in the
+    # direction that reads as a product regression: IGA's 3 never-accepted
+    # mutating controls became 20 on a pin bump alone.
+    #
+    # The TOUCHED question is still answerable from an old file — it needs only
+    # the path — so only `accepted_only` refuses. Re-record; do not soften this.
+    if accepted_only and int(doc.get("format", _inferred_format(rows))) < FORMAT:
+        raise StaleRecording(
+            f"{p} is recording format {doc.get('format', _inferred_format(rows))}, "
+            f"and the accepted/not-accepted question needs {FORMAT}: a redirect "
+            f"cannot be judged without its Location, so every 3xx in this file "
+            f"would silently read as NEVER ACCEPTED. Treat this as DID NOT RUN "
+            f"and re-record (`make hits`). Reading it for TOUCHED is fine.")
+
     out = set()
-    for row in json.loads(p.read_text(encoding="utf-8")).get("recorded", []):
+    for row in rows:
         head, _, trailer = row.partition("\t")
         location, _, host = trailer.partition("\t")
         parts = head.rsplit(" ", 1)

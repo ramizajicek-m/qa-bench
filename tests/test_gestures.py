@@ -796,10 +796,12 @@ def test_a_directory_of_recordings_is_unioned_per_tier(tmp_path):
     """
     d = tmp_path / "hits"
     d.mkdir()
+    # Both files declare the current format: the union is the subject here, and a
+    # fixture that is silently stale would refuse instead of unioning.
     (d / "unit.json").write_text(json.dumps(
-        {"recorded": ["POST /a/b 200", "POST /refused 403"]}))
+        {"format": _hits.FORMAT, "recorded": ["POST /a/b 200\t\t", "POST /refused 403\t\t"]}))
     (d / "integration.json").write_text(json.dumps(
-        {"recorded": ["POST /c/d 303\t/c?saved=1\t"]}))
+        {"format": _hits.FORMAT, "recorded": ["POST /c/d 303\t/c?saved=1\t"]}))
 
     assert _hits.read(d) == {"POST /a/b", "POST /c/d"}
     assert _hits.read(d, accepted_only=False) == {
@@ -1013,16 +1015,29 @@ def test_a_third_party_sharing_a_path_cannot_credit_a_control(tmp_path, monkeypa
     assert _hits.read(f) == {"POST /admin/thing"}
 
 
-def test_an_older_recording_without_statuses_still_parses(tmp_path):
-    """The committed files predate the trailer; they must not crash a reader.
+def test_an_older_recording_is_a_DID_NOT_RUN_for_accepted_not_a_zero(tmp_path):
+    """This test used to assert the opposite, and the reasoning was wrong.
 
-    They are treated as status-unknown, which `accepted_only` then drops — so an
-    old recording reports NOTHING accepted rather than everything, and the next
-    real run replaces it. Silent optimism is the failure to avoid here.
+    It said an old recording "reports NOTHING accepted rather than everything"
+    because "silent optimism is the failure to avoid here". Pessimism is not the
+    answer to optimism — both are silence. Reporting zero accepted is a CLAIM,
+    and it manufactured a false finding on IGA on 2026-09-13: a pin bump alone
+    turned 3 never-accepted mutating controls into 20, every one of them a
+    control whose recording held a 303 and no Location to judge it by. That is
+    indistinguishable from a product regression, and a reader would have gone
+    looking for one.
+
+    The third answer is the one the rest of this kit already uses everywhere:
+    treat it as DID NOT RUN and say so. Re-record.
+
+    Mutation: replace the raise with `return set()` and this goes red.
     """
     f = tmp_path / "unit.json"
     f.write_text(json.dumps({"recorded": ["POST /admin/legacy"]}))
-    assert _hits.read(f) == set()
+    with pytest.raises(_hits.StaleRecording):
+        _hits.read(f)
+    # TOUCHED needs only the path, so it is still answerable — refusing both
+    # would delete a real measure to protect another one.
     assert _hits.read(f, accepted_only=False) == {"POST /admin/legacy"}
 
 
@@ -1284,3 +1299,103 @@ def test_the_manifest_and_the_register_are_held_to_each_other():
     assert coverage_disagreements(
         {"coverage": dict(cov, caveat="looks fine")}, reg), (
         "a block without the caveat must be a failure — it is the point of it")
+
+
+# ---------------------------------------------------------------------------
+# A recording too old to answer the question.
+
+
+def _rec(tmp_path, rows, fmt=None):
+    import json
+    doc = {"recorded": rows, "count": len(rows)}
+    if fmt is not None:
+        doc["format"] = fmt
+    p = tmp_path / "hits.json"
+    p.write_text(json.dumps(doc), encoding="utf-8")
+    return p
+
+
+def test_an_old_recording_is_refused_for_the_ACCEPTED_question(tmp_path):
+    """Reinterpreting it silently produced a 3 → 20 jump that looked like a defect.
+
+    IGA's committed recording had `POST /admin/courses/create 303` with no
+    Location column. `_acted` cannot judge a redirect without one, so it answered
+    "not accepted" — and a pin bump alone turned 3 never-accepted mutating
+    controls into 20, indistinguishable from a real regression.
+
+    Mutation: drop the `StaleRecording` raise from `qabench/hits.py` and this
+    goes red.
+    """
+    from qabench import hits
+
+    old = _rec(tmp_path, ["POST /admin/courses/create 303", "GET / 200"])
+    with pytest.raises(hits.StaleRecording) as refused:
+        hits.read(old)
+    assert "DID NOT RUN" in str(refused.value)
+    assert "re-record" in str(refused.value)
+
+
+def test_the_TOUCHED_question_is_still_answerable_from_an_old_recording(tmp_path):
+    """Refusing both questions would be the over-correction.
+
+    A path is all "has anything ever knocked on this" needs, and that is the
+    count the estate uses to separate "nothing is aimed at it" from "reached and
+    refused". Making it unavailable would delete a real measure to protect
+    another one.
+
+    Mutation: make the raise unconditional (drop `accepted_only and`) and this
+    goes red.
+    """
+    from qabench import hits
+
+    old = _rec(tmp_path, ["POST /admin/courses/create 303", "GET / 200"])
+    touched = hits.read(old, accepted_only=False)
+    assert "POST /admin/courses/create" in touched
+    assert "GET /" in touched
+
+
+def test_a_current_recording_is_read_normally(tmp_path):
+    """Or the refusal above is just a way of never reading anything."""
+    from qabench import hits
+
+    now = _rec(tmp_path, ["POST /admin/x 200\t\tapp.local",
+                          "POST /admin/y 303\t/admin/y/7\tapp.local",
+                          "POST /admin/z 303\t/login?next=/admin/z\tapp.local"],
+               fmt=hits.FORMAT)
+    accepted = hits.read(now)
+    assert "POST /admin/x" in accepted, "a 2xx must be accepted"
+    assert "POST /admin/y" in accepted, "a redirect that is not to a login is accepted"
+    assert "POST /admin/z" not in accepted, "a redirect to the login page is a refusal"
+
+
+def test_the_format_is_inferred_from_the_rows_when_undeclared(tmp_path):
+    """Every recording committed before 2026-09-13 declares nothing.
+
+    Guessing from the rows beats assuming the newest: a row with no tab cannot
+    carry a Location whatever the file says. And a file that DECLARES an old
+    format is taken at its word even if its rows look newer — the declaration is
+    the writer's, and the writer knows.
+    """
+    from qabench.hits import FORMAT, _inferred_format
+
+    assert _inferred_format(["GET /x"]) == 1
+    assert _inferred_format(["GET /x 200"]) == 2
+    assert _inferred_format(["GET /x 200\t\tapp.local"]) == 3
+    # An empty recording cannot be misread, so it is not the thing to refuse —
+    # `write` already refuses to create one, and that is where it belongs.
+    assert _inferred_format([]) == FORMAT
+
+
+def test_a_written_recording_declares_its_format(tmp_path, monkeypatch):
+    """Or the next reader is back to guessing.
+
+    Mutation: drop `"format": FORMAT` from `write` and this goes red.
+    """
+    import json
+
+    from qabench import hits
+
+    monkeypatch.setattr(hits, "_seen", {"GET /x 200\t\tapp.local"})
+    doc = hits.write(tmp_path / "out.json")
+    assert doc["format"] == hits.FORMAT
+    assert json.loads((tmp_path / "out.json").read_text())["format"] == hits.FORMAT

@@ -1,4 +1,5 @@
 """C8: ready work is explicit; clean alone does not mean ready or shipped."""
+import pathlib
 from copy import deepcopy
 from datetime import datetime, timezone
 
@@ -85,3 +86,31 @@ def test_duplicate_readiness_declarations_are_rejected(records):
     records[1]["items"].append(deepcopy(records[1]["items"][0]))
     with pytest.raises(Invalid, match="duplicate"):
         review(records)
+
+
+def test_the_fixture_manifest_pins_the_version_this_tree_declares():
+    """A release that forgets the fixture's pin must fail in SECONDS, not in the
+    browser tier.
+
+    `run_stage` refuses when a manifest's `bench.version` disagrees with the
+    installed kit — the kit's own rule, and right. But the only thing exercising
+    it was `tests/test_stages.py`, the slow Playwright tier, so forgetting the
+    bump produced eight `SystemExit`s twenty minutes into a release instead of
+    one assertion immediately. That happened on 0.1.34.
+
+    The same reasoning as every consumer's pin guard, applied to the kit: the two
+    numbers live in one repository and can only drift by being remembered.
+
+    Mutation: set the fixture manifest's `bench.version` to anything else and
+    this goes red.
+    """
+    import yaml
+
+    import qabench
+
+    manifest = pathlib.Path(__file__).resolve().parent / "fixture_repo" / "qa" / "manifest.yml"
+    pinned = yaml.safe_load(manifest.read_text(encoding="utf-8"))["bench"]["version"]
+    assert pinned == qabench.__version__, (
+        f"{manifest.name} pins bench.version {pinned} and this tree declares "
+        f"{qabench.__version__} — bump both in the release commit, or every stage "
+        f"test exits with the kit's own version refusal")
