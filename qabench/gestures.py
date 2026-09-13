@@ -622,7 +622,13 @@ def hit_by_recording(gestures: list, hits: set) -> set:
         method, _, path = h.partition(" ")
         by_method.setdefault(method, []).append(path)
     for g in population(gestures):
-        if g.kind != "form" or not g.action:
+        # ANY gesture that declares a path and a method, not only a `form`.
+        # ana-log's population comes from its action REGISTRY, so every row is
+        # kind="action"; keying on the kind meant a project with 802 recorded
+        # requests and 156 discriminated action calls still reported a judgeable
+        # subset of ZERO. The property that matters is whether the control says
+        # where it sends, and `kind` was never that property.
+        if not g.action:
             continue
         method = (g.method or "GET").upper()
         pat = _action_pattern(g.action)
@@ -640,7 +646,7 @@ def judgeable_by_recording(gestures: list) -> set:
     claim from one over all of it, and the number has to be stated or the
     reader supplies an optimistic one.
     """
-    return {g.id for g in population(gestures) if g.kind == "form" and g.action}
+    return {g.id for g in population(gestures) if g.action}
 
 
 #: Files that TALK ABOUT gestures rather than driving them. A register's own

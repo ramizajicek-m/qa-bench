@@ -921,3 +921,29 @@ def test_an_unreadable_body_never_fails_the_suite(tmp_path, monkeypatch):
     assert {r.rsplit(" ", 1)[0] for r in _hits._seen} == {
         "POST /api/actions/x", "POST /api/actions/y"}
     _hits._seen.clear()
+
+
+def test_a_non_form_gesture_that_declares_its_path_is_judgeable(tmp_path):
+    """`kind` was never the property that mattered.
+
+    ana-log's population comes from its action registry, so every row is
+    kind="action". Keying the matcher on kind=="form" meant a project with 802
+    recorded requests and 156 discriminated action calls still reported a
+    judgeable subset of ZERO — the measure had the evidence and refused to look
+    at it.
+
+    Mutation: restore `g.kind == "form"` and both assertions fail.
+    """
+    def provider(root):
+        return [Gesture(template="app/api/actions.py", kind="action",
+                        selector="action[name=intake.receiveCase]",
+                        method="POST", action="/api/actions/intake#receiveCase",
+                        mutates="yes", why="declared writes=True",
+                        names=("receive_case", "receiveCase"))]
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "t.py").write_text("pass\n", encoding="utf-8")
+    m = measure(tmp_path, corpus_dirs=("tests",), min_controls=1, min_corpus=1,
+                population_fn=provider,
+                recording={"POST /api/actions/intake#receiveCase"})
+    assert m.judgeable == {"app/api/actions.py::action[name=intake.receiveCase]"}
+    assert m.hit == {"app/api/actions.py::action[name=intake.receiveCase]"}
