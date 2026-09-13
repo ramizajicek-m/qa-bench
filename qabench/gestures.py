@@ -649,6 +649,22 @@ def judgeable_by_recording(gestures: list) -> set:
     return {g.id for g in population(gestures) if g.action}
 
 
+def judgeable_with_presses(gestures: list, presses: dict | None) -> set:
+    """Judgeable by a resolved action OR by having been PRESSED.
+
+    This is the line that moves anat's 125 of 973. A press names the control
+    directly — the click is the identity — so a button whose URL no static reader
+    can resolve becomes judgeable the moment something clicks it. Nothing else in
+    the measure changes: it is still "a request this control sent was acted on",
+    just established by attribution rather than by matching a path.
+    """
+    out = judgeable_by_recording(gestures)
+    if presses:
+        ids = {g.id for g in population(gestures)}
+        out |= (set(presses) & ids)
+    return out
+
+
 #: Files that TALK ABOUT gestures rather than driving them. A register's own
 #: consumer names every undriven control in its failure message and docstring,
 #: so leaving it in the corpus makes each one read as driven — by the very file
@@ -723,6 +739,10 @@ class Measurement:
     touched: set | None = None
     #: False when no recording was supplied.
     recorded: bool = False
+    #: Control ids something CLICKED, from `qabench.press`. These are judgeable
+    #: without a resolvable action, because the click is the identity — which is
+    #: the only thing that reaches a button whose URL is built at runtime.
+    pressed: set = field(default_factory=set)
 
     @property
     def ceiling(self) -> int:
@@ -788,7 +808,8 @@ class Measurement:
 def measure(root, templates="templates", static="static",
             corpus_dirs=("tests", "scripts"),
             min_controls: int = 20, min_corpus: int = 20,
-            population_fn=None, recording=None, touched=None) -> Measurement:
+            population_fn=None, recording=None, touched=None,
+            presses: dict | None = None) -> Measurement:
     """One sweep: every control, and which of them something names.
 
     `population_fn` is how a project whose controls are not in markup joins the
@@ -830,10 +851,12 @@ def measure(root, templates="templates", static="static",
     return Measurement(population=pop, corpus_files=len(corpus), driven=driven,
                        undriven=undriven,
                        mutating_undriven=[g for g in undriven if g.mutates == "yes"],
-                       hit=hit_by_recording(gestures, recording or set()),
+                       hit=(hit_by_recording(gestures, recording or set())
+                            | {c for c, ok in (presses or {}).items() if ok}),
                        touched=(hit_by_recording(gestures, touched)
                                 if touched is not None else None),
-                       judgeable=judgeable_by_recording(gestures),
+                       judgeable=judgeable_with_presses(gestures, presses),
+                       pressed=set(presses or {}),
                        recorded=bool(recording))
 
 

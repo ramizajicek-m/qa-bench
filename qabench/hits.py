@@ -438,6 +438,48 @@ def merge_workers(target: str) -> dict:
     return {**doc, "workers": len(parts)}
 
 
+def fold_raw(out_target: str, pattern: str = "*.raw") -> dict:
+    """Fold appended raw recording lines into one JSON recording.
+
+    A BROWSER recorder cannot use `write()`: it has no session end it controls and
+    a crashed spec must still leave behind what it reached, so it appends one line
+    per response instead. Those files are `.raw` — naming an append-log `.json`
+    would be a format lie, and `read()` would choke on it.
+
+    This is the Python half of what `shulipeles/scripts/hits-to-json.mjs` does for
+    its Node tier. Both exist because the browser is the only instrument that can
+    see a control whose path is built at runtime: anat has 45,000 lines of inline
+    JS and monkey-patches `window.fetch`, so 848 of its 973 controls are not
+    judgeable from source at all.
+
+    Refuses an empty fold and refuses when there is nothing to fold, for the
+    reason every refusal in this module exists: an empty recording marks every
+    control unhit on the next read, which reads as a regression rather than as a
+    missing file.
+    """
+    out = Path(out_target)
+    parts = sorted(out.parent.glob(pattern))
+    if not parts:
+        raise RuntimeError(
+            f"no raw recordings matching {pattern} beside {out} — the browser "
+            f"recorder never ran, or QABENCH_RECORD_HITS was unset for it. Treat "
+            f"this as DID NOT RUN.")
+
+    rows: set = set()
+    for f in parts:
+        rows |= {l for l in f.read_text(encoding="utf-8").splitlines() if l.strip()}
+    if not rows:
+        raise RuntimeError(
+            f"{len(parts)} raw file(s) beside {out} and not one line between them. "
+            f"Refusing to write an empty recording.")
+
+    doc = {"format": FORMAT, "recorded": sorted(rows), "count": len(rows)}
+    out.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
+    for f in parts:
+        f.unlink()
+    return {**doc, "raw_files": len(parts)}
+
+
 def pytest_sessionfinish(session, exitstatus):   # pragma: no cover
     target = os.environ.get(ENV)
     if not target:

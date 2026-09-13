@@ -1628,3 +1628,50 @@ def test_merging_nothing_is_a_refusal_not_an_empty_file(tmp_path):
         hits.merge_workers(str(d / "unit.json"))
     assert "DID NOT RUN" in str(e.value)
     assert not (d / "unit.json").exists(), "it wrote a file anyway"
+
+
+def test_raw_browser_lines_fold_into_one_recording(tmp_path):
+    """The browser recorder appends; the register reads JSON. This joins them.
+
+    A browser recorder cannot use `write()` — it has no session end it controls,
+    and a crashed spec must still leave what it reached behind — so it appends one
+    line per response to a `.raw` file. Naming an append-log `.json` would be a
+    format lie and `read()` would choke on it.
+
+    Mutation: drop the `f.unlink()` loop and the leftovers assertion goes red;
+    remove the no-parts refusal and the empty case does.
+    """
+    from qabench.hits import FORMAT, fold_raw, read
+
+    (tmp_path / "e2e.browser-gw0.raw").write_text(
+        "POST /admin/x 200\t\tapp\nPOST /admin/y 303\t/login?next=/a\tapp\n")
+    (tmp_path / "e2e.browser-gw1.raw").write_text(
+        "POST /admin/x 200\t\tapp\nPOST /admin/z 303\t/admin/z/7\tapp\n")
+
+    out = fold_raw(str(tmp_path / "e2e.json"))
+    assert out["raw_files"] == 2
+    assert out["count"] == 3, f"duplicates across workers must collapse: {out}"
+    assert out["format"] == FORMAT
+    assert not list(tmp_path.glob("*.raw")), "the raw files survived the fold"
+
+    accepted = read(tmp_path)
+    assert "POST /admin/x" in accepted, "a 2xx from the browser must count"
+    assert "POST /admin/z" in accepted, "a redirect to the new record is accepted"
+    assert "POST /admin/y" not in accepted, "a bounce to login is a refusal"
+
+
+def test_folding_nothing_is_a_refusal(tmp_path):
+    """An empty browser recording would mark every control unhit."""
+    import pytest as _pytest
+
+    from qabench.hits import fold_raw
+
+    with _pytest.raises(RuntimeError) as e:
+        fold_raw(str(tmp_path / "e2e.json"))
+    assert "DID NOT RUN" in str(e.value)
+    assert not (tmp_path / "e2e.json").exists()
+
+    (tmp_path / "e2e.browser.raw").write_text("\n\n")
+    with _pytest.raises(RuntimeError) as e2:
+        fold_raw(str(tmp_path / "e2e.json"))
+    assert "not one line" in str(e2.value)
