@@ -804,3 +804,31 @@ def test_a_directory_of_recordings_is_unioned_per_tier(tmp_path):
     assert _hits.read(d, accepted_only=False) == {
         "POST /a/b", "POST /refused", "POST /c/d"}
     assert _hits.read(tmp_path / "nothing-here") == set()
+
+
+def test_the_verb_is_read_from_the_handler_not_assumed(tmp_path):
+    """A control driven by PUT could never match a recording.
+
+    Every JS-derived gesture was labelled POST, so anat's edit-project-form and
+    mark-paid-form — both PUT, with no POST route existing at those paths at all
+    — were destined to read as never accepted no matter how well they were
+    tested.
+
+    Mutation: restore the POST default and the PUT case fails.
+    """
+    write(tmp_path, "t.html", '<form id="edit-form"><button>Save</button></form>')
+    (tmp_path / "static").mkdir(exist_ok=True)
+    (tmp_path / "static" / "app.js").write_text(
+        "document.getElementById('edit-form').addEventListener('submit', async () => {\n"
+        "  await fetch(`/api/projects/${id}`, { method: 'PUT', body: b });\n"
+        "});\n", encoding="utf-8")
+    g, inline = lift_with_scripts(tmp_path)
+    js = dict(inline)
+    js["app.js"] = (tmp_path / "static" / "app.js").read_text()
+    g = classify_with_js(g, js)
+    row = [x for x in g if x.selector == "form[id=edit-form]"][0]
+    assert row.method == "PUT", f"the verb was read as {row.method}"
+    assert row.action == "/api/projects/{}"
+    assert hit_by_recording(g, {"PUT /api/projects/abc"}) == {row.id}
+    assert hit_by_recording(g, {"POST /api/projects/abc"}) == set(), \
+        "a POST must not satisfy a control that sends PUT"

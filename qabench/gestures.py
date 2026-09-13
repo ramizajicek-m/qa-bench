@@ -373,6 +373,11 @@ _MUTATING_CALL = re.compile(
 #: `/api/clients/{}/portal-invite`, which is the same shape a form action has —
 #: so one matcher serves both and a recorded request can be attributed to the
 #: control that sends it.
+#: The method a handler sends, when it says so. `method: 'PUT'` and
+#: `method, headers: {...}` both appear; only the literal form is readable, and
+#: when it is absent POST is the honest guess for a form submit.
+_HANDLER_VERB = re.compile(r"""method\s*:\s*['"](GET|POST|PUT|PATCH|DELETE)['"]""", re.I)
+
 _HANDLER_URL = re.compile(
     r"""['"`](?P<path>/[A-Za-z0-9_\-./]*(?:\$\{[^}]*\}[A-Za-z0-9_\-./]*)*)['"`]"""
     r"""(?P<verb>)""")
@@ -430,7 +435,15 @@ def classify_with_js(gestures: list[Gesture], js_sources: dict[str, str]) -> lis
                     url = _HANDLER_URL.search(window)
                     if url:
                         g.action = re.sub(r"\$\{[^}]*\}", PLACEHOLDER, url.group("path"))
-                        g.method = (url.group("verb") or "POST").upper()
+                        # THE VERB, read from the same window rather than assumed.
+                        # Defaulting to POST made every JS-derived gesture claim
+                        # POST, so a control driven by PUT could never match a
+                        # recording and read as never accepted for ever. anat's
+                        # edit-project-form and mark-paid-form are both PUT; the
+                        # register named them POST and the routes do not exist
+                        # under that verb at all.
+                        verb = _HANDLER_VERB.search(window)
+                        g.method = (verb.group(1) if verb else "POST").upper()
                 break
     return gestures
 
