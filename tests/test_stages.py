@@ -330,6 +330,46 @@ def test_pages_by_role_sees_a_script_that_dies_after_render(bench_env, server_fa
     assert len(broken) == 4   # both roles × both viewports; the page returns 200 for both
 
 
+def test_a_transport_failure_is_a_SKIP_and_never_a_finding(bench_env, server_factory):
+    """my8200, 2026-09-12: `net::ERR_NETWORK_CHANGED` on a sub-resource of a
+    page that had already answered 200 took the bench red, the night refused
+    the promotion, and production sat a day behind over a laptop changing
+    networks.
+
+    It must not become a pass either: the cell's central claim is that the page
+    raised zero console errors, and after a transport failure that claim is
+    UNKNOWN. So the stage exits 3 (did not run), which the night already reads
+    as "nothing was decided here" rather than as green.
+    """
+    server_factory(FAKE_WIRE="1")
+    assert cli.main(["stage", "pages_by_role"]) == 3, "a skip, not a failure and not a pass"
+    led = _ledger(bench_env, "pages_by_role")
+    assert led["failed"] == [], led["failed"]
+    wire = [(l, w) for l, w in led["not_run"] if l.endswith("/admin/broken")]
+    assert len(wire) == 4, wire       # both roles × both viewports
+    assert all("transport failure, not a finding" in w and "ERR_NETWORK_CHANGED" in w
+               for _, w in wire), wire
+    # Every OTHER cell still decided: a flaky wire on one page must not make the
+    # whole stage stop measuring.
+    assert led["passed"] >= 18, led["passed"]
+
+
+def test_a_page_that_is_genuinely_broken_still_fails_through_a_transport_failure(bench_env, server_factory):
+    """The direction that would have made this change a way to hide defects.
+
+    Both faults at once: the transport error is set aside, the real one is still
+    named, and the report says the network error was ignored so nobody spends
+    the morning on it.
+    """
+    server_factory(FAKE_BROKEN="1", FAKE_WIRE="1")
+    assert cli.main(["stage", "pages_by_role"]) == 1
+    led = _ledger(bench_env, "pages_by_role")
+    broken = [(l, d) for l, d in led["failed"] if l.endswith("/admin/broken")]
+    assert len(broken) == 4, led["failed"]
+    assert all("boom" in d for _, d in broken), broken
+    assert all("also a transport failure, ignored" in d for _, d in broken), broken
+
+
 def test_pages_by_role_sees_sideways_scroll_only_at_phone_width(bench_env, server_factory):
     server_factory(FAKE_WIDE="1")
     assert cli.main(["stage", "pages_by_role"]) == 1
