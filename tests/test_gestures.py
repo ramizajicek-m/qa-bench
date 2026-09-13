@@ -832,3 +832,37 @@ def test_the_verb_is_read_from_the_handler_not_assumed(tmp_path):
     assert hit_by_recording(g, {"PUT /api/projects/abc"}) == {row.id}
     assert hit_by_recording(g, {"POST /api/projects/abc"}) == set(), \
         "a POST must not satisfy a control that sends PUT"
+
+
+def test_a_handler_naming_two_urls_yields_no_action_rather_than_the_first(tmp_path):
+    """AMBIGUOUS IS NOT A GUESS, and picking one was worse than picking none.
+
+    anat's log-followup handler sits beside promote-to-lead in the same window.
+    Taking the first literal labelled the register row with an endpoint the
+    control never sends to — so `hit` was measured against the wrong path and the
+    row could be wrong in BOTH directions: driven and reported undriven, or
+    undriven and reported driven.
+
+    The control stays in the population as unresolved, which is the honest state
+    and still owes a test.
+
+    Mutation: take `_HANDLER_URL.search(window)` unconditionally and this row
+    gains an action it has no right to.
+    """
+    write(tmp_path, "t.html", '<form id="two-urls"><button>Go</button></form>')
+    (tmp_path / "static").mkdir(exist_ok=True)
+    (tmp_path / "static" / "app.js").write_text(
+        "document.getElementById('two-urls').addEventListener('submit', async () => {\n"
+        "  await fetch('/api/a/log-followup', { method: 'POST' });\n"
+        "  await fetch('/api/a/promote-to-lead', { method: 'POST' });\n"
+        "});\n", encoding="utf-8")
+    g, inline = lift_with_scripts(tmp_path)
+    js = dict(inline)
+    js["app.js"] = (tmp_path / "static" / "app.js").read_text()
+    g = classify_with_js(g, js)
+    row = [x for x in g if x.selector == "form[id=two-urls]"][0]
+    assert row.mutates == "yes", "it still reaches a mutating call"
+    assert row.action == "", f"an ambiguous window produced the action {row.action!r}"
+    assert row.id in {x.id for x in population(g)}, "it must stay in the population"
+    assert judgeable_by_recording(g) == set(), \
+        "a control with no action cannot be judged by a request log, and must say so"

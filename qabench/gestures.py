@@ -432,7 +432,17 @@ def classify_with_js(gestures: list[Gesture], js_sources: dict[str, str]) -> lis
                 # measure was not weak there, it was blind — so take the path
                 # from the same window that proved the call mutates.
                 if not g.action:
-                    url = _HANDLER_URL.search(window)
+                    # AMBIGUOUS IS NOT A GUESS. A handler window often holds
+                    # several URLs — anat's log-followup handler sits beside
+                    # promote-to-lead, and taking the first labelled the row with
+                    # the wrong endpoint. That is worse than no label: "hit" would
+                    # then be measured against a path the control never sends to,
+                    # and the row could be wrong in either direction. When the
+                    # window names more than one distinct path, record none and
+                    # leave the control in the population as unresolved.
+                    found = {re.sub(r"\$\{[^}]*\}", PLACEHOLDER, m.group("path"))
+                             for m in _HANDLER_URL.finditer(window)}
+                    url = _HANDLER_URL.search(window) if len(found) == 1 else None
                     if url:
                         g.action = re.sub(r"\$\{[^}]*\}", PLACEHOLDER, url.group("path"))
                         # THE VERB, read from the same window rather than assumed.
