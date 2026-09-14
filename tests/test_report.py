@@ -158,7 +158,8 @@ def test_all_green_json_output_is_parseable(monkeypatch, tmp_path, capsys):
     estate = tmp_path / "estate.yml"
     estate.write_text("projects: [{name: x}]\n")
     healthy = _row()
-    monkeypatch.setattr(report, "row_for", lambda *args: healthy)
+    monkeypatch.setattr(report, "row_for", lambda *args, **kw: healthy)
+    monkeypatch.setattr(report, "gh_quota", lambda: None)       # no network in a unit test
     assert report.run(["--json", "--estate", str(estate)]) == 0
     output = capsys.readouterr()
     assert json.loads(output.out)[0]["name"] == "x"
@@ -273,3 +274,102 @@ def test_gh_json_returns_unreadable_when_the_command_fails(monkeypatch):
 
     monkeypatch.setattr(report.subprocess, "run", boom)
     assert report.gh_json("repos/o/r/actions/runs") is report.UNREADABLE
+
+
+# --- the kit pin as a gate (0.1.40) --------------------------------------------
+
+def _row_with_pin(pin, floor="0.1.40", **kw):
+    fetch_pin = lambda repo, branch: pin  # noqa: E731
+    fetch_run = kw.pop("run", lambda repo, wf: _run())
+    return report.row_for(P, MON, fetch_run=fetch_run, fetch_tip=lambda r, b: "a" * 40,
+                          fetch_health=lambda u: "a" * 12, fetch_compare=lambda repo, base, head: "identical",
+                          fetch_scheduled=lambda repo, wf: _run(), fetch_pin=fetch_pin, floor=floor)
+
+
+def test_a_kit_pinned_below_the_floor_is_red():
+    """A register made by 0.1.36 answers a different question than one made by
+    0.1.39 while looking identical (0.1.35 fixed a count that was always 0).
+    Mutation: drop the `_vtuple(pin) < _vtuple(floor)` branch and this passes
+    a lagging pin as green."""
+    r = _row_with_pin("0.1.36")
+    assert any("floor is 0.1.40" in x for x in r["red"]), r
+    assert r["kit"] == "0.1.36"
+
+
+def test_a_kit_at_or_above_the_floor_is_not_red_for_it():
+    assert _row_with_pin("0.1.40")["red"] == []
+    assert _row_with_pin("0.1.41")["red"] == []
+    assert _row_with_pin("0.1.40")["kit"] == "0.1.40"
+
+
+def test_version_order_is_numeric_not_lexical():
+    """0.1.9 < 0.1.10, whatever a string compare thinks."""
+    assert _row_with_pin("0.1.9", floor="0.1.10")["red"]
+    assert _row_with_pin("0.1.10", floor="0.1.9")["red"] == []
+
+
+def test_an_unreadable_pin_is_red_and_says_gh_not_the_project():
+    r = _row_with_pin(report.UNREADABLE)
+    assert any("kit pin" in x and "gh failed" in x for x in r["red"]), r
+    assert r["kit"] == "?"
+
+
+def test_a_manifest_with_no_pin_is_red_because_its_registers_have_no_author():
+    r = _row_with_pin(None)
+    assert any("no bench.version" in x for x in r["red"]), r
+    assert r["kit"] == "none"
+
+
+def test_without_a_floor_nothing_is_claimed_about_the_kit():
+    r = _row()
+    assert r["kit"] == "" and r["red"] == []
+
+
+def test_the_table_carries_the_kit_column():
+    text = report.render([_row_with_pin("0.1.36")])
+    assert "| kit |" in text.splitlines()[0]
+    assert "| 0.1.36 |" in text
+
+
+def test_gh_reason_names_the_quota_not_a_generic_failure():
+    """2026-09-14: six rows read 'gh failed here' with gh authenticated — the
+    account's 5,000/h quota was spent and stderr said so; the report ate it."""
+    import subprocess as sp
+    err = "gh: API rate limit exceeded for user ID 1. If you reach out to GitHub Support…"
+    assert "rate limit" in report.gh_reason(err, sp.CalledProcessError(1, "gh"))
+    assert "not authenticated" in report.gh_reason("gh: To get started with GitHub CLI, please run: gh auth login\nauthentication required", sp.CalledProcessError(4, "gh"))
+    assert "not installed" in report.gh_reason(None, FileNotFoundError("gh"))
+    assert "timed out" in report.gh_reason(b"", sp.TimeoutExpired("gh", 60))
+    assert "not JSON" in report.gh_reason("", __import__("json").JSONDecodeError("x", "", 0))
+
+
+def test_a_failed_gh_read_records_its_reason_for_the_morning(monkeypatch):
+    import subprocess as sp
+
+    def boom(*a, **k):
+        raise sp.CalledProcessError(1, "gh", stderr="gh: API rate limit exceeded for user ID 1.")
+
+    monkeypatch.setattr(report.subprocess, "run", boom)
+    report.GH_FAILURES.clear()
+    assert report.gh_json("repos/o/r/actions/runs") is report.UNREADABLE
+    assert report.GH_FAILURES and "rate limit" in report.GH_FAILURES[-1]["reason"]
+    lines = report.gh_failure_lines(report.GH_FAILURES, {"reset": MON})
+    assert lines[0].startswith("1 gh read(s) failed") and "resets 06:30 UTC" in lines[1], lines
+    report.GH_FAILURES.clear()
+
+
+def test_no_failures_means_no_tail():
+    assert report.gh_failure_lines([], None) == []
+
+
+def test_kit_pin_reads_bench_version_off_the_manifest_contents(monkeypatch):
+    import base64
+    body = base64.b64encode(b"project: x\nbench:\n  version: 0.1.36\n").decode()
+    monkeypatch.setattr(report, "gh_json", lambda path: {"content": body})
+    assert report.kit_pin("o/r", "main") == "0.1.36"
+    monkeypatch.setattr(report, "gh_json", lambda path: report.UNREADABLE)
+    assert report.kit_pin("o/r", "main") is report.UNREADABLE
+    monkeypatch.setattr(report, "gh_json", lambda path: {"message": "Not Found"})
+    assert report.kit_pin("o/r", "main") is None
+    monkeypatch.setattr(report, "gh_json", lambda path: {"content": base64.b64encode(b"project: x\n").decode()})
+    assert report.kit_pin("o/r", "main") is None

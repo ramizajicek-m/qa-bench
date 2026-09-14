@@ -95,6 +95,10 @@ The reader selects the latest eligible run for this workflow/SHA/branch/event se
 
 The estate report rejects literal `unknown` build identities, compares staging against `staging_branch` when configured, and prints valid JSON even when all projects are healthy. A queued night has a default 0.5-hour deadline; active execution has a default 3-hour deadline measured from `run_started_at`, so fresh retries do not inherit the original run's age. Projects can set `queue_deadline_h` and `run_deadline_h` separately. These are observation deadlines, not evidence that a cancelled/failed job was repaired; a full release-flow ownership ledger remains separate work.
 
+## The kit pin, and the contract behind the twelve (0.1.40)
+
+`qabench/estate.yml` carries `kit_floor`; `python -m qabench report` reads each project's `bench.version` off its integration branch into a `kit` column and a pin below the floor is a RED row — a register made by an older kit answers a different question while looking identical. In each repo, `qabench.conformance.pin_agrees(ROOT)` asserts without a checkout that the manifest's version equals the INSTALLED kit's, that every `qa-bench@` ref is one full commit, and that it is the installed commit. `qabench/contract.yml` says what `implemented` requires per check, what `partial` may lack (by key, in `missing:`), and what proves it ran (`ran:`); `qabench.conformance.judge(manifest, root)` holds a manifest to it — lies are fatal, `●?` (claimed, no ran-proof) and `◐?` (partial with no named gap) are advisory until the repo turns them on. Every release is tagged: `python scripts/release.py X.Y.Z "title"`.
+
 ## Its own tests
 
 Local, inactive acceptance-contract, JUnit, ready-work and escaped-defect tools are documented in [the acceptance draft](docs/acceptance.md). Their new tests are written but not executed; they do not change the current nightly or promotion path.

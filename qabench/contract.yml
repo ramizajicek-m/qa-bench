@@ -1,0 +1,120 @@
+# The contract behind the twelve checks — what "implemented" MEANS, in every repo.
+#
+# Until 2026-09-14 a check was `implemented` when the repo's author wrote that
+# word in qa/manifest.yml, and six repos had six meanings: my8200's C12 read ●
+# while its own reason said "there is no socket-level block on unit tests".
+# `qabench.conformance.judge` holds every manifest to THIS file instead. Three
+# rules apply to every check:
+#
+#   (a) evidence is an executable in the tree that can fail, prints the SIZE of
+#       the population it examined, and exits 0 / 1 / 3 with 3 never read as 0;
+#   (b) `partial` names what is missing with keys from `partial_may_lack`, not a
+#       free sentence — so two repos' ◐ mean the same thing;
+#   (c) `implemented` names what proves it RAN (`ran:`), a stage, CI job or test
+#       whose trace the report can read. A ● with no ran-proof is `●?` in the
+#       matrix: claimed, not shown.
+#
+# The judge's findings come in two strengths. FATAL: the manifest lies (a path
+# that does not exist, ● with no evidence, ◐/○ with no reason, a missing check).
+# ADVISORY: ● without `ran:`, ◐ whose `missing:` uses no key from this list.
+# Advisory becomes fatal per repo once that repo is clean — the estate's own
+# adoption rule: provision, verify it passes, then make skipping fatal.
+version: 1
+statuses: [implemented, partial, absent]
+checks:
+  C1:
+    name: truth register
+    implemented_requires:
+      - qa/claims.yml with an owner and a switch per claim
+      - a sweep over every rendered public page, chat bank and outbound template
+      - fails on a claim whose switch is off, or that no owner signs
+    partial_may_lack: [surfaces, owners, chat_bank, outbound_templates]
+    ran_proof: the sweep's ledger — claims × surfaces examined
+  C2:
+    name: one fact, every surface
+    implemented_requires:
+      - a facts register naming every surface each fact is shown on
+      - per-ENTITY comparison of every surface against the source function, never a pinned number
+    partial_may_lack: [surfaces, entities, source_compare]
+    ran_proof: facts × surfaces × entities examined
+  C3:
+    name: decision register
+    implemented_requires:
+      - qa/decisions.yml — id, decider, date, rule, the test that asserts it
+      - the conformance test fails on a decision with no test
+    partial_may_lack: [owed_tests]
+    ran_proof: the conformance run
+  C4:
+    name: input rejection sweep
+    implemented_requires:
+      - mechanical enumeration of every field and parameter, with its count
+      - the unbounded frozen by NAME in classes, ratchet falls only
+      - a probe per class posting the out-of-range value and asserting 4xx that names the field
+    partial_may_lack: [probe, enumeration, ratchet]
+    ran_proof: population and probe counts
+  C5:
+    name: real-artifact corpus
+    implemented_requires:
+      - at least one REAL document per parser / importer / extractor, expected output transcribed by a person
+      - a stage that runs the corpus
+    partial_may_lack: [parsers_without_artifact, stage]
+    ran_proof: the corpus stage's ledger
+  C6:
+    name: derived, persisted, re-derived
+    implemented_requires:
+      - a register of derived columns, each naming ONE re-derivation entry point
+      - a sweep that every writer of an input calls it
+      - re-derive tests; a seed paired with the backfill that reaches existing rows
+    partial_may_lack: [writer_sweep, backfill_pairing, register]
+    ran_proof: register size and writer sites
+  C7:
+    name: deployed ≠ code
+    implemented_requires:
+      - health exposes commit, schema head, seed version and active switches
+      - a comparer OUTSIDE the process, on every environment the manifest names
+      - the gate REFUSES on drift
+    partial_may_lack: [gate_refuses, environments, schema_head, seed_version, switches]
+    ran_proof: the night job's step
+  C8:
+    name: silence is red
+    implemented_requires:
+      - every scheduled thing in the manifest, with its cadence
+      - heartbeat and deadline DERIVED from the manifest, never typed twice
+      - the promotion gate reads the same table; a zero-population stage exits 3
+    partial_may_lack: [gate_refuses, derived_deadlines, coverage_of_scheduled]
+    ran_proof: the gate's own run
+  C9:
+    name: outbound as recipient
+    implemented_requires:
+      - a catalogue of every outbound
+      - an AST sweep that every sender call site is claimed by the catalogue
+      - each rendered and READ as its recipient — sender, signature, money, subject, attachment, link target
+      - the source row's status flipped
+    partial_may_lack: [recipient_read, subject, attachment, link_target, status_flip, sender_sweep]
+    ran_proof: catalogue size and sender sites
+  C10:
+    name: journey per surface
+    implemented_requires:
+      - a real browser, phone AND desktop width
+      - every role, and a second tenant
+      - the STORED ROW asserted, not the toast
+      - qa/gestures.yml with mutating_never_accepted 0, or every remaining row signed
+    partial_may_lack: [second_tenant, phone_width, every_role, stored_row, gesture_register, browser]
+    ran_proof: the bench ledger and the register's counts
+  C11:
+    name: form → model → column
+    implemented_requires:
+      - posted-but-undeclared swept
+      - selected-but-absent swept
+      - a ratchet over today's offenders
+    partial_may_lack: [posted_direction, selected_direction, ratchet]
+    ran_proof: population examined
+  C12:
+    name: real backend, no live wire
+    implemented_requires:
+      - a tier on the engine production runs
+      - a socket-level block in conftest with a negative control watched red
+      - a DSN guard that asks WHICH database, not what the URL looks like
+      - a pin check that the interpreter runs the pinned packages
+    partial_may_lack: [real_engine_tier, socket_block, dsn_identity, pin_check]
+    ran_proof: the tier's run and the negative control's test id
