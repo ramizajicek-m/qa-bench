@@ -269,8 +269,29 @@ def _login_paths() -> tuple:
     return declared or DEFAULT_LOGIN_PATHS
 
 
-def _acted(status: int, location: str) -> bool:
-    """Did the app ACT on this request, as opposed to answering it?"""
+#: Requests whose SUCCESS is to land on the login page with nothing to say.
+#: `POST /logout -> 303 /login` is the logout WORKING, and the bounce rule above
+#: read it as the app refusing — eliad's register carried its logout as "touched,
+#: never accepted" through two re-records (2026-09-14) while a test drove it every
+#: run. The path is the evidence here, not the Location. Declared per repo when
+#: the app signs out somewhere else.
+LOGOUT_ENV = "QABENCH_LOGOUT_PATHS"
+DEFAULT_LOGOUT_PATHS = ("/logout", "/signout", "/sign-out", "/auth/logout", "/accounts/logout")
+
+
+def _is_logout(where: str) -> bool:
+    """Whether `where` ("METHOD /path" or a bare path) is the app's sign-out."""
+    path = (where or "").split(" ", 1)[-1].partition("?")[0].rstrip("/")
+    declared = tuple(p for p in os.environ.get(LOGOUT_ENV, "").split(",") if p)
+    return any(path == p.rstrip("/") or path.endswith(p.rstrip("/")) for p in (declared or DEFAULT_LOGOUT_PATHS))
+
+
+def _acted(status: int, location: str, where: str = "") -> bool:
+    """Did the app ACT on this request, as opposed to answering it?
+
+    `where` is the request itself; it decides only one case — a sign-out whose
+    success is the login page — and an empty `where` decides nothing.
+    """
     if ACCEPTED_MIN <= status < ACCEPTED_MAX:
         return True
     if status in (307, 308):
@@ -278,6 +299,8 @@ def _acted(status: int, location: str) -> bool:
     if 300 <= status < 400:
         if not (location or ""):
             return False        # a redirect with no Location decides nothing
+        if _is_logout(where) and not any(b in (location.partition("?")[2]) for b in BOUNCE_PARAMS):
+            return True         # signed out and shown the door: that is the flow finishing
         return not _is_login_bounce(location)
     return False
 
@@ -361,7 +384,7 @@ def read(path, accepted_only: bool = True) -> set:
             where, status = head, 0
         if hosts and host and host not in hosts:
             continue
-        if accepted_only and not _acted(status, location):
+        if accepted_only and not _acted(status, location, where):
             continue
         out.add(where)
     return out

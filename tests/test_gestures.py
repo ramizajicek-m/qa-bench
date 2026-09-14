@@ -1675,3 +1675,33 @@ def test_folding_nothing_is_a_refusal(tmp_path):
     with _pytest.raises(RuntimeError) as e2:
         fold_raw(str(tmp_path / "e2e.json"))
     assert "not one line" in str(e2.value)
+
+
+@pytest.mark.parametrize(
+    "where, location, acted, why",
+    [
+        ("POST /logout", "/login", True, "signing out and landing on the login page is the logout WORKING"),
+        ("POST /logout", "/login/", True, "the same, trailing slash"),
+        ("POST /auth/logout", "/auth/login", True, "a declared-shape logout under a prefix"),
+        ("POST /logout", "/login?next=/admin", False, "a logout that bounces with 'come back' did not sign anyone out"),
+        ("POST /admin/crm/2", "/login", False, "any other control landing on the login page is still a refusal"),
+        ("", "/login", False, "no request path decides nothing"),
+    ],
+)
+def test_a_logout_that_lands_on_the_login_page_is_the_logout_working(where, location, acted, why):
+    """eliad, 2026-09-14: `POST /logout 303 -> /login` was recorded on every run
+    and the register said the control had never once been accepted — through
+    two re-records. The bounce rule reads a bare login path as a refusal, which
+    is right for every control except the one whose job is to put you there.
+    The request path is the evidence. Mutation: drop the `_is_logout` clause in
+    `_acted` and the first three rows go red."""
+    from qabench.hits import _acted
+
+    assert _acted(303, location, where) is acted, why
+
+
+def test_a_repo_can_declare_where_it_signs_out(monkeypatch):
+    from qabench.hits import _acted
+    monkeypatch.setenv("QABENCH_LOGOUT_PATHS", "/bye")
+    assert _acted(303, "/login", "POST /bye") is True
+    assert _acted(303, "/login", "POST /logout") is False, "declaring replaces the defaults, it does not add to them"
