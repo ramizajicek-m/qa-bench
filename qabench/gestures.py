@@ -102,6 +102,11 @@ class Gesture:
         return f"{self.template}::{self.selector}"
 
 
+#: The suffix a key carries when no attribute could name the control. It is a
+#: MEASUREMENT FAILURE, not a finding about the control — see `Measurement`.
+POSITIONAL = "?positional"
+
+
 def _attr(attrs, name):
     for k, v in attrs:
         if k == name:
@@ -157,7 +162,7 @@ class _Lifter(HTMLParser):
         # are not.
         n = self._counter.get(tag, 0)
         self._counter[tag] = n + 1
-        return f"{tag}#{n}?positional"
+        return f"{tag}#{n}{POSITIONAL}"
 
     def _open_form(self):
         return self._forms[-1] if self._forms else None
@@ -743,10 +748,42 @@ class Measurement:
     #: without a resolvable action, because the click is the identity — which is
     #: the only thing that reaches a button whose URL is built at runtime.
     pressed: set = field(default_factory=set)
+    #: Controls the sweep could not NAME — no id, data-action, name or
+    #: data-testid — so their key is an occurrence index. NOT a finding about the
+    #: control: a positional key is a measurement failure, and #687 is the two
+    #: costs of counting it as one.
+    #:
+    #: It UNDERSTATED coverage. Inserting markup above such a control shifts
+    #: every index below it, so a control a recording had driven stops matching
+    #: and reads as never driven. Measured on anat 2026-09-15: adding one card to
+    #: a page moved judgeable 125 -> 124 and accepted 84 -> 83 with the
+    #: population identical at 975 — no control gained or lost, one simply
+    #: stopped being recognised. Worse than the number: the shifted index now
+    #: stands for a DIFFERENT control while carrying the old one's hit record, so
+    #: something nobody has ever driven can read as accepted.
+    #:
+    #: And it BLOCKED ordinary work. The undriven ratchet only falls, and a
+    #: nameless control cannot be credited to a test or a journey — so adding a
+    #: tab button to a page whose controls are all positional could not be
+    #: offset by driving one, and the change could not land at all. A gate that
+    #: cannot be satisfied teaches people to override it.
+    #:
+    #: Held apart rather than dropped: the mutating half is listed separately,
+    #: because a control that CHANGES something and cannot even be named is the
+    #: worst row in the register, not an exempt one.
+    unmeasured: list = field(default_factory=list)
+    mutating_unmeasured: list = field(default_factory=list)
 
     @property
     def ceiling(self) -> int:
         return len(self.undriven)
+
+    @property
+    def unmeasured_count(self) -> int:
+        """How much of the population the driven/undriven verdict does NOT
+        speak for. A verdict without this is an optimistic number: the reader
+        assumes the rest is fine, and the rest is unknown."""
+        return len(self.unmeasured)
 
     @property
     def mutating(self) -> int:
@@ -847,9 +884,19 @@ def measure(root, templates="templates", static="static",
             f"{min_corpus}). Treat this as DID NOT RUN, not as a clean repo.")
     driven = driven_by_corpus(gestures, corpus)
     pop = population(gestures)
-    undriven = sorted((g for g in pop if g.id not in driven), key=lambda g: g.id)
+    # A control the sweep could not NAME is not a control nobody drives — it is
+    # one nothing can be said about. Holding the two apart is the whole of #687:
+    # a positional key moves the moment markup is inserted above it, so it both
+    # understated coverage (a driven control silently stopped matching) and
+    # blocked ordinary work (adding a button could not be offset by driving one,
+    # because a nameless control cannot be credited to a test).
+    named = [g for g in pop if not g.id.endswith(POSITIONAL)]
+    unmeasured = sorted((g for g in pop if g.id.endswith(POSITIONAL)), key=lambda g: g.id)
+    undriven = sorted((g for g in named if g.id not in driven), key=lambda g: g.id)
     return Measurement(population=pop, corpus_files=len(corpus), driven=driven,
                        undriven=undriven,
+                       unmeasured=unmeasured,
+                       mutating_unmeasured=[g for g in unmeasured if g.mutates == "yes"],
                        mutating_undriven=[g for g in undriven if g.mutates == "yes"],
                        hit=(hit_by_recording(gestures, recording or set())
                             | {c for c, ok in (presses or {}).items() if ok}),
@@ -1171,6 +1218,12 @@ def register_doc(m: "Measurement", old: dict, *, today=None) -> dict:
         "corpus_files": m.corpus_files,
         "recorded": m.recorded,
         "judgeable": len(m.judgeable),
+        # #687: how much of the population the driven/undriven verdict does NOT
+        # speak for. Written down so the ceiling cannot read as a statement about
+        # the whole page — and so a repo whose nameless controls are GROWING can
+        # be seen doing it.
+        "unmeasured": len(m.unmeasured),
+        "unmeasured_mutating": len(m.mutating_unmeasured),
         # The three, never one. See `header`.
         "never_touched": len(m.never_touched) if m.split_measured else None,
         "touched_not_accepted": (len(m.touched_not_accepted)

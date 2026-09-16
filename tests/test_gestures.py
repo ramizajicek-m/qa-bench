@@ -1705,3 +1705,79 @@ def test_a_repo_can_declare_where_it_signs_out(monkeypatch):
     monkeypatch.setenv("QABENCH_LOGOUT_PATHS", "/bye")
     assert _acted(303, "/login", "POST /bye") is True
     assert _acted(303, "/login", "POST /logout") is False, "declaring replaces the defaults, it does not add to them"
+
+
+# ── #687: a control we cannot NAME is unmeasured, not undriven ───────────────
+
+
+def test_a_nameless_control_is_unmeasured_not_undriven(tmp_path):
+    """The heart of #687.
+
+    A button with no id, data-action, name or data-testid gets an occurrence
+    index for a key. That key moves the moment markup is inserted above it, so
+    counting it as "driven by nothing" was wrong in both directions: a control a
+    recording HAD driven stopped matching and read as never driven, and the
+    shifted index carried the old one's hit record onto a different control.
+
+    Measured on anat: adding one card to a page moved judgeable 125 -> 124 and
+    accepted 84 -> 83 while the population stayed at 975 — nothing gained,
+    nothing lost, one control simply stopped being recognised.
+    """
+    _repo(tmp_path,
+          {"a.html": '<button id="named" onclick="go()">x</button>'
+                     '<button onclick="go()">nameless</button>'},
+          {"t.py": "pass"})
+    m = measure(tmp_path, min_controls=1, min_corpus=1)
+    ids_undriven = {g.id for g in m.undriven}
+    ids_unmeasured = {g.id for g in m.unmeasured}
+    assert any("named" in i for i in ids_undriven), ids_undriven
+    assert any("?positional" in i for i in ids_unmeasured), ids_unmeasured
+    assert not any("?positional" in i for i in ids_undriven), (
+        "a control the sweep could not name is still counted as driven by "
+        "nothing — that is a measurement failure reported as a finding")
+
+
+def test_the_ceiling_stops_counting_what_it_cannot_name(tmp_path):
+    """The practical consequence, and the reason this was urgent: the undriven
+    ratchet only falls, and a nameless control cannot be credited to a test — so
+    adding one button to a page of nameless controls could not be offset by
+    driving one, and the change could not land at all.
+
+    A gate nobody can satisfy teaches people to override it.
+    """
+    _repo(tmp_path,
+          {"a.html": "".join('<button onclick="go()">x</button>' for _ in range(5))},
+          {"t.py": "pass"})
+    m = measure(tmp_path, min_controls=1, min_corpus=1)
+    assert m.ceiling == 0, (
+        f"the ceiling still counts {m.ceiling} controls it cannot name")
+    assert m.unmeasured_count == 5
+
+
+def test_a_mutating_control_we_cannot_name_is_not_quietly_exempt(tmp_path):
+    """The half that must NOT get easier. A control that changes something and
+    cannot even be named is the worst row in the register, not an exempt one —
+    so it moves to its own list rather than disappearing.
+    """
+    _repo(tmp_path,
+          {"a.html": '<form method="post" action="/admin/x/purge"></form>'},
+          {"t.py": "pass"})
+    m = measure(tmp_path, min_controls=1, min_corpus=1)
+    nameless_mutators = [g for g in m.unmeasured if g.mutates == "yes"]
+    assert nameless_mutators or m.mutating, (
+        "a mutating control vanished from both lists — it must be in one of them")
+    assert {g.id for g in m.mutating_unmeasured} == {g.id for g in nameless_mutators}
+
+
+def test_the_register_says_how_much_it_did_not_speak_for(tmp_path):
+    """A verdict without its discriminating subset is an optimistic number: the
+    reader assumes the rest is fine, and the rest is unknown."""
+    from qabench.gestures import register_doc
+    _repo(tmp_path,
+          {"a.html": '<button id="named" onclick="go()">x</button>'
+                     '<button onclick="go()">nameless</button>'},
+          {"t.py": "pass"})
+    m = measure(tmp_path, min_controls=1, min_corpus=1)
+    doc = register_doc(m, {})
+    assert doc["unmeasured"] == 1, doc
+    assert "unmeasured_mutating" in doc
