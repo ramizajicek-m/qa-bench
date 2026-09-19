@@ -189,6 +189,7 @@ class Bench:
     credentials: Credentials = field(default_factory=Credentials)
     login: Login = field(default_factory=Login)
     viewports: list[tuple[int, int]] = field(default_factory=lambda: [(1440, 900), (390, 844)])
+    engines: list[str] = field(default_factory=lambda: ["chromium"])     # add "webkit" for Safari's engine
     pages: Pages = field(default_factory=Pages)
     api: Api = field(default_factory=Api)
     ignore_console: list[str] = field(default_factory=list)
@@ -253,7 +254,7 @@ def load(repo: Path | None = None, *, manifest: Path | None = None) -> Bench:
         repo=repo, origin=origin, version=str(b.get("version", "")),
         health=b.get("health", "/health"), commit_field=b.get("commit_field", "commit"),
         roles=list(roles), credentials=_sub(Credentials, b.get("credentials")),
-        login=_sub(Login, b.get("login")), viewports=viewports,
+        login=_sub(Login, b.get("login")), viewports=viewports, engines=list(b.get("engines") or ["chromium"]),
         pages=_sub(Pages, b.get("pages")), api=_sub(Api, b.get("api")),
         ignore_console=list(b.get("ignore_console") or []),
         routes=b.get("routes"), ids=b.get("ids"), stages_extra=extra,
