@@ -115,6 +115,13 @@ def brief(cfg: Bench, persona: Persona, report: Path, changes: list[dict]) -> st
     lines += [f"- {c['subject']} — {', '.join(c['files'])}".replace(FENCE, "` ` `") for c in changes] or [
         "- nothing merged in the window — tour the whole product (landmark tour first)"]
     lines += [FENCE]
+    shapes = _shape_picks()
+    if shapes:
+        lines += ["", "## Real records with risky shapes — open each as this persona, print what can be printed",
+                  "", "(from `qabench shapes` over the real data: the longest value, a missing field, every state, "
+                  "no / one / most children. Defects people found hid in exactly these.)", "", FENCE + "text"]
+        lines += [f"- {p['shape']} — {p['url'] or p['table'] + ' ' + str(p['id'])}" for p in shapes[:60]]
+        lines += [FENCE]
     lines += ["", "## Heuristics — work through them; name the ones you applied", ""]
     lines += [pack(n) for n in PACKS]
     lines += ["", "Strings to type into free-text fields:", "", "```", pack("naughty-strings.txt"), "```", "",
@@ -132,6 +139,17 @@ def brief(cfg: Bench, persona: Persona, report: Path, changes: list[dict]) -> st
                           "not_covered": ["what you meant to reach and did not"]}, indent=1, ensure_ascii=False),
               "```", "", "`not_covered` matters as much as `findings`: the next night starts from it."]
     return "\n".join(lines)
+
+
+def _shape_picks() -> list[dict]:
+    """`qabench shapes --json` output named by QA_SHAPES_FILE, if the night produced one."""
+    path = os.environ.get("QA_SHAPES_FILE")
+    if not path or not Path(path).exists():
+        return []
+    try:
+        return [p for p in json.loads(Path(path).read_text(encoding="utf-8")).get("picks", []) if p.get("url")]
+    except (ValueError, OSError):
+        return []
 
 
 def validate(doc: object) -> list[str]:

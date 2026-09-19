@@ -1,0 +1,67 @@
+# The questions asked of the REQUESTER before a surface is built — per kind of surface.
+#
+# Sources, generic first: Bach's SFDIPOT (Platform, Operations, Time), Example
+# Mapping (rules, examples, red question cards), GS1 General Specifications and
+# printer-driver media settings for anything printed, the UI behaviour standard
+# for defaults and messages. Rows marked `learned:` were added after grading this
+# list against the defects people found (qa-bench/docs/methodology.md §11) — they
+# are the questions the generic sources did not ask.
+#
+# Each question has an id that a project's qa/requirements.yml answers by. An
+# answer names WHO answered (a person outside the team) and WHEN. "We assumed"
+# is not an answer; it is an open question with an owner and a date.
+version: 1
+always:                                   # every surface, whatever its kind
+  - {id: who-uses,     q: "Who uses this, on what device, where, and how often a day?"}
+  - {id: task,         q: "What is the person trying to get done — in their words, not ours? Write down the words they use for the things on the screen."}
+  - {id: done,         q: "How does the person know it worked? What do they see, and where do they end up afterwards?"}
+  - {id: wrong,        q: "What goes wrong today (in the old system or on paper), and what must never happen?"}
+  - {id: example,      q: "Give one real example, end to end, with real values — and one example that is NOT allowed."}
+  - {id: defaults,     q: "What is pre-selected or pre-filled, and what happens if the person does not touch it?", learned: "AL-113: three write options defaulted to ticked; AL-069: a default nobody confirmed"}
+  - {id: interrupted,  q: "What happens if they are interrupted half-way — a call, a lost connection, the screen locks, they go home?", learned: "AL-077, AL-090"}
+kinds:
+  print:
+    - {id: printer,      q: "Which printer model, which driver, and which paper or label stock is in it?"}
+    - {id: paper-size,   q: "What is the paper or label SIZE, exactly (mm)?"}
+    - {id: orientation,  q: "Which way does the printer hold the paper — portrait or landscape — and which way must the print come out?", learned: "AL-016: size answered, orientation not; the fourth report"}
+    - {id: content,      q: "What MUST the printed thing say, line by line, and in what order? Is there an existing one (their system, a photo) to copy?", learned: "AL-045, AL-017: the specification was on disk and nobody opened it"}
+    - {id: longest,      q: "What is the longest real value that will appear on it (a product name, an address)?"}
+    - {id: per-sheet,    q: "How many per sheet, and what else is printed next to each one?", learned: "AL-025: neighbours on the same sheet were read by the camera"}
+    - {id: reprint,      q: "Can it be printed twice? Is a second print an original or a copy, and must it say so?", learned: "AL-080"}
+    - {id: symbology,    q: "Does it carry a barcode or QR? Which symbology, and what reads it — which device, at what distance?"}
+  scan:
+    - {id: reader,       q: "What reads the code — a handheld scanner, a phone camera, a fixed reader? Which models?"}
+    - {id: symbology,    q: "Which symbologies are ON the labels already in the field (not the ones we will print)?", learned: "AL-108: ten thousand Code 128 labels already stuck on pallets"}
+    - {id: in-view,      q: "What else is in view when a code is read — other labels on the same sheet, on the same pallet?", learned: "AL-025"}
+    - {id: one-or-many,  q: "One read and done, or continuous reading? When does the camera or scanner stop?"}
+    - {id: wrong-code,   q: "What happens on a code that is unknown, belongs to another customer, or was already scanned?"}
+    - {id: encoded,      q: "What exactly does the code ENCODE (the id alone, id:warehouse, a URL)? Is there a printed example?", learned: "AL-031: their location labels encode locationId:warehouseId"}
+  phone:
+    - {id: hands,        q: "One hand or two? Gloves? Outdoors, in a warehouse, in sunlight?"}
+    - {id: screen,       q: "Which phones? What is on screen while they work — keyboard open, a dialog, the camera?"}
+    - {id: lock,         q: "How long between two actions — long enough for the screen to lock?", learned: "AL-078"}
+  list:
+    - {id: find,         q: "How do they find the row they want — by what number, name or date? Do they type it, scan it or scroll?", learned: "AL-024, AL-068"}
+    - {id: many,         q: "How many rows, typically and at worst? Do they need to act on several at once?", learned: "AL-034"}
+    - {id: share,        q: "Do they send a filtered list to a colleague, or open rows in new tabs?", learned: "AL-070"}
+    - {id: row-action,   q: "What do they do FROM a row — open it, print it, change its state — and what must they not be able to do?"}
+  form:
+    - {id: after-save,   q: "After saving, where should they be — back on the list, on the record, on a new blank form?", learned: "AL-012, AL-027"}
+    - {id: required,     q: "Which fields are required, and what does each one refuse?"}
+    - {id: depends,      q: "Does choosing one field limit or fill another (a customer limits the products, a city limits the streets)?", learned: "AL-022, AL-032"}
+    - {id: undo,         q: "Can what they add be removed again, and by whom?", learned: "AL-111"}
+  message:
+    - {id: errors-stay,  q: "When something fails, what must they be able to read afterwards — and quote to support?", learned: "AL-076, AL-081"}
+    - {id: language,     q: "Which language and which words? Singular and plural?"}
+  money:
+    - {id: rule-source,  q: "Where is the rule written — a rate card, a contract, their code? Which document, which version, since when?", learned: "AL-083: the pricing engine changed in March–April 2026"}
+    - {id: worked,       q: "One worked example to the cent, from a real invoice we can cite in a test."}
+    - {id: rounding,     q: "Rounding, currency, VAT, discounts — in which order?"}
+  data-rule:
+    - {id: inferred,     q: "Was this rule INFERRED from data by us? If so, the owner states it before it ships — a fit to the data is not the rule.", learned: "AL-066, AL-096, AL-097"}
+    - {id: exceptions,   q: "What are the exceptions — the rows that break the rule on purpose?"}
+  schedule:
+    - {id: when,         q: "Which days and hours — in the business's own calendar (Sunday–Thursday?), and in which time zone?", learned: "AL-084, AL-090"}
+    - {id: during-work,  q: "Does it run while people are working, and what do they lose if it does?", learned: "AL-090"}
+  report:
+    - {id: act-on,       q: "What will the reader DO with the number? Name the rows or columns behind it, not only the total.", learned: "AL-109"}

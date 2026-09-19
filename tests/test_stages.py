@@ -603,3 +603,46 @@ def test_a_page_whose_fonts_never_settle_still_gets_a_verdict(bench_env, server_
     # Bounded: the whole sweep, not one cell. Generous on purpose — the claim is
     # that it TERMINATES, not that it is fast.
     assert elapsed < 120, f"the sweep took {elapsed:.0f}s — the font wait is unbounded again"
+
+
+# ---------------------------------------------------------------- probes that vote
+def _with_probes(tmp_path, probes: str):
+    m = tmp_path / "qa" / "manifest.yml"
+    m.parent.mkdir(parents=True, exist_ok=True)
+    m.write_text(open("qa/manifest.yml").read().replace("  heartbeat:", f"  probes:\n{probes}\n  heartbeat:"))
+    return m
+
+
+def test_a_fresh_mirror_and_a_real_pdf_pass(bench_env, server_factory, tmp_path):
+    server_factory()
+    m = _with_probes(tmp_path, "    - {name: mirror fresh, path: /health/deep, json: mirror.lag_days, max: 1}\n"
+                               "    - {name: a PDF renders, path: /probe.pdf, content_type: application/pdf}")
+    assert cli.main(["stage", "smoke", "--manifest", str(m)]) == 0
+
+
+def test_a_stale_mirror_votes_red(bench_env, server_factory, tmp_path):
+    server_factory(FAKE_LAG_DAYS="2.4")
+    m = _with_probes(tmp_path, "    - {name: mirror fresh, path: /health/deep, json: mirror.lag_days, max: 1}")
+    assert cli.main(["stage", "smoke", "--manifest", str(m)]) == 1
+    led = _ledger(bench_env, "smoke")
+    assert any("2.4" in why for label, why in led["failed"] if "mirror fresh" in label)
+
+
+def test_a_broken_renderer_votes_red_though_the_page_answers_200(bench_env, server_factory, tmp_path):
+    server_factory(FAKE_PDF_BROKEN="1")
+    m = _with_probes(tmp_path, "    - {name: a PDF renders, path: /probe.pdf, content_type: application/pdf}")
+    assert cli.main(["stage", "smoke", "--manifest", str(m)]) == 1
+
+
+def test_a_measurement_with_no_threshold_is_red_not_silent(bench_env, server_factory, tmp_path):
+    server_factory()
+    m = _with_probes(tmp_path, "    - {name: mirror measured, path: /health/deep, json: mirror.lag_days}")
+    assert cli.main(["stage", "smoke", "--manifest", str(m)]) == 1
+    led = _ledger(bench_env, "smoke")
+    assert any("no max/min/equals" in why for _, why in led["failed"])
+
+
+def test_a_value_the_answer_does_not_carry_is_red_not_a_pass(bench_env, server_factory, tmp_path):
+    server_factory()
+    m = _with_probes(tmp_path, "    - {name: mirror fresh, path: /health/deep, json: mirror.age_hours, max: 24}")
+    assert cli.main(["stage", "smoke", "--manifest", str(m)]) == 1
