@@ -129,6 +129,24 @@ class Heartbeat:
 
 
 @dataclass
+class Probe:
+    """An environment fact that VOTES: a request against the deployment and a
+    threshold on its answer. ana-log measured its mirror's lag from 2026-09-07
+    and nothing failed on it for nine days, because the ceiling was declared on
+    neither environment — a measurement with no threshold is a number, not a
+    check. So a probe that reads a value must say what value is wrong."""
+    name: str
+    path: str
+    role: str = ""                 # sign in as this bench role first; "" = anonymous
+    expect: int = 200
+    json: str = ""                 # dotted path into the JSON answer
+    max: float | None = None
+    min: float | None = None
+    equals: object = None
+    content_type: str = ""         # e.g. application/pdf — the deployed build can actually MAKE one
+
+
+@dataclass
 class Persona:
     """One night's tester: a role from bench.roles, a viewport, a sentence of who
     they are. Never the most privileged role — a SuperAdmin passes every gate
@@ -182,6 +200,7 @@ class Bench:
     shots: Path = field(default_factory=lambda: Path("/tmp/qabench"))
     floor: int = 1
     explore: Explore = field(default_factory=Explore)
+    probes: list[Probe] = field(default_factory=list)
     sandbox_entity: str = ""       # the one tenant/client a write may touch (manifest top level)
     enumerate_routes: str = ""     # the project's own route-listing command (manifest top level)
     project: str = ""
@@ -240,6 +259,7 @@ def load(repo: Path | None = None, *, manifest: Path | None = None) -> Bench:
         routes=b.get("routes"), ids=b.get("ids"), stages_extra=extra,
         heartbeat=_sub(Heartbeat, b.get("heartbeat")), production_hosts=prod_hosts,
         shots=shots, floor=int(b.get("floor", 1)), explore=explore,
+        probes=[Probe(**p) for p in (b.get("probes") or [])],
         sandbox_entity=str(doc.get("sandbox_entity") or ""), enumerate_routes=str(doc.get("enumerate_routes") or ""),
         project=str(doc.get("project") or ""),
     )

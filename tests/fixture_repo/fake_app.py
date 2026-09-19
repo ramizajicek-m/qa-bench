@@ -56,6 +56,22 @@ def _page(title: str, extra: str = "") -> HTMLResponse:
                         "<script>document.title += ' ✓';</script>")
 
 
+@app.get("/health/deep")
+def health_deep():
+    """A deep health whose mirror lag a test sets: FAKE_LAG_DAYS (default 0.5)."""
+    return {"status": "ok", "mirror": {"lag_days": float(os.environ.get("FAKE_LAG_DAYS", "0.5"))}}
+
+
+@app.get("/probe.pdf")
+def probe_pdf():
+    """A PDF the build can render — or, with FAKE_PDF_BROKEN=1, the HTML error page a
+    broken renderer answers with (ana-log 2026-08-17: every PDF broken, health green)."""
+    from fastapi.responses import Response
+    if os.environ.get("FAKE_PDF_BROKEN") == "1":
+        return Response("<html>renderer missing</html>", media_type="text/html")
+    return Response(b"%PDF-1.7 probe", media_type="application/pdf")
+
+
 @app.get("/health")
 def health():
     return {"ok": True, "commit": COMMIT}

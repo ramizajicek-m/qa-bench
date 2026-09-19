@@ -11,6 +11,11 @@ Three checks, in the order they would save the most time if they fail:
      "read 400 red cells" (IGA 2026-08-30: a dead token behind every promotion).
   3. The login refusal is real: a wrong password is refused. A login that
      accepts anything makes every role check below it vacuous.
+  4. Every `bench.probes` entry VOTES: a freshness lag under its ceiling, a PDF
+     the deployed build can actually render, a count above its floor. A probe
+     that reads a value with no threshold is red — measured-and-silent is how a
+     staging two days stale read green (ana-log, 2026-09-15) — and a value the
+     answer does not carry is red, never a pass.
 """
 from __future__ import annotations
 
@@ -80,5 +85,52 @@ def main(cfg: Bench, argv: list[str]) -> int:
     except SystemExit as ex:
         L.skip("a wrong password is refused", str(ex)[:160])
 
+    # 4. environment probes that vote
+    for probe in cfg.probes:
+        L.check(f"probe: {probe.name}", *run_probe(cfg, probe))
+
     L.write()
     return L.exit_code()
+
+
+def _dig(node, dotted: str):
+    for part in dotted.split("."):
+        if not isinstance(node, dict) or part not in node:
+            raise KeyError(dotted)
+        node = node[part]
+    return node
+
+
+def run_probe(cfg: Bench, probe) -> tuple[bool, str]:
+    """(passed, why) — why always names the measured value or the reason there is none."""
+    if probe.json and probe.max is None and probe.min is None and probe.equals is None:
+        return False, f"reads {probe.json} with no max/min/equals — a measurement with no threshold does not vote"
+    try:
+        client = core.login(cfg, probe.role).client() if probe.role else httpx.Client(
+            base_url=cfg.origin, follow_redirects=False, timeout=httpx.Timeout(30.0, connect=45.0))
+        with client:
+            r = client.get(probe.path)
+    except SystemExit as ex:
+        return False, f"could not sign in as {probe.role}: {str(ex)[:120]}"
+    except Exception as ex:  # noqa: BLE001
+        return False, f"{type(ex).__name__}: {str(ex)[:120]} — a network or host failure, not a finding about the code"
+    if r.status_code != probe.expect:
+        return False, f"HTTP {r.status_code}, expected {probe.expect}"
+    if probe.content_type and not r.headers.get("content-type", "").startswith(probe.content_type):
+        return False, f"content-type {r.headers.get('content-type', 'none')!r}, expected {probe.content_type}"
+    if not probe.json:
+        return True, f"HTTP {r.status_code}" + (f", {probe.content_type}, {len(r.content)} bytes" if probe.content_type else "")
+    try:
+        value = _dig(r.json(), probe.json)
+    except (ValueError, KeyError):
+        return False, f"the answer carries no {probe.json} — cannot read it, which is not a pass"
+    if probe.equals is not None:
+        return value == probe.equals, f"{probe.json} = {value!r}, expected {probe.equals!r}"
+    try:
+        num = float(value)
+    except (TypeError, ValueError):
+        return False, f"{probe.json} = {value!r} is not a number"
+    ok = (probe.max is None or num <= probe.max) and (probe.min is None or num >= probe.min)
+    bound = " and ".join(x for x in (f"≤ {probe.max}" if probe.max is not None else "",
+                                      f"≥ {probe.min}" if probe.min is not None else "") if x)
+    return ok, f"{probe.json} = {num:g}, must be {bound}"

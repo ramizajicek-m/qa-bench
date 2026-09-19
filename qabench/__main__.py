@@ -2,6 +2,10 @@
     python -m qabench stage <smoke|pages_by_role|endpoints_by_role|explore> [stage args]
     python -m qabench show          # the resolved config, credentials as presence only
     python -m qabench report [--estate FILE] [--json]   # every project, every morning: did the night run, is production the swept build
+    python -m qabench shapes [--dsn DSN] [--json]   # real records of each risky shape, with the URL to open
+    python -m qabench questions <kind...>   # the questions to put to the requester before building
+    python -m qabench asked [--changed-since "7 days ago"] [--json]   # every surface's questions answered or owned
+    python -m qabench census [--repo DIR] [--json]   # every declared key reaches every consumer layer, or is exempted with evidence
     python -m qabench escapes [--ledger PATH] [--benchmark PATH] [--days N] [--json]   # escape rate + ODC trigger histogram; red on an unclassified finder
     python -m qabench gap [--repo DIR] [--slug OWNER/NAME] [--workflow F] [--since "1 day ago"] [--json]
 """
@@ -10,7 +14,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from . import __version__, core, escapes, gap, manifest, nightly, report
+from . import __version__, census, core, escapes, gap, manifest, nightly, report, requirements, shapes
 from .stages import endpoints_by_role, explore, pages_by_role, smoke
 
 STAGES = {"smoke": smoke.main, "pages_by_role": pages_by_role.main, "endpoints_by_role": endpoints_by_role.main,
@@ -50,6 +54,14 @@ def main(argv: list[str] | None = None) -> int:
     # generalises and anat's "was it what was asked" half does not.
     if cmd == "gap":
         return gap.run(rest)
+    if cmd == "shapes":                     # real records with the shapes defects hide in
+        return shapes.run(rest)
+    if cmd == "questions":                  # what to ask the requester, per kind of surface
+        return requirements.run_questions(rest)
+    if cmd == "asked":                      # qa/requirements.yml: were they asked, and what did they say
+        return requirements.run_asked(rest)
+    if cmd == "census":                     # reads source and descriptors, never a deployment
+        return census.run(rest)
     if cmd == "escapes":                    # reads a ledger or the seeded-fault benchmark, never a deployment
         return escapes.run(rest)
     cfg = _cfg(rest)
