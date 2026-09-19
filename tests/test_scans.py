@@ -48,3 +48,12 @@ def test_the_exit_contract(monkeypatch, tmp_path, results, argv, code):
     monkeypatch.setattr(scans, "run_gitleaks", lambda root: results["gitleaks"])
     monkeypatch.setattr(scans, "run_pip_audit", lambda root, files: {"ran": True, "findings": []})
     assert scans.run(["--repo", str(tmp_path), *argv]) == code
+
+
+def test_a_diff_that_cannot_run_is_did_not_run_not_clean(tmp_path):
+    """A shallow checkout has no origin/main~20; the first version read the failed
+    diff's empty output as «no migration changed» — clean, having checked nothing."""
+    import subprocess
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    r = scans.run_squawk(tmp_path, "migrations/*.sql", "origin/main~20")
+    assert r["ran"] is False and "cannot diff" in r["why"]
