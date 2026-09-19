@@ -670,3 +670,20 @@ def test_a_chromium_only_page_is_green_in_chromium_and_red_in_webkit(bench_env, 
 def test_an_unknown_engine_is_refused(bench_env, server_factory, tmp_path):
     server_factory()
     assert cli.main(["stage", "pages_by_role", "--manifest", str(_with_engines(tmp_path, "[netscape]"))]) != 0
+
+
+def test_a_single_page_app_sweeps_what_each_role_may_open_and_counts_the_rest(bench_env, server_factory, tmp_path):
+    """An SPA answers 200 on every client route, so a refusal is not a status.
+    With pages.spa the stage sweeps the admitted cells and COUNTS the others —
+    and an unguarded page is then invisible to it, which is why the count is
+    in the ledger: the refusal is the project's own role test's job. A DOWNLOAD
+    is a server route and keeps its status check (FAKE_UNGUARDED would redden
+    the .csv probe even here, correctly)."""
+    server_factory()
+    m = tmp_path / "qa" / "manifest.yml"
+    m.parent.mkdir(parents=True)
+    m.write_text(open("qa/manifest.yml").read().replace('pages: { include_prefixes: ["/admin"] }',
+                                                        'pages: { include_prefixes: ["/admin"], spa: true }'))
+    assert cli.main(["stage", "pages_by_role", "--manifest", str(m)]) == 0
+    led = _ledger(bench_env, "pages_by_role")
+    assert led["spa_cells_not_swept"] > 0 and led["failed"] == []

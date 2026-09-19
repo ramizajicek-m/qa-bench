@@ -225,6 +225,7 @@ def main(cfg: Bench, argv: list[str]) -> int:
     paid: set[str] = set()          # listed paths measured at the narrowest width
     still: set[str] = set()         # …of which at least one role's cell still scrolled
     browsers: dict = {}
+    spa_unswept = 0
     with sync_playwright() as p:
         for role in cfg.roles:
             if only_roles and role not in only_roles:
@@ -258,6 +259,9 @@ def main(cfg: Bench, argv: list[str]) -> int:
                     for row in rows:
                         tmpl = row["path"]
                         if only and tmpl != only:
+                            continue
+                        if cfg.pages.spa and not _admits(row, role):
+                            spa_unswept += 1
                             continue
                         path = core.fill(tmpl, ids)
                         cell = f"{role} {label} {tmpl}"
@@ -386,6 +390,7 @@ def main(cfg: Bench, argv: list[str]) -> int:
         L.skip(f"{tmpl} no longer scrolls sideways at {narrow_w}px for any role", "remove it from bench.pages.sideways_allow")
     L.extra["cells"] = cells_total
     L.extra["routes"] = len(rows)
+    L.extra["spa_cells_not_swept"] = spa_unswept
     L.extra["transport_lost"] = transport_lost
     print(f"  decided {cells_total} cells over {len(rows)} routes × {len(cfg.viewports)} viewports", flush=True)
     if transport_lost:
