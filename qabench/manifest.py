@@ -129,6 +129,38 @@ class Heartbeat:
 
 
 @dataclass
+class Persona:
+    """One night's tester: a role from bench.roles, a viewport, a sentence of who
+    they are. Never the most privileged role — a SuperAdmin passes every gate
+    (ana-log AL-034: the warehouse saw neither button and the tier was green)."""
+    role: str
+    viewport: tuple[int, int] = (390, 844)
+    who: str = ""
+
+
+@dataclass
+class Explore:
+    """The nightly explorer — an actor that did NOT write the code, in a real
+    browser, briefed with the requester's words and the heuristic packs, never
+    with the author's tests. Off by default; a project opts in."""
+    enabled: bool = False
+    budget_min: int = 25
+    personas: list[Persona] = field(default_factory=list)
+    forbid_writes_to: list[str] = field(default_factory=list)   # hosts never to POST/PUT/DELETE against
+    claude: str = "claude"                                      # the binary; a test points it at a fake
+    since: str = "1 day ago"                                    # the change window the brief describes
+    origin_env: str = "QA_BASE_URL"                             # copied from bench, so the session inherits the origin
+    blocking: bool = False                                      # findings fail the night; advisory until the first weeks are triaged
+    #: Environment variable NAMES the session may inherit — the session CLI's own
+    #: auth and nothing else. The kit's role passwords are never among them: the
+    #: stage signs in first and hands over only the cached staging session.
+    session_env: list[str] = field(default_factory=lambda: ["ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CONFIG_DIR"])
+    #: When a fenced host is reachable from where the session runs, the stage
+    #: refuses to explore unless this names who accepted that, when, and why.
+    accept_open_egress: str = ""
+
+
+@dataclass
 class Bench:
     repo: Path
     origin: str
@@ -149,6 +181,10 @@ class Bench:
     production_hosts: list[str] = field(default_factory=list)
     shots: Path = field(default_factory=lambda: Path("/tmp/qabench"))
     floor: int = 1
+    explore: Explore = field(default_factory=Explore)
+    sandbox_entity: str = ""       # the one tenant/client a write may touch (manifest top level)
+    enumerate_routes: str = ""     # the project's own route-listing command (manifest top level)
+    project: str = ""
 
     def provider(self, dotted: str) -> Callable[..., Any]:
         """Import `module:function` with the repo root first on sys.path."""
@@ -186,6 +222,14 @@ def load(repo: Path | None = None, *, manifest: Path | None = None) -> Bench:
     viewports = [tuple(v) for v in (b.get("viewports") or [[1440, 900], [390, 844]])]
     extra = [(s[0], list(s[1])) for s in (b.get("stages_extra") or [])]
     shots = Path(os.environ.get("QA_SHOT_DIR") or b.get("shots") or f"/tmp/qabench-{doc.get('project', 'project')}")
+    ex = dict(b.get("explore") or {})
+    ex["origin_env"] = origin_env
+    ex["personas"] = [Persona(role=str(p["role"]), viewport=tuple(p.get("viewport") or viewports[-1]), who=str(p.get("who", "")))
+                      for p in (ex.get("personas") or [])]
+    explore = Explore(**ex)
+    for p in explore.personas:
+        if p.role not in roles:
+            raise SystemExit(f"{path}: explore.personas names role {p.role!r}, which is not in bench.roles {list(roles)}")
     return Bench(
         repo=repo, origin=origin, version=str(b.get("version", "")),
         health=b.get("health", "/health"), commit_field=b.get("commit_field", "commit"),
@@ -195,5 +239,7 @@ def load(repo: Path | None = None, *, manifest: Path | None = None) -> Bench:
         ignore_console=list(b.get("ignore_console") or []),
         routes=b.get("routes"), ids=b.get("ids"), stages_extra=extra,
         heartbeat=_sub(Heartbeat, b.get("heartbeat")), production_hosts=prod_hosts,
-        shots=shots, floor=int(b.get("floor", 1)),
+        shots=shots, floor=int(b.get("floor", 1)), explore=explore,
+        sandbox_entity=str(doc.get("sandbox_entity") or ""), enumerate_routes=str(doc.get("enumerate_routes") or ""),
+        project=str(doc.get("project") or ""),
     )
