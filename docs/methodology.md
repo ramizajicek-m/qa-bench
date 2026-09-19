@@ -224,3 +224,21 @@ Limits, stated: n = 31 on one project; the analyst graded its own list (a second
 Attached to four gesture-heavy browser test files (forms and cards, screen actions, core journeys, every screen — 301 passing tests), the census recorded 154 endpoints and 7,371 served leaf keys, of which 2,887 were never read and 929 were read without being served. Reading the code behind the largest groups showed why most are not defects: a key read only on a branch the tier never takes (`edit_permitted` is short-circuited whenever `delete_permitted` is true; `filterable` is read when a filter menu opens; `validation` when a field is left), and optional keys read on every field and served on some (`defaultValue`, `onValueChange`). **Unread under a tier means "not exercised by this tier", not "unused".** As a defect finder its precision is too low to triage 2,887 rows — the same failure as the static census's 150 reds — so it is not in the contract. It is kept, opt-in, for two uses where it was measured to work: replaying a specific past defect (AL-067 caught), and as a coverage map of the browser tier — which served fields no test exercises (every permission key, because the tier signs in as a privileged user).
 
 It also taught the kit something about its own instruments. The first recorder CHANGED the application it measured: a fresh proxy per read broke object identity, and a proxied row handed to `history.pushState` failed to clone, so two of ana-log's tests failed only with the census attached. Both are fixed and pinned by `tests/test_readcensus.py`. **Every instrument that runs inside the application must be run with and without itself on the same tests, and the failure sets compared, before its results are believed** — the kit rule this adds.
+
+## 13. Print check and layout probe — replayed on the real label and the real screens (2026-09-19)
+
+Pre-registered claims: three print rows and three layout rows, bar 5 of 6.
+
+**Print check (`qabench.printcheck`) — 3 of 3.** The pallet label was rendered in-process at the parent and the fix of each defect, with one realistic row, and checked against the paper Israel gave (100×150 mm, landscape) and the field reader (QR):
+
+| row | parent of the fix | the fix |
+|---|---|---|
+| AL-006 Code 128 on every label | red: nothing a QR reader can decode | codes decode |
+| AL-015 the PDF cut to A4 | red: 210×297 mm, the stock is 100×150 | paper right |
+| AL-016 the right size, the wrong way round | red: portrait on a landscape roll | clean |
+
+It also shows the sequence the people went through: at each fix the check still named the NEXT defect (A4 after the QR fix, portrait after the paper fix) — the four reports in three days were one instrument's worth of findings. It needs the answers only a person has (`qa/requirements.yml` paper-size, orientation, reader), which is why requirement capture and the print check are one mechanism. AL-014 (a correct 100×150 page scaled by the printer driver) was not claimed and cannot be seen from the PDF.
+
+**Layout probe (`qabench.layout`) — 0 of 2 run, 1 not run.** AL-041 (a money figure broken mid-number on the dashboard) did not reproduce on today's local data at 390 px — the break depends on the figure and the width together. AL-051 (the first record 46 % down a phone screen) was missed because the budget threshold was set at 50 % BEFORE the replay; the complaint was about 46 %. Moving the threshold now would be fitting to the answer, so it stays, and the lesson is recorded: a threshold for "too far down" is a requirement question for the person holding the phone, not a constant. AL-054 did not run (the replay server's login failed). The probe ships as a diagnostic the explorer and the browser tier can call; it is not in the contract.
+
+**The bar, refined:** an instrument joins the contract when it catches at least five claimed rows, or ALL of its claimed rows when fewer than five exist — the print check has three, and caught three.

@@ -16,6 +16,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+print = ["pypdf>=4", "pypdfium2>=4", "pdfplumber>=0.11", "zxing-cpp>=2.2", "pillow>=10"]
 dev = ["pytest>=8", "pytest-timeout==2.4.0", "fastapi>=0.110", "uvicorn>=0.29", "python-multipart>=0.0.9"]
 
 [project.scripts]
