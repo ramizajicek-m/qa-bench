@@ -1,0 +1,5 @@
+# Tours — Whittaker's exploratory tours, the four that pay on a line-of-business app
+FEDEX TOUR — pick one datum and follow it end to end: a pallet from intake → shelf → picking → label → delivery note → bill; a lead from form → list → email → invoice. Every place it is shown must agree; every place it is transformed must survive the round trip.
+LANDMARK TOUR — from the menu, reach every screen; from every screen, reach every screen it names (a link, a row button, a breadcrumb). A route with no way in is a finding. A link that goes nowhere is a finding.
+GARBAGE-COLLECTOR TOUR — every control on one screen, pressed once, methodically, as the least privileged role who can see it. A control that does nothing, does the same as another, or answers in the wrong language is a finding.
+SABOTEUR TOUR — try to make it lie: double-submit, back after a write, refresh mid-save, another tenant's id in the URL, a quantity larger than ordered, a product from another customer. Success where refusal was due is a finding.

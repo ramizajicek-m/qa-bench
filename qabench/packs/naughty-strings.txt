@@ -1,0 +1,40 @@
+# Inputs to type into any free-text field (a curated subset of minimaxir/big-list-of-naughty-strings, MIT, plus the Hebrew/bidi cases this estate has met). One per line; a comment line starts with #.
+# --- nothing and whitespace
+ 
+	
+# --- Hebrew, Latin and digits interleaved (the estate's exposure)
+משטח 12 ABC-7
+הזמנה #13945 של ACME Ltd.
+מק"ט 2300:2 במחסן
+₪1,234.50 חוב
+2026-09-19 יום שישי
+# --- bidi controls (U+202E RLO, U+200F RLM, U+200E LRM, U+2067 RLI, U+2069 PDI)
+‮reversed
+test‏ing
+‎‏
+⁧abc⁩
+# --- combining marks and normalisation
+é (e + U+0301)
+Ｆｕｌｌｗｉｄｔｈ
+ǅ ǈ ǋ
+# --- emoji and symbols
+🚚📦
+👨‍👩‍👧‍👦
+# --- classic injection shapes — the product must show them as text, never run them
+<script>alert(1)</script>
+' OR '1'='1
+=1+1
+{{7*7}}
+${7*7}
+../../etc/passwd
+%00
+# --- numbers as text
+0
+-1
+1e309
+٠١٢٣٤٥٦٧٨٩
+१२३
+NaN
+# --- long
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+מוצר עם שם ארוך במיוחד שמכיל הרבה מילים ומספרים 12345 וגם אותיות לטיניות Latin ותווים מיוחדים ~!@#$%^&*() כדי לבדוק גלישה של טקסט בתוויות ובטבלאות

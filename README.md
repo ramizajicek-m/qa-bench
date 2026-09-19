@@ -9,7 +9,10 @@ What it proves, against a **running deployment** (it never boots the app):
 | `smoke` | the deployment answers `/health` with a commit (and it is the SHA the run was asked about); every role can sign in — a dead credential exits 3 and names the variable; a wrong password is refused |
 | `pages_by_role` | every page × every role × every viewport (desk and phone): the HTTP status equals the declared guard, zero console errors, zero failed requests, no sideways scroll; a session lost mid-sweep fails the role instead of reading green |
 | `endpoints_by_role` | every GET API route × every role: no 500, the declared gate is the real gate, a customer role never passes auth on a staff route |
+| `explore` | the independent explorer (opt-in): per persona, a fresh `claude -p` session that did not write the code drives staging as a non-privileged role, briefed with yesterday's commit subjects and the heuristic packs in `qabench/packs/`, never the author's tests; writes go through a fence that aborts any write to a production or forbidden host and fails the night. A session that visits nothing is `3`; findings are advisory until `explore.blocking` |
 | `nightly` | runs the three, then the project's own `stages_extra`; the verdict depends on each stage having RUN (a ledger exists) and DECIDED something; writes `nightly.json` with `swept_sha` for the promote step |
+
+Two commands read the record rather than a deployment: `escapes` (defect escape rate and ODC trigger histogram from the project's ledger, red on a finder it cannot classify) and `gap` (did anything ship untested). The method behind all of it — what finds the defects people find, the catalogues adopted, the tools weighed and rejected — is `docs/methodology.md`; the defects it was measured on, with their fix commits, are `benchmarks/escaped.yml`.
 
 Exit codes everywhere: `0` proven · `1` failed · `3` nothing failed but something did not run — and 3 is never reported as 0.
 
@@ -44,7 +47,16 @@ bench:
   stages_extra:
     - [message_gallery, [scripts/qa/message_gallery.py]]   # must write <shots>/message_gallery.json
   heartbeat: { key: qa_nightly, cadence_h: 30, stamp: scripts.qa.heartbeat:stamp }
+  explore:                               # opt-in; off by default
+    enabled: true
+    budget_min: 25                       # the whole night's time-box, split across personas
+    blocking: false                      # findings fail the night once the first weeks are triaged
+    forbid_writes_to: [webapp.legacy.example]   # production hosts are always fenced; add any other live system
+    personas:                            # every role must be in bench.roles; never the most privileged
+      - { role: staff, viewport: [390, 844], who: "a picker on the warehouse floor, one hand, Hebrew" }
 ```
+
+Top-level keys the kit also reads: `ledger:` (the calibration ledger `escapes` measures), `people:` (first names of this project's customers and stakeholders, so `escapes` counts their finds as escapes), `sandbox_entity:` (the one tenant a write may touch — the explorer is told it) and `project:`.
 
 ### `login`
 

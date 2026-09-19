@@ -1,7 +1,8 @@
 """    python -m qabench nightly [--only a,b] [--except c] [--manifest PATH]
-    python -m qabench stage <smoke|pages_by_role|endpoints_by_role> [stage args]
+    python -m qabench stage <smoke|pages_by_role|endpoints_by_role|explore> [stage args]
     python -m qabench show          # the resolved config, credentials as presence only
     python -m qabench report [--estate FILE] [--json]   # every project, every morning: did the night run, is production the swept build
+    python -m qabench escapes [--ledger PATH] [--benchmark PATH] [--days N] [--json]   # escape rate + ODC trigger histogram; red on an unclassified finder
     python -m qabench gap [--repo DIR] [--slug OWNER/NAME] [--workflow F] [--since "1 day ago"] [--json]
 """
 from __future__ import annotations
@@ -9,10 +10,11 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from . import __version__, core, gap, manifest, nightly, report
-from .stages import endpoints_by_role, pages_by_role, smoke
+from . import __version__, core, escapes, gap, manifest, nightly, report
+from .stages import endpoints_by_role, explore, pages_by_role, smoke
 
-STAGES = {"smoke": smoke.main, "pages_by_role": pages_by_role.main, "endpoints_by_role": endpoints_by_role.main}
+STAGES = {"smoke": smoke.main, "pages_by_role": pages_by_role.main, "endpoints_by_role": endpoints_by_role.main,
+          "explore": explore.main}
 
 
 def _cfg(argv: list[str]) -> manifest.Bench:
@@ -48,6 +50,8 @@ def main(argv: list[str] | None = None) -> int:
     # generalises and anat's "was it what was asked" half does not.
     if cmd == "gap":
         return gap.run(rest)
+    if cmd == "escapes":                    # reads a ledger or the seeded-fault benchmark, never a deployment
+        return escapes.run(rest)
     cfg = _cfg(rest)
     if cmd == "nightly":
         return nightly.run(cfg, rest)
