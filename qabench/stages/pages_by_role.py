@@ -242,6 +242,12 @@ def main(cfg: Bench, argv: list[str]) -> int:
                     # allowlists still match; every other engine is named.
                     label = f"{w}x{h_}" if engine == "chromium" else f"{engine} {w}x{h_}"
                     print(f"  → {role} / {label} ({len(rows)} pages)", flush=True)
+                    if cfg.login.rotates:
+                        try:
+                            sess = core.login(cfg, role, fresh=True)   # a rotated refresh token is spent in the last context
+                        except SystemExit as ex:
+                            L.skip(f"{role} {label}: all pages", str(ex)[:200])
+                            continue
                     ctx = _browser(p, engine, browsers).new_context(viewport={"width": w, "height": h_})
                     ctx.set_default_timeout(30_000)
                     ctx.set_default_navigation_timeout(45_000)

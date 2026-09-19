@@ -687,3 +687,24 @@ def test_a_single_page_app_sweeps_what_each_role_may_open_and_counts_the_rest(be
     assert cli.main(["stage", "pages_by_role", "--manifest", str(m)]) == 0
     led = _ledger(bench_env, "pages_by_role")
     assert led["spa_cells_not_swept"] > 0 and led["failed"] == []
+
+
+def test_a_rotating_refresh_token_signs_in_afresh_for_every_browser_context(bench_env, server_factory, tmp_path, monkeypatch):
+    """ana-log revokes a refresh token when it issues the next: a session planted
+    into a second context is already spent, and the first real sweep read 249
+    of 256 failures from it (2026-09-19). With login.rotates each context signs
+    in afresh — one fresh login per role × viewport × engine."""
+    from qabench import core
+    server_factory()
+    real, fresh = core.login, []
+
+    def counting(cfg, role, *, fresh_=None, **kw):
+        if kw.get("fresh"):
+            fresh.append(role)
+        return real(cfg, role, **kw)
+    monkeypatch.setattr(core, "login", lambda cfg, role, **kw: counting(cfg, role, **kw))
+    m = tmp_path / "qa" / "manifest.yml"
+    m.parent.mkdir(parents=True)
+    m.write_text(open("qa/manifest.yml").read().replace("    csrf_cookie: csrf_token", "    csrf_cookie: csrf_token\n    rotates: true"))
+    assert cli.main(["stage", "pages_by_role", "--manifest", str(m)]) == 0
+    assert sorted(fresh) == ["owner", "owner", "staff", "staff"], fresh
