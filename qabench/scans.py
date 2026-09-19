@@ -148,12 +148,20 @@ def run_pip_audit(root: Path, files: list[str]) -> dict:
 
 
 def changed_migrations(root: Path, pattern: str, since: str) -> list[Path]:
+    """Migrations changed since `since`. A diff that FAILS raises — on a shallow
+    CI checkout `origin/main~20` does not exist, and reading the empty output as
+    «nothing changed» made squawk report clean having checked nothing."""
     p = subprocess.run(["git", "-C", str(root), "diff", "--name-only", since, "--", pattern], capture_output=True, text=True)
+    if p.returncode != 0:
+        raise RuntimeError(f"cannot diff against {since}: {(p.stderr or '').strip()[:160]} (a shallow checkout? use fetch-depth: 0)")
     return sorted(root / f for f in p.stdout.split() if (root / f).exists())
 
 
 def run_squawk(root: Path, pattern: str, since: str) -> dict:
-    files = changed_migrations(root, pattern, since)
+    try:
+        files = changed_migrations(root, pattern, since)
+    except RuntimeError as ex:
+        return {"ran": False, "why": str(ex)}
     if not files:
         return {"ran": True, "findings": [], "note": f"no migration matching {pattern} changed since {since}"}
     exe = fetch("squawk")
