@@ -2,6 +2,7 @@
     python -m qabench stage <smoke|pages_by_role|endpoints_by_role|explore> [stage args]
     python -m qabench show          # the resolved config, credentials as presence only
     python -m qabench report [--estate FILE] [--json]   # every project, every morning: did the night run, is production the swept build
+    python -m qabench scans [--advisory] [--json]   # gitleaks, pip-audit, squawk at one pinned version
     python -m qabench shapes [--dsn DSN] [--json]   # real records of each risky shape, with the URL to open
     python -m qabench questions <kind...>   # the questions to put to the requester before building
     python -m qabench asked [--changed-since "7 days ago"] [--json]   # every surface's questions answered or owned
@@ -14,7 +15,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from . import __version__, census, core, escapes, gap, manifest, nightly, report, requirements, shapes
+from . import __version__, scans, census, core, escapes, gap, manifest, nightly, report, requirements, shapes
 from .stages import endpoints_by_role, explore, pages_by_role, smoke
 
 STAGES = {"smoke": smoke.main, "pages_by_role": pages_by_role.main, "endpoints_by_role": endpoints_by_role.main,
@@ -54,6 +55,8 @@ def main(argv: list[str] | None = None) -> int:
     # generalises and anat's "was it what was asked" half does not.
     if cmd == "gap":
         return gap.run(rest)
+    if cmd == "scans":                      # gitleaks, pip-audit, squawk — pinned and verified
+        return scans.run(rest)
     if cmd == "shapes":                     # real records with the shapes defects hide in
         return shapes.run(rest)
     if cmd == "questions":                  # what to ask the requester, per kind of surface

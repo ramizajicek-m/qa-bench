@@ -646,3 +646,27 @@ def test_a_value_the_answer_does_not_carry_is_red_not_a_pass(bench_env, server_f
     server_factory()
     m = _with_probes(tmp_path, "    - {name: mirror fresh, path: /health/deep, json: mirror.age_hours, max: 24}")
     assert cli.main(["stage", "smoke", "--manifest", str(m)]) == 1
+
+
+# ---------------------------------------------------------------- a second engine
+def _with_engines(tmp_path, engines: str):
+    m = tmp_path / "qa" / "manifest.yml"
+    m.parent.mkdir(parents=True, exist_ok=True)
+    m.write_text(open("qa/manifest.yml").read().replace("  heartbeat:", f"  engines: {engines}\n  heartbeat:"))
+    return m
+
+
+def test_a_chromium_only_page_is_green_in_chromium_and_red_in_webkit(bench_env, server_factory, tmp_path):
+    """AL-002's shape: the page works in the one engine the tier ran."""
+    server_factory(FAKE_CHROMIUM_ONLY="1")
+    assert cli.main(["stage", "pages_by_role", "--manifest", str(_with_engines(tmp_path, "[chromium]"))]) == 0
+    m = _with_engines(tmp_path / "w", "[chromium, webkit]")
+    assert cli.main(["stage", "pages_by_role", "--manifest", str(m)]) == 1
+    failed = _ledger(bench_env, "pages_by_role")["failed"]
+    assert failed and all(" webkit " in label for label, _ in failed), failed
+    assert any("BarcodeDetector" in why for _, why in failed)
+
+
+def test_an_unknown_engine_is_refused(bench_env, server_factory, tmp_path):
+    server_factory()
+    assert cli.main(["stage", "pages_by_role", "--manifest", str(_with_engines(tmp_path, "[netscape]"))]) != 0

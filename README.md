@@ -39,6 +39,7 @@ bench:
   # an app that signs in with a JSON POST instead of a form (ana-log):
   # login: { kind: json, path: /api/auth/login, body: {email: email, password: password}, expect: 200, page: /login, cookies: [analog_refresh], bearer: accessToken, bearer_browser: cookie }
   viewports: [[1440, 900], [390, 844]]
+  engines: [chromium, webkit]            # default [chromium]; webkit is Safari's engine (install it: playwright install --with-deps webkit)
   pages: { include_prefixes: ["/admin"], exclude_prefixes: ["/admin/api/"], sideways_allow: { "/admin/audit": "wide table; fix owed" } }   # known phone-width offenders, a ratchet
   api:   { include_prefixes: ["/api/"], exclude_paths: ["/api/stream"], portal_roles: [customer], portal_prefixes: ["/api/portal"] }
   ignore_console: ["favicon"]            # each entry justified in a comment

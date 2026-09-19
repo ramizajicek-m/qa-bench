@@ -156,6 +156,11 @@ def broken(request: Request):
     if g:
         return g
     js = "<script>throw new Error('boom: the wiring below never runs')</script>" if os.environ.get("FAKE_BROKEN") == "1" else ""
+    # FAKE_CHROMIUM_ONLY: a page whose wiring assumes a Chromium-only API —
+    # ana-log's camera required BarcodeDetector and opened nothing on Safari
+    # for weeks (AL-002). Chromium passes; WebKit throws.
+    if os.environ.get("FAKE_CHROMIUM_ONLY") == "1":
+        js += "<script>if (!('BarcodeDetector' in window)) throw new Error('BarcodeDetector is not defined');</script>"
     # FAKE_WIRE: the console line a real transport failure produces, copied
     # verbatim from my8200's bench log of 2026-09-12 — a sub-resource of a page
     # that had already answered 200. Playwright reports it as a console message

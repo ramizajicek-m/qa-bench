@@ -79,6 +79,19 @@ def _admits(row: dict, role: str) -> bool:
 FONT_SETTLE_MS = 2000
 
 
+def _browser(p, engine: str, cache: dict):
+    """One browser per engine, launched on first use. A second engine is not a
+    nicety: ana-log's camera opened nothing on iOS/Safari for weeks because it
+    needed BarcodeDetector, which only Chromium has, and a phone refused a popup
+    that headless Chromium opened happily (AL-002, AL-061). WebKit runs on the
+    runner's Linux ARM64; the branded Chrome channel is what does not."""
+    if engine not in cache:
+        if engine not in ("chromium", "webkit", "firefox"):
+            raise SystemExit(f"bench.engines names {engine!r}; one of chromium, webkit, firefox")
+        cache[engine] = getattr(p, engine).launch(headless=True)
+    return cache[engine]
+
+
 def _scrolls_sideways(page) -> bool:
     """Does the DOCUMENT overflow the viewport — measured after the page has
     settled, twice, and only when both samples agree.
@@ -211,8 +224,8 @@ def main(cfg: Bench, argv: list[str]) -> int:
     narrow_w = min(cfg.viewports)[0]
     paid: set[str] = set()          # listed paths measured at the narrowest width
     still: set[str] = set()         # …of which at least one role's cell still scrolled
+    browsers: dict = {}
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
         for role in cfg.roles:
             if only_roles and role not in only_roles:
                 continue
@@ -222,148 +235,152 @@ def main(cfg: Bench, argv: list[str]) -> int:
                 L.skip(f"{role}: all pages", str(ex)[:200])
                 continue
             relogged: dict[tuple[str, str], bool] = {}
-            for (w, h_) in cfg.viewports:
-                label = f"{w}x{h_}"
-                print(f"  → {role} / {label} ({len(rows)} pages)", flush=True)
-                ctx = browser.new_context(viewport={"width": w, "height": h_})
-                ctx.set_default_timeout(30_000)
-                ctx.set_default_navigation_timeout(45_000)
-                ctx.add_cookies(sess.cookies)
-                # a bearer session (login.bearer_browser: header) rides on every
-                # navigation and fetch the context makes — measured on Chromium
-                ctx.set_extra_http_headers(sess.browser_headers(cfg))
-                page = ctx.new_page()
-                console: list[str] = []
-                failed: list[str] = []
-                bounced: list[str] = []
-                page.on("console", lambda m: console.append(f"{m.type}: {m.text}") if m.type == "error" else None)
-                page.on("pageerror", lambda e: console.append(f"pageerror: {e}"))
-                page.on("response", lambda r: failed.append(f"{r.status} {r.request.method} {r.url}") if r.status >= 400 else None)
-                for row in rows:
-                    tmpl = row["path"]
-                    if only and tmpl != only:
-                        continue
-                    path = core.fill(tmpl, ids)
-                    cell = f"{role} {label} {tmpl}"
-                    if not path:
-                        L.skip(cell, "no id for a path parameter (bench.ids)")
-                        continue
-                    console.clear(); failed.clear()
-                    try:
-                        resp = page.goto(cfg.origin + path, wait_until="load")
-                        page.wait_for_timeout(1500)
-                    except Exception as ex:  # noqa: BLE001
-                        # A DROPPED CONNECTION IS NOT A FINDING ABOUT THE PAGE —
-                        # the same reasoning as the lost session below, which this
-                        # file already applies. Measured on tharros 2026-09-10:
-                        # three consecutive bench runs on two good commits went red
-                        # on nothing but net::ERR_NETWORK_CHANGED, five cells then
-                        # two, with ZERO assertion failures across 384 decided
-                        # probes each time — and each red held a promote that
-                        # carried a fix for a live money defect. A check that
-                        # cannot tell "the code is wrong" from "the wire moved"
-                        # is not a check.
-                        if not _is_transport(ex):
-                            # A TIMEOUT STAYS A FINDING. A page that never
-                            # finishes loading is a defect, and folding it in
-                            # here would be how this fix starts hiding real ones.
-                            L.check(cell, False, f"navigation failed: {type(ex).__name__}: {str(ex)[:120]}")
+            for engine in cfg.engines:
+                for (w, h_) in cfg.viewports:
+                    # Chromium keeps its bare label so existing registers and
+                    # allowlists still match; every other engine is named.
+                    label = f"{w}x{h_}" if engine == "chromium" else f"{engine} {w}x{h_}"
+                    print(f"  → {role} / {label} ({len(rows)} pages)", flush=True)
+                    ctx = _browser(p, engine, browsers).new_context(viewport={"width": w, "height": h_})
+                    ctx.set_default_timeout(30_000)
+                    ctx.set_default_navigation_timeout(45_000)
+                    ctx.add_cookies(sess.cookies)
+                    # a bearer session (login.bearer_browser: header) rides on every
+                    # navigation and fetch the context makes — measured on Chromium
+                    ctx.set_extra_http_headers(sess.browser_headers(cfg))
+                    page = ctx.new_page()
+                    console: list[str] = []
+                    failed: list[str] = []
+                    bounced: list[str] = []
+                    page.on("console", lambda m: console.append(f"{m.type}: {m.text}") if m.type == "error" else None)
+                    page.on("pageerror", lambda e: console.append(f"pageerror: {e}"))
+                    page.on("response", lambda r: failed.append(f"{r.status} {r.request.method} {r.url}") if r.status >= 400 else None)
+                    for row in rows:
+                        tmpl = row["path"]
+                        if only and tmpl != only:
                             continue
+                        path = core.fill(tmpl, ids)
+                        cell = f"{role} {label} {tmpl}"
+                        if not path:
+                            L.skip(cell, "no id for a path parameter (bench.ids)")
+                            continue
+                        console.clear(); failed.clear()
                         try:
-                            page.wait_for_timeout(2000)
                             resp = page.goto(cfg.origin + path, wait_until="load")
                             page.wait_for_timeout(1500)
-                        except Exception as ex2:  # noqa: BLE001
-                            transport_lost.append(cell)
-                            L.skip(cell, "the connection dropped twice "
-                                         f"({_transport_reason(ex2)}) — this cell "
-                                         "measured the network and made no claim "
-                                         "about the route")
-                            continue
-                    if core.bounced_to_login(cfg, page.url):
-                        # A SHORT SESSION IS NOT A FINDING ABOUT THE PAGE. IGA's demo
-                        # roles lose their session minutes after login (2026-09-05:
-                        # inspector, then manager, at whatever cell they had reached).
-                        # Sign in again ONCE, refresh the context's cookies, retry the
-                        # cell; only a second bounce is recorded as a lost session.
-                        if not relogged.get((role, label)):        # once per role AND viewport: each context is a fresh budget
-                            relogged[(role, label)] = True
-                            core.forget_session(cfg, role)
+                        except Exception as ex:  # noqa: BLE001
+                            # A DROPPED CONNECTION IS NOT A FINDING ABOUT THE PAGE —
+                            # the same reasoning as the lost session below, which this
+                            # file already applies. Measured on tharros 2026-09-10:
+                            # three consecutive bench runs on two good commits went red
+                            # on nothing but net::ERR_NETWORK_CHANGED, five cells then
+                            # two, with ZERO assertion failures across 384 decided
+                            # probes each time — and each red held a promote that
+                            # carried a fix for a live money defect. A check that
+                            # cannot tell "the code is wrong" from "the wire moved"
+                            # is not a check.
+                            if not _is_transport(ex):
+                                # A TIMEOUT STAYS A FINDING. A page that never
+                                # finishes loading is a defect, and folding it in
+                                # here would be how this fix starts hiding real ones.
+                                L.check(cell, False, f"navigation failed: {type(ex).__name__}: {str(ex)[:120]}")
+                                continue
                             try:
-                                sess = core.login(cfg, role, fresh=True)
-                                ctx.clear_cookies()
-                                ctx.add_cookies(sess.cookies)
-                                ctx.set_extra_http_headers(sess.browser_headers(cfg))
-                                print(f"  ({role}: session lost at {tmpl}; signed in again and retrying)", flush=True)
+                                page.wait_for_timeout(2000)
                                 resp = page.goto(cfg.origin + path, wait_until="load")
                                 page.wait_for_timeout(1500)
-                            except Exception as ex:  # noqa: BLE001
-                                L.check(cell, False, f"re-login after a lost session failed: {type(ex).__name__}: {str(ex)[:120]}")
+                            except Exception as ex2:  # noqa: BLE001
+                                transport_lost.append(cell)
+                                L.skip(cell, "the connection dropped twice "
+                                             f"({_transport_reason(ex2)}) — this cell "
+                                             "measured the network and made no claim "
+                                             "about the route")
                                 continue
                         if core.bounced_to_login(cfg, page.url):
-                            bounced.append(tmpl)
-                            L.skip(cell, "navigation ended on the login form — the session was lost, so this cell measured the sign-in page and not the route")
-                            continue
-                    status = resp.status if resp else 0
-                    want_open = _admits(row, role)
-                    landed = page.url.split("?", 1)[0].rstrip("/")
-                    redirected = not landed.endswith(path.rstrip("/"))
-                    if redirected and status < 400 and want_open:
-                        status = 200                   # a redirect to a default page is the page
-                    errs = [c for c in console if not any(rx.search(c) for rx in ignore)]
-                    bad = [f for f in failed if not any(rx.search(f) for rx in ignore)]
-                    # The wire, separated from the code, before either is judged.
-                    wire = [c for c in errs if TRANSPORT.search(c)]
-                    errs = [c for c in errs if not TRANSPORT.search(c)]
-                    if not want_open:
-                        errs = [c for c in errs if "status of 40" not in c]
-                        bad = [f for f in bad if not f.startswith(f"{status} GET {cfg.origin}{path}")]
-                    ok_status = (status == 200) if want_open else (status in cfg.pages.deny_statuses)
-                    sideways = False
-                    if want_open and status == 200:
-                        sideways = _scrolls_sideways(page)
-                    detail = f"HTTP {status} (want {'200' if want_open else '/'.join(map(str, cfg.pages.deny_statuses))})"
-                    if errs:
-                        detail += f"; console: {errs[0][:140]}" + (f" (+{len(errs) - 1})" if len(errs) > 1 else "")
-                    if bad and want_open:
-                        detail += f"; failed: {bad[0][:120]}" + (f" (+{len(bad) - 1})" if len(bad) > 1 else "")
-                    allowed_reason = cfg.pages.sideways_allow.get(tmpl)
-                    if allowed_reason and want_open and status == 200 and w == narrow_w:
-                        paid.add(tmpl)
-                        if sideways:
-                            still.add(tmpl)
-                    if sideways and allowed_reason:
-                        # KNOWN offender: recorded, not failed — the ratchet's grandfather list
-                        L.skip(f"{cell} scrolls sideways at {w}px", f"known — {allowed_reason}")
+                            # A SHORT SESSION IS NOT A FINDING ABOUT THE PAGE. IGA's demo
+                            # roles lose their session minutes after login (2026-09-05:
+                            # inspector, then manager, at whatever cell they had reached).
+                            # Sign in again ONCE, refresh the context's cookies, retry the
+                            # cell; only a second bounce is recorded as a lost session.
+                            if not relogged.get((role, label)):        # once per role AND viewport: each context is a fresh budget
+                                relogged[(role, label)] = True
+                                core.forget_session(cfg, role)
+                                try:
+                                    sess = core.login(cfg, role, fresh=True)
+                                    ctx.clear_cookies()
+                                    ctx.add_cookies(sess.cookies)
+                                    ctx.set_extra_http_headers(sess.browser_headers(cfg))
+                                    print(f"  ({role}: session lost at {tmpl}; signed in again and retrying)", flush=True)
+                                    resp = page.goto(cfg.origin + path, wait_until="load")
+                                    page.wait_for_timeout(1500)
+                                except Exception as ex:  # noqa: BLE001
+                                    L.check(cell, False, f"re-login after a lost session failed: {type(ex).__name__}: {str(ex)[:120]}")
+                                    continue
+                            if core.bounced_to_login(cfg, page.url):
+                                bounced.append(tmpl)
+                                L.skip(cell, "navigation ended on the login form — the session was lost, so this cell measured the sign-in page and not the route")
+                                continue
+                        status = resp.status if resp else 0
+                        want_open = _admits(row, role)
+                        landed = page.url.split("?", 1)[0].rstrip("/")
+                        redirected = not landed.endswith(path.rstrip("/"))
+                        if redirected and status < 400 and want_open:
+                            status = 200                   # a redirect to a default page is the page
+                        errs = [c for c in console if not any(rx.search(c) for rx in ignore)]
+                        bad = [f for f in failed if not any(rx.search(f) for rx in ignore)]
+                        # The wire, separated from the code, before either is judged.
+                        wire = [c for c in errs if TRANSPORT.search(c)]
+                        errs = [c for c in errs if not TRANSPORT.search(c)]
+                        if not want_open:
+                            errs = [c for c in errs if "status of 40" not in c]
+                            bad = [f for f in bad if not f.startswith(f"{status} GET {cfg.origin}{path}")]
+                        ok_status = (status == 200) if want_open else (status in cfg.pages.deny_statuses)
                         sideways = False
-                    if sideways:
-                        detail += f"; the page scrolls sideways at {w}px"
-                    ok = ok_status and not errs and not (want_open and bad) and not sideways
-                    if wire and ok:
-                        # Everything this cell COULD decide came out clean, and
-                        # the one thing it could not is the console claim. Not a
-                        # pass: the page may well have been left half-wired by
-                        # the resource that never arrived, and we cannot know.
-                        L.skip(cell, f"a transport failure, not a finding — {wire[0][:120]}"
-                                     + (f" (+{len(wire) - 1})" if len(wire) > 1 else "")
-                                     + "; the browser never got the bytes, so the "
-                                       "console claim is UNKNOWN for this cell")
+                        if want_open and status == 200:
+                            sideways = _scrolls_sideways(page)
+                        detail = f"HTTP {status} (want {'200' if want_open else '/'.join(map(str, cfg.pages.deny_statuses))})"
+                        if errs:
+                            detail += f"; console: {errs[0][:140]}" + (f" (+{len(errs) - 1})" if len(errs) > 1 else "")
+                        if bad and want_open:
+                            detail += f"; failed: {bad[0][:120]}" + (f" (+{len(bad) - 1})" if len(bad) > 1 else "")
+                        allowed_reason = cfg.pages.sideways_allow.get(tmpl)
+                        if allowed_reason and want_open and status == 200 and w == narrow_w:
+                            paid.add(tmpl)
+                            if sideways:
+                                still.add(tmpl)
+                        if sideways and allowed_reason:
+                            # KNOWN offender: recorded, not failed — the ratchet's grandfather list
+                            L.skip(f"{cell} scrolls sideways at {w}px", f"known — {allowed_reason}")
+                            sideways = False
+                        if sideways:
+                            detail += f"; the page scrolls sideways at {w}px"
+                        ok = ok_status and not errs and not (want_open and bad) and not sideways
+                        if wire and ok:
+                            # Everything this cell COULD decide came out clean, and
+                            # the one thing it could not is the console claim. Not a
+                            # pass: the page may well have been left half-wired by
+                            # the resource that never arrived, and we cannot know.
+                            L.skip(cell, f"a transport failure, not a finding — {wire[0][:120]}"
+                                         + (f" (+{len(wire) - 1})" if len(wire) > 1 else "")
+                                         + "; the browser never got the bytes, so the "
+                                           "console claim is UNKNOWN for this cell")
+                            cells_total += 1
+                            core.shot(page, cfg.shots, f"{role}__{label}__{tmpl.strip('/').replace('/', '_').replace('{', '').replace('}', '')}")
+                            continue
+                        if wire:
+                            # It failed for a REAL reason as well. Report both, so
+                            # nobody spends the morning on the network error.
+                            detail += f"; (also a transport failure, ignored: {wire[0][:80]})"
+                        L.check(cell, ok, detail)
                         cells_total += 1
                         core.shot(page, cfg.shots, f"{role}__{label}__{tmpl.strip('/').replace('/', '_').replace('{', '').replace('}', '')}")
-                        continue
-                    if wire:
-                        # It failed for a REAL reason as well. Report both, so
-                        # nobody spends the morning on the network error.
-                        detail += f"; (also a transport failure, ignored: {wire[0][:80]})"
-                    L.check(cell, ok, detail)
-                    cells_total += 1
-                    core.shot(page, cfg.shots, f"{role}__{label}__{tmpl.strip('/').replace('/', '_').replace('{', '').replace('}', '')}")
-                if bounced:
-                    core.forget_session(cfg, role)
-                    L.check(f"{role} {label}: the session survived the sweep", False,
-                            f"{len(bounced)} of {len(rows)} cells ended on the login form (first: {bounced[0]}) — those cells decided nothing")
-                ctx.close()
-        browser.close()
+                    if bounced:
+                        core.forget_session(cfg, role)
+                        L.check(f"{role} {label}: the session survived the sweep", False,
+                                f"{len(bounced)} of {len(rows)} cells ended on the login form (first: {bounced[0]}) — those cells decided nothing")
+                    ctx.close()
+        for b in browsers.values():
+            b.close()
     for tmpl in sorted(paid - still):
         # The debt was paid for EVERY role; the list must shrink or it is a pardon
         L.skip(f"{tmpl} no longer scrolls sideways at {narrow_w}px for any role", "remove it from bench.pages.sideways_allow")
