@@ -708,3 +708,19 @@ def test_a_rotating_refresh_token_signs_in_afresh_for_every_browser_context(benc
     m.write_text(open("qa/manifest.yml").read().replace("    csrf_cookie: csrf_token", "    csrf_cookie: csrf_token\n    rotates: true"))
     assert cli.main(["stage", "pages_by_role", "--manifest", str(m)]) == 0
     assert sorted(fresh) == ["owner", "owner", "staff", "staff"], fresh
+
+
+def test_a_keychain_item_s_account_supplies_the_email_when_no_variable_does(monkeypatch):
+    """anat keeps each QA login as a keychain item whose ACCOUNT is the email; the
+    explorer found every anat role 'without credentials' (2026-09-19) because only
+    the password half was read."""
+    from types import SimpleNamespace
+    from qabench import core
+    monkeypatch.setattr(core, "_keychain_password", lambda service, account: "secret")
+    monkeypatch.setattr(core, "_keychain_account", lambda service: "qa-bookkeeper@example.test")
+    creds = SimpleNamespace(email_env="QA_{ROLE}_EMAIL", password_env="QA_{ROLE}_PASSWORD", emails={},
+                            email_template="", keychain_service="anat-qa-{role}", keychain_account=None)
+    cfg = SimpleNamespace(credentials=creds)
+    monkeypatch.delenv("QA_BOOKKEEPER_EMAIL", raising=False)
+    monkeypatch.delenv("QA_BOOKKEEPER_PASSWORD", raising=False)
+    assert core.credentials(cfg, "bookkeeper") == ("qa-bookkeeper@example.test", "secret")
