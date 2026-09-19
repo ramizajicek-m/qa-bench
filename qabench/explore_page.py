@@ -71,5 +71,30 @@ def signed_in_page(role: str, width: int = 390, height: int = 844, *, engine: st
             ctx.set_extra_http_headers(sess.browser_headers(cfg))
             ctx.route("**/*", _fence(fenced_hosts(cfg), log))
             yield ctx.new_page()
+            if cfg.login.rotates:
+                _keep_rotated(cfg, role, sess, ctx.cookies())
         finally:
             browser.close()
+
+
+def _keep_rotated(cfg, role: str, sess, cookies: list[dict]) -> None:
+    """Write the context's CURRENT cookies back to the session cache.
+
+    An app that rotates its refresh token (ana-log) revokes the token a page
+    used; the cache still held it, so the explorer's second page opened signed
+    out — the explorer reported exactly that as its own seventh finding on its
+    first night (2026-09-19). Writing the rotated cookie back keeps the session
+    alive without handing the session a password (the stage signs in, the
+    session never can)."""
+    names = {c["name"] for c in sess.cookies}
+    fresh = [{"name": c["name"], "value": c["value"], "domain": c.get("domain", ""), "path": c.get("path", "/"),
+              "secure": c.get("secure", True)} for c in cookies if c["name"] in names]
+    if not fresh:
+        return
+    path = core._session_path(cfg, role)
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return
+    data["cookies"] = fresh
+    path.write_text(json.dumps(data))

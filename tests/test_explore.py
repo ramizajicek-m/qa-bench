@@ -224,3 +224,23 @@ def test_findings_are_redacted_before_they_reach_the_ledger(tmp_path, monkeypatc
     assert explore.main(cfg, []) == 0
     assert "not-a-real-key-0000" not in (cfg.shots / "explore.json").read_text()
 
+
+
+def test_a_rotated_refresh_cookie_is_written_back_to_the_session_cache(tmp_path, monkeypatch):
+    """ana-log rotates its refresh token: the explorer's second page opened signed
+    out on its first night because the cache kept the spent one (it reported that
+    itself). After a page, the context's current cookie replaces the cached one."""
+    import json as _json
+    from types import SimpleNamespace
+    from qabench import core
+    monkeypatch.setenv("QA_SESSION_DIR", str(tmp_path))
+    cfg = SimpleNamespace(origin="https://staging.example.test", login=SimpleNamespace(rotates=True))
+    path = core._session_path(cfg, "staff")
+    path.parent.mkdir(parents=True)
+    path.write_text(_json.dumps({"origin": cfg.origin, "email": "s@x", "at": 1,
+                                 "cookies": [{"name": "refresh", "value": "spent", "domain": "staging.example.test", "path": "/api"}]}))
+    sess = SimpleNamespace(cookies=[{"name": "refresh", "value": "spent"}])
+    explore_page._keep_rotated(cfg, "staff", sess, [{"name": "refresh", "value": "next", "domain": "staging.example.test",
+                                                     "path": "/api", "secure": True}, {"name": "other", "value": "x"}])
+    cached = _json.loads(path.read_text())["cookies"]
+    assert [c["value"] for c in cached] == ["next"] and cached[0]["path"] == "/api"
