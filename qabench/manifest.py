@@ -99,6 +99,12 @@ class Pages:
     include_prefixes: list[str] = field(default_factory=lambda: ["/admin"])
     exclude_prefixes: list[str] = field(default_factory=list)
     deny_statuses: list[int] = field(default_factory=lambda: [401, 403])
+    #: A single-page app answers every client route 200 and draws its own
+    #: refusal, so a status cannot show a page a role may not open. With
+    #: `spa: true` those cells are not swept (counted, never a pass) — the
+    #: refusal belongs to the project's own role × surface test, and the sweep
+    #: keeps what it CAN measure: every admitted screen in every engine and width.
+    spa: bool = False
     #: Pages KNOWN to scroll sideways at a phone width, each with a reason — a
     #: ratchet, not a pardon: a listed page still prints as a SKIP with its
     #: reason, a listed page that no longer scrolls asks to be removed, and any
