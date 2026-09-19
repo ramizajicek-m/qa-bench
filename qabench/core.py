@@ -140,6 +140,20 @@ def _keychain_password(service: str, account: str | None) -> str | None:
         return None
 
 
+def _keychain_account(service: str) -> str | None:
+    """The item's ACCOUNT attribute — anat stores each QA login as keychain item
+    `anat-qa-<role>` with account = the email and password = the secret, so the
+    email is on the laptop even when no environment variable names it. Read from
+    the attributes (never `-w`, which is the secret)."""
+    try:
+        out = subprocess.run(["security", "find-generic-password", "-s", service],
+                             capture_output=True, text=True, check=True).stdout
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return None
+    m = re.search(r'"acct"<blob>="([^"]+)"', out)
+    return m.group(1).strip() if m and "@" in m.group(1) else None
+
+
 def credentials(cfg: Bench, role: str) -> tuple[str, str]:
     """A role's login: the environment first (a runner has no keychain), the
     laptop keychain second, and a failure that NAMES the two places to look."""
@@ -153,6 +167,11 @@ def credentials(cfg: Bench, role: str) -> tuple[str, str]:
         email = c.email_template.format(role=lower, ROLE=upper)
     if password is None and c.keychain_service:
         password = _keychain_password(c.keychain_service.format(role=lower, ROLE=upper), c.keychain_account)
+    if not email and c.keychain_service:
+        # The nightly explorer on anat (2026-09-19) found every role "without
+        # credentials": the passwords were in the keychain and the emails were
+        # the same items' account attribute, which nothing read.
+        email = _keychain_account(c.keychain_service.format(role=lower, ROLE=upper))
     if email and password:
         return email.strip().lower(), password
     raise SystemExit(
