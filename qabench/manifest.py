@@ -76,6 +76,13 @@ class Login:
     #: next stage in the same run, so six roles × three stages is six logins, not
     #: eighteen — the throttle above is exactly what eighteen would trip.
     session_ttl_s: float = 3300.0
+    #: The app REVOKES a refresh token when it issues the next one (ana-log's
+    #: `analog_refresh`). A session planted into a second browser context is then
+    #: already spent: its first refresh answers 401 and every page draws signed-
+    #: out. Measured 2026-09-19 — the first real sweep of ana-log read 249 of 256
+    #: failures from exactly this, every context after the first. With `rotates`
+    #: each browser context signs in afresh.
+    rotates: bool = False
 
     def __post_init__(self):
         if self.kind not in ("form", "json"):
