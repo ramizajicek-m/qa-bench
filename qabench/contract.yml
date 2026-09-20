@@ -13,6 +13,15 @@
 #   (c) `implemented` names what proves it RAN (`ran:`), a stage, CI job or test
 #       whose trace the report can read. A ● with no ran-proof is `●?` in the
 #       matrix: claimed, not shown.
+#   (d) the size in (a) is the size of a population derived INDEPENDENTLY of the
+#       evidence, and the evidence sweeps all of it. Added 2026-09-20, after
+#       twelve defects behind green tests in anat and ana-log came back as one
+#       shape: the size was printed and it was the size of the neighbourhood of
+#       the example the guard was written against — routes whose PATH said
+#       batch|bulk, templates that happened to load style.css, the eleven
+#       pydantic types already in the switch. `python -m qabench population`
+#       runs each guard's two commands and names the members of the population
+#       it never examined; `qa/guards.yml` is the register.
 #
 # The judge's findings come in two strengths. FATAL: the manifest lies (a path
 # that does not exist, ● with no evidence, ◐/○ with no reason, a missing check).
