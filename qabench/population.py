@@ -492,7 +492,23 @@ non-compliant.
     LST-05  population = tables declaring data-row-actions   -> 2 record lists outside
     LST-04  population = lists that CALL the helper          -> 14 render their empty row by hand
 
-What makes it worse than an ordinary corpus gap is that THE MARKER IS APPLIED BY
+AND THE INVERSE TRIGGER, which is worse because the number moves the reassuring
+way: KEYED ON WHAT THE FIX REMOVES. A guard for "a request body drops a field"
+required `JSON.stringify` within 900 characters of a call — and the blessed
+helper takes an OBJECT, so every call through it was invisible, and the window
+then walked PAST the invisible call to report the next call's keys against the
+first call's path: a wrong answer rather than a missing one. 182 → 226 matched
+calls after the fix, 44 of them the object form nobody had ever seen. That
+codebase is mid-migration onto the helper, so EVERY MIGRATED SITE WOULD HAVE
+LEFT THE GUARD'S POPULATION, its matched count would have fallen as the code
+improved, and a falling count on a coverage guard reads as progress — ending
+green over a population of nearly nothing, in the middle of the work meant to
+make it meaningful. The design-time question: for any corpus defined by a
+syntactic form, ask what happens to it if the codebase adopts THE RECOMMENDED
+ALTERNATIVE. If the answer is "it shrinks to zero", the guard is measuring the
+old way of writing things rather than the property.
+
+What makes both worse than an ordinary corpus gap is that THE MARKER IS APPLIED BY
 THE CONVERSION. STA-02's ratchet drove hand-rolled empty states 75 → 38 → 0 by
 moving them onto the helper, each conversion adding the class, so the population
 is exactly "the things already fixed" and the number measures the conversion
@@ -1001,7 +1017,9 @@ def judge_pin(pinned, actual: int, shrunk, root: Path) -> str:
                 "(a pin that lags cannot detect the fall back)")
     if not isinstance(shrunk, dict):
         return (f"the population FELL {pinned} → {actual} with no `shrunk:` — this is what re-keying a "
-                "corpus on a naming heuristic looks like from the outside")
+                "corpus on a naming heuristic looks like from the outside, AND what a MIGRATION looks like "
+                "from the outside: if the codebase is adopting the recommended alternative and this corpus is "
+                "keyed on the old syntactic form, the count falls as the code improves and reads as progress")
     lacking = [k for k in SHRUNK_KEYS if not shrunk.get(k)]
     if lacking:
         return f"the population fell {pinned} → {actual}; `shrunk:` lacks {', '.join(lacking)}"
@@ -1009,7 +1027,10 @@ def judge_pin(pinned, actual: int, shrunk, root: Path) -> str:
     absent = [e for e in ev if not (root / str(e).split("::")[0]).exists()]
     if absent:
         return f"the population fell {pinned} → {actual}; `shrunk.evidence` does not exist: {', '.join(absent)}"
-    return f"the population fell {pinned} → {actual} and `shrunk:` explains it — set population.count to {actual}"
+    return (f"the population fell {pinned} → {actual} and `shrunk:` explains it — set population.count to "
+            f"{actual}. Before you do: if the fall is a MIGRATION, ask what this population becomes when the "
+            "migration finishes. A corpus keyed on the form being migrated AWAY from shrinks to nothing exactly "
+            "while the work that was meant to make it meaningful is happening")
 
 
 def judge(spec: dict, root: Path, today: dt.date, *, run=read_members, surfaces=()) -> Row:

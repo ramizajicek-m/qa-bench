@@ -144,7 +144,8 @@ def test_a_population_that_falls_with_evidence_asks_for_the_pin(repo):
     row = judged(repo, population={"cmd": emit("a"), "count": 3, "shrunk": {
         "reason": "two routes deleted in the 09-18 cutover", "evidence": "docs/ledger.md", "date": "2026-09-18"}},
         subject={"cmd": emit("a")})
-    assert row["problems"] == ["the population fell 3 → 1 and `shrunk:` explains it — set population.count to 1"]
+    assert len(row["problems"]) == 1
+    assert row["problems"][0].startswith("the population fell 3 → 1 and `shrunk:` explains it")
 
 
 def test_a_population_that_grows_must_raise_the_pin_in_the_same_commit(repo):
@@ -756,3 +757,17 @@ def test_a_proven_layer_is_accepted(repo):
         {"name": "global wrappers", "cmd": emit("b", "c", "d"),
          "proven_by": "tests/test_wrappers.py::test_a_rejected_fetch_still_bounces"}]))
     assert row["problems"] == [] and row["covered_by"] == {"global wrappers": 3}
+
+
+def test_a_falling_population_names_the_migration_case(repo):
+    """A guard keyed on the form being migrated AWAY from empties as the code
+    improves, and the falling count reads as progress."""
+    row = judged(repo, population={"cmd": emit("a"), "count": 3}, subject={"cmd": emit("a")})
+    assert any("what a MIGRATION looks like" in p and "reads as progress" in p for p in row["problems"])
+
+
+def test_an_explained_fall_still_asks_the_migration_question(repo):
+    row = judged(repo, population={"cmd": emit("a"), "count": 3, "shrunk": {
+        "reason": "two routes deleted", "evidence": "docs/ledger.md", "date": "2026-09-18"}},
+        subject={"cmd": emit("a")})
+    assert any("if the fall is a MIGRATION" in p and "shrinks to nothing" in p for p in row["problems"])
