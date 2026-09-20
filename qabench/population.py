@@ -142,6 +142,28 @@ the CSRF header and the 401 bounce; 538 check status themselves; 297 report a
 failure to a person; 109 do NEITHER. One hundred and nine is the actionable
 number and it is a much smaller, correct piece of work.
 
+AND THEN THE BROWSER CORRECTED THAT MEASUREMENT TOO, which is why `complement:`
+now demands a proof per layer. The 538 counted "checks res.ok" as handling
+failure — but `res.ok` only exists if the promise RESOLVED. A network rejection
+throws out of the Promise.all and the check never runs, so the screen keeps the
+old rows and says nothing. THE POPULATION WAS RIGHT AND THE BUCKET BOUNDARY WAS
+WRONG: a third class beside marker-keyed and surface-default, where the corpus
+is complete, the arithmetic is sound, and a category line sits in the wrong
+place so members are filed as covered while suffering the outcome. So a layer
+carries `proven_by:` — a command showing the layer actually covers a real member
+— for the same reason a capability carries `fires:`. A COVERAGE CLAIM IS A CLAIM
+LIKE ANY OTHER.
+
+The repair that follows is the headline from that browser run: THREE mechanisms
+— a network rejection, a wrong-shaped 200, and a half-handled HTTP error —
+converge on ONE user-visible outcome, the screen keeping old data and saying
+nothing. On one list the main region was byte-identical before and after a
+failed read, 931 characters both times, with the count still asserting "8
+clients"; on another, twenty-three stale rows and a MutationObserver recording
+zero nodes added. A guard is keyed on THE OUTCOME A PERSON SUFFERS, not on which
+check a call site performs — three buckets cannot be got right when the thing
+that matters is the same in all three.
+
 So a guard may declare `kind: reach`, and then `complement:` is MANDATORY — the
 layers that cover what bypasses the helper, applied in order, with the residue
 named as the finding. A reach guard without it is refused the way a population
@@ -1089,7 +1111,10 @@ def judge(spec: dict, root: Path, today: dt.date, *, run=read_members, surfaces=
             "Measured on anat: apiFetch reaches 198 call sites and 783 bypass it, which reads as 20% and would "
             "have started a rewrite — but three other global fetch wrappers give every raw call the loading "
             "indicator, session activity, the CSRF header and the 401 bounce, 538 of them check status "
-            "themselves and 297 report a failure to a person. The actionable number is 109, not 783")
+            "themselves and 297 report a failure to a person. The actionable number was 109, not 783 — and a "
+            "browser later showed even the 538 was wrong, because `res.ok` only exists if the promise RESOLVED "
+            "and a network rejection never reaches it. Hence `proven_by:` below: a coverage claim is a claim "
+            "like any other")
     transforms = spec.get("transform") or []
     cap_spec = spec.get("capability") or {}
     pop_spec = spec.get("population") or {}
@@ -1219,6 +1244,14 @@ def judge(spec: dict, root: Path, today: dt.date, *, run=read_members, surfaces=
         for layer in complement:
             if not isinstance(layer, dict) or not layer.get("cmd") or not layer.get("name"):
                 row.problems.append(f"every `complement:` layer names a `name` and a `cmd`: {layer!r}")
+                return row
+            if not layer.get("proven_by"):
+                row.problems.append(
+                    f"complement layer {layer['name']!r} has no `proven_by:` — a command showing it actually "
+                    "covers a real member. A layer counting 538 call sites as handling failure because they "
+                    "check `res.ok` was wrong: res.ok only exists if the promise RESOLVED, and a network "
+                    "rejection throws before it. The population was right and the BUCKET BOUNDARY was wrong, so "
+                    "a coverage claim needs the same proof a capability does")
                 return row
             got = run(root, layer["cmd"])
             if got.error:

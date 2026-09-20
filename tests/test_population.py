@@ -329,8 +329,8 @@ def test_the_union_of_two_honest_corpora_can_still_miss_the_requirement(repo):
     sanctioned so not hand-rolled, not AnatEmpty so never checked for why and
     action. Each corpus is a proper subset of the claim and so is their union."""
     row = judged(repo, population={"cmd": emit("a", "b", "c"), "count": 3},
-                 subject={"cmd": None, "detectors": [{"name": "anat-empty-calls", "cmd": emit("a")},
-                                                    {"name": "hand-rolled-markup", "cmd": emit("b")}]})
+                 subject={"cmd": None, "detectors": [{"name": "anat-empty-calls", "cmd": emit("a"), "proven_by": "tests/test_x.py::test_anat-empty-calls"},
+                                                    {"name": "hand-rolled-markup", "cmd": emit("b"), "proven_by": "tests/test_x.py::test_hand-rolled-markup"}]})
     assert row["detectors"] == {"anat-empty-calls": 1, "hand-rolled-markup": 1}
     assert row["missing"] == ["c"]
     assert "no detector covers: c" in row["note"]
@@ -338,19 +338,19 @@ def test_the_union_of_two_honest_corpora_can_still_miss_the_requirement(repo):
 
 
 def test_detectors_that_together_cover_the_requirement_are_clean(repo):
-    row = judged(repo, subject={"cmd": None, "detectors": [{"name": "one", "cmd": emit("a", "b")},
-                                                          {"name": "two", "cmd": emit("c")}]})
+    row = judged(repo, subject={"cmd": None, "detectors": [{"name": "one", "cmd": emit("a", "b"), "proven_by": "tests/test_x.py::test_one"},
+                                                          {"name": "two", "cmd": emit("c"), "proven_by": "tests/test_x.py::test_two"}]})
     assert row["problems"] == [] and row["subject"] == 3
 
 
 def test_a_subject_names_cmd_or_detectors_not_both(repo):
-    row = judged(repo, subject={"cmd": emit("a"), "detectors": [{"name": "one", "cmd": emit("a")}]})
+    row = judged(repo, subject={"cmd": emit("a"), "detectors": [{"name": "one", "cmd": emit("a"), "proven_by": "tests/test_x.py::test_one"}]})
     assert row["problems"] == ["a subject names `cmd` OR `detectors`, not both"]
 
 
 def test_a_detector_that_cannot_run_is_did_not_run(repo):
-    row = judged(repo, subject={"cmd": None, "detectors": [{"name": "one", "cmd": emit("a")},
-                                                          {"name": "two", "cmd": "/bin/sh -c exit2"}]})
+    row = judged(repo, subject={"cmd": None, "detectors": [{"name": "one", "cmd": emit("a"), "proven_by": "tests/test_x.py::test_one"},
+                                                          {"name": "two", "cmd": "/bin/sh -c exit2", "proven_by": "tests/test_x.py::test_two"}]})
     assert row["unrunnable"]
 
 
@@ -382,14 +382,13 @@ def test_a_reach_guard_without_a_complement_is_refused(repo):
     and a denominator with no coverage-by-other-means measurement is a verdict
     without a population."""
     row = judged(repo, **reachy())
-    assert any("MUST declare `complement:`" in p and "The actionable number is 109, not 783" in p
-               for p in row["problems"])
+    assert any("MUST declare `complement:`" in p and "109, not 783" in p for p in row["problems"])
 
 
 def test_the_complement_is_partitioned_and_only_the_residue_is_a_finding(repo):
     """Bypassing a helper is not the same as being uncovered."""
-    row = judged(repo, **reachy(complement=[{"name": "global wrappers", "cmd": emit("b")},
-                                            {"name": "checks status itself", "cmd": emit("c")}]))
+    row = judged(repo, **reachy(complement=[{"name": "global wrappers", "cmd": emit("b"), "proven_by": "tests/test_x.py::test_global"},
+                                            {"name": "checks status itself", "cmd": emit("c"), "proven_by": "tests/test_x.py::test_checks"}]))
     assert row["covered_by"] == {"global wrappers": 1, "checks status itself": 1}
     assert row["missing"] == ["d"]
     assert "leaving 1 covered by NOTHING, which is the actionable number" in row["note"]
@@ -397,15 +396,15 @@ def test_the_complement_is_partitioned_and_only_the_residue_is_a_finding(repo):
 
 
 def test_a_fully_covered_complement_is_clean(repo):
-    row = judged(repo, **reachy(complement=[{"name": "global wrappers", "cmd": emit("b", "c", "d")}]))
+    row = judged(repo, **reachy(complement=[{"name": "global wrappers", "cmd": emit("b", "c", "d"), "proven_by": "tests/test_x.py::test_global"}]))
     assert row["problems"] == [] and row["missing"] == []
     assert "leaving 0 covered by NOTHING" in row["note"]
 
 
 def test_a_layer_is_counted_once_in_the_order_declared(repo):
     """Overlapping layers must not double-count the same bypassing site."""
-    row = judged(repo, **reachy(complement=[{"name": "first", "cmd": emit("b", "c")},
-                                            {"name": "second", "cmd": emit("b", "c", "d")}]))
+    row = judged(repo, **reachy(complement=[{"name": "first", "cmd": emit("b", "c"), "proven_by": "tests/test_x.py::test_first"},
+                                            {"name": "second", "cmd": emit("b", "c", "d"), "proven_by": "tests/test_x.py::test_second"}]))
     assert row["covered_by"] == {"first": 2, "second": 1}
 
 
@@ -417,7 +416,7 @@ def test_a_sweep_guard_is_unaffected_by_the_reach_rules(repo):
 def test_a_complement_layer_that_cannot_run_is_did_not_run(repo):
     """A layer that failed to run would otherwise cover nothing and silently
     inflate the residue — a finding invented by a broken command."""
-    row = judged(repo, **reachy(complement=[{"name": "wrappers", "cmd": "/bin/sh -c exit2"}]))
+    row = judged(repo, **reachy(complement=[{"name": "wrappers", "cmd": "/bin/sh -c exit2", "proven_by": "tests/test_x.py::test_wrappers"}]))
     assert row["unrunnable"] and row["missing"] != ["d"]
 
 
@@ -741,3 +740,19 @@ def test_naming_the_mutation_without_the_number_it_moved_is_not_enough(repo):
                                         "was": "the settings save at 131%",
                                         "by_mutating": "the save bar from sticky to static"}]))
     assert any("must be shown able to PRODUCE A FAILING VALUE" in p for p in row["problems"])
+
+
+def test_a_complement_layer_must_prove_it_covers(repo):
+    """538 call sites were filed as handling failure because they check res.ok.
+    res.ok only exists if the promise RESOLVED; a network rejection throws
+    before it, and the screen keeps the old rows and says nothing. The
+    population was right and the bucket boundary was wrong."""
+    row = judged(repo, **reachy(complement=[{"name": "checks res.ok", "cmd": emit("b")}]))
+    assert any("has no `proven_by:`" in p and "BUCKET BOUNDARY was wrong" in p for p in row["problems"])
+
+
+def test_a_proven_layer_is_accepted(repo):
+    row = judged(repo, **reachy(complement=[
+        {"name": "global wrappers", "cmd": emit("b", "c", "d"),
+         "proven_by": "tests/test_wrappers.py::test_a_rejected_fetch_still_bounces"}]))
+    assert row["problems"] == [] and row["covered_by"] == {"global wrappers": 3}

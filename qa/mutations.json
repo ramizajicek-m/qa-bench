@@ -415,6 +415,22 @@
    "verdict": "caught",
    "exit": 1,
    "recorded": "2026-09-20"
+  },
+  {
+   "file": "qabench/population.py",
+   "expr": "s.replace(\"            if not layer.get(\\\"proven_by\\\"):\", \"            if False:\", 1)",
+   "command": [
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_population.py",
+    "-q",
+    "-p",
+    "no:randomly"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-20"
   }
  ]
 }
