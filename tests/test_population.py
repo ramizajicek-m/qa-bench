@@ -808,3 +808,26 @@ def test_two_coverage_ratchets_empty_together(repo):
                  guard(id="another-reach", kind="reach")])
     rows = population.run_population(root, {"register": "qa/guards.yml"}, today=TODAY)["rows"]
     assert any("two coverage ratchets empty together" in p for p in rows[0]["problems"])
+
+
+def test_a_helper_contract_guard_must_name_its_reach(repo):
+    """A tracker read 66 rows implemented and every one was TRUE OF THE HELPER.
+    apiFetch reports every failure by default and 198 of 870 sites call it."""
+    row = judged(repo, proves_helper="apiFetch")
+    assert any("MOST EXPENSIVE KIND OF GREEN" in p and "TRUE OF THE HELPER" in p for p in row["problems"])
+
+
+def test_a_helper_contract_guard_paired_with_its_reach_is_accepted(repo):
+    root = repo([guard(proves_helper="apiFetch", paired_with="apifetch-reach"),
+                 guard(**reachy(id="apifetch-reach",
+                                complement=[{"name": "w", "cmd": emit("b", "c", "d"),
+                                             "proven_by": "tests/x.py::t"}]))])
+    rows = population.run_population(root, {"register": "qa/guards.yml"}, today=TODAY)["rows"]
+    assert rows[0]["problems"] == []
+
+
+def test_a_helper_contract_paired_with_a_property_guard_is_not_enough(repo):
+    root = repo([guard(proves_helper="apiFetch", paired_with="another-sweep"),
+                 guard(id="another-sweep")])
+    rows = population.run_population(root, {"register": "qa/guards.yml"}, today=TODAY)["rows"]
+    assert any("names no `paired_with:` REACH guard" in p for p in rows[0]["problems"])

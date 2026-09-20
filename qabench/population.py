@@ -602,6 +602,56 @@ METHOD is unbounded and invisible from inside, because every row it passed looks
 exactly like a row that was actually checked; the one that happened was caught
 by somebody else driving a browser, and by nothing else.
 
+MEASURING ONE REQUIREMENT'S EVIDENCE AGAINST ANOTHER'S CLAIM. A scan for
+"empty-state block with almost no text" returned 33 — a real number, correctly
+counted, from a scan that ran exactly as written. Most of the 33 were
+`Loading…`. The loading placeholder lives in the SAME ELEMENT as the empty
+state, because the element is reused: it says "Loading…" while the request is
+out and "No responses yet" after it answers. A loading placeholder is a
+DIFFERENT requirement's evidence — "any action taking more than 300 ms shows a
+loading indicator" — so the scan was about to file a page's COMPLIANCE with one
+rule as its VIOLATION of another.
+
+The window was fine and the corpus was fine. What is wrong is that TWO
+REQUIREMENTS SHARE ONE SURFACE and the scan had no way to ask which state the
+element was in: nothing in the markup distinguishes "empty because nothing
+exists" from "empty because it has not loaded yet", because THAT DISTINCTION
+LIVES IN TIME, NOT IN THE DOM. A static scan cannot see it at all, and a browser
+scan sees whichever moment it happened to sample.
+
+THE TELL: A REQUIREMENT ABOUT A STATE, SCANNED STATICALLY, WILL COLLECT EVERY
+OTHER STATE THAT SHARES ITS ELEMENT. Empty, loading and failed all render into
+one div in that codebase, and the day's other findings are the same three states
+in the same container, which is unlikely to be a coincidence.
+
+The sequence is the instructive part, and it is why a first number should never
+leave the room: 119 (THE POPULATION INCLUDED THE MECHANISM UNDER TEST — it
+counted the macro that RENDERS an action as an empty state with no action) → 33 (the loading confusion) → 59, of which 52 explain
+themselves, 7 are bare labels and 2 of the 7 are not defects. Three numbers, one
+scan, ten minutes, and only the last is true.
+
+(No field in this module enforces that. Declaring the sibling states that share
+a surface would be a tenth required declaration, and the cost of the nine it
+already asks for has not been measured yet — adding a tenth while that is open
+would be the kind of thing this file refuses elsewhere. The question is here to
+be asked, not checked.)
+
+A HELPER IMPLEMENTS THE CONTRACT CORRECTLY AND MOST OF THE PRODUCT DOES NOT
+CALL IT — three instances in one codebase, each found separately, by a different
+route, on a different row: apiFetch reports every failure by default and 198 of
+870 sites call it; AnatEmpty takes title/why/action and refuses a null action
+unless you say why, with 20 sites using it against 59 hand-rolled; and a third
+message builder reached by neither of the other two paths at all. A TRACKER READ
+66 ROWS IMPLEMENTED AND EVERY ONE OF THEM WAS TRUE OF THE HELPER.
+
+That changes what such a programme MEANS: most rows are not "build the
+behaviour" but "route the product through the behaviour it already has". So a
+guard declaring `proves_helper:` must name a `paired_with:` REACH guard giving
+the fraction of eligible call sites that arrive — A CONTRACT PROVEN ON A
+MECHANISM NOBODY CALLS IS THE MOST EXPENSIVE KIND OF GREEN. The question is not
+"does the product do X" but "WHAT FRACTION OF THE PLACES THAT SHOULD DO X GO
+THROUGH THE THING THAT DOES IT".
+
 A CORPUS DEFINED BY THE PROPERTY UNDER TEST, which is not the denominator
 problem and needs its own name, because the usual fix does not work on it.
 
@@ -1147,6 +1197,18 @@ def judge(spec: dict, root: Path, today: dt.date, *, run=read_members, surfaces=
     kind = str(spec.get("kind") or "sweep")
     if kind not in ("sweep", "reach"):
         row.problems.append(f"kind must be `sweep` or `reach`, not {kind!r}")
+    proves_helper = spec.get("proves_helper")
+    if proves_helper:
+        by_id = {str(g.get("id")): g for g in register if isinstance(g, dict)}
+        pair = by_id.get(str(spec.get("paired_with") or ""))
+        if not pair or str(pair.get("kind") or "sweep") != "reach":
+            row.problems.append(
+                f"this guard proves the contract of {proves_helper!r} and names no `paired_with:` REACH guard "
+                "saying what fraction of the eligible call sites reach it. A CONTRACT PROVEN ON A MECHANISM "
+                "NOBODY CALLS IS THE MOST EXPENSIVE KIND OF GREEN: apiFetch reports every failure by default "
+                "and 198 of 870 sites call it; AnatEmpty refuses a null action unless you say why and 20 sites "
+                "use it against 59 hand-rolled. A tracker read 66 rows implemented, and every one of them was "
+                "TRUE OF THE HELPER")
     complement = spec.get("complement")
     if kind == "reach":
         paired = spec.get("paired_with")
