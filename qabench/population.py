@@ -232,6 +232,78 @@ after the same gap was found from a browser report on STA-02, with no knowledge
 of the first: two independent routes to one finding is the closest thing to
 validation this method gets, and it is worth more than any number in the table.
 
+DRIVING IS NOT STRICTER THAN DERIVING — measured on one file. Required controls
+in one large template: a markup scan of the FILE says 20, the tree-wide guard
+18, the DOM on a loaded page 16. Overlap about 10; MARKUP-ONLY 10; DOM-ONLY 3.
+Deriving misses what the page HAS and the file does not contain (four
+`{% include %}` directives; three of the sixteen observed appear zero times in
+that file). Driving misses what the file HAS and this instance does not render
+(ten of the twenty never reached the DOM, all conditional on client state the
+sandbox client lacks). HALF THE DERIVED COUNT WAS NOT ON THE SCREEN AND A FIFTH
+OF WHAT WAS ON THE SCREEN WAS NOT IN THE FILE. So: WORK FROM THE DERIVED LIST
+BECAUSE IT IS THE COMPLETE ONE; VERIFY THROUGH A GESTURE BECAUSE THAT IS THE
+ONLY THING THAT PROVES A FIX REACHES A PERSON. NEITHER IS EVIDENCE FOR THE
+OTHER'S POPULATION, and A DRIVEN PAGE IS ONE INSTANCE OF A TEMPLATE. (One
+conclusion drawn from that calibration — "a per-file count under-counts pages
+built from partials" — was WITHDRAWN: the helper globs partials as files in
+their own right, so a control is counted once, IN THE FILE A REPAIR WOULD
+ACTUALLY EDIT. A count's unit is a choice about where the work lands: per-file
+counts the repair, per-page counts the exposure.)
+
+INDEPENDENCE OF METHOD IS NOT INDEPENDENCE OF ERROR. A source scan said 8 of 23
+surfaces lack a sort control; a browser drive of a surface NOT among the 8
+agreed, and the agreement was reported as proof the scan under-counted. Both
+were wrong: the drive queried `thead th` ACROSS THE WHOLE PAGE and judged 20
+headers from THREE tables — the real list has 15, 11 sortable, and THE ELEMENT
+UNDER TEST WAS NEVER LOCATED — while the scan could not see sort at all because
+it is applied AT RUNTIME by a shared helper. Different mechanisms, same error,
+from one unstated shared assumption: THAT THE PAGE CONTAINS ONE LIST. SO WHEN
+TWO METHODS AGREE, THE QUESTION IS NOT "WERE THEY INDEPENDENT?" BUT "COULD THEY
+FAIL THE SAME WAY?" — corroboration is evidence only if the failure modes are
+disjoint. The standard that settles it: NO ROW IS DEMOTED UNTIL THE ELEMENT THE
+REQUIREMENT IS ABOUT HAS BEEN LOCATED AND DRIVEN — not the file, not the page,
+THE ELEMENT.
+
+THE CEILING OF A BROWSER-EXTENSION TIER, stated once rather than rediscovered
+per project: THE TIER DRIVES A HIDDEN TAB, and three limits share that root —
+load-time focus, `focusout`, and TIMER GRANULARITY (`setTimeout` at 50, 250 and
+500 ms all fire at the same instant on a one-second boundary, so anything
+debounced, throttled, delayed or auto-dismissed is unmeasurable there). Two more
+are separate: REQUEST TIMING, where interception must happen BELOW the page's
+own wrappers, and a CREDENTIAL A SESSION DECLINES TO ENTER, a judgement rather
+than a capability. NOT affected: Navigation Timing, which is not timer-based,
+and anything DOM-derived and synchronous — `closest()`, `offsetParent`,
+settled-DOM reads.
+
+AN INSTRUMENT LIMIT, ONCE FOUND, GETS OVER-APPLIED. That focus limit was first
+recorded flat; it is true of FULL-PAGE forms, which rely on the load-time focus
+Chrome suppresses, and FALSE of dialogs, which focus EXPLICITLY and do not
+depend on document focus. The first proof was correct and ITS SCOPE WAS ASSUMED
+RATHER THAN MEASURED — this file's subject aimed at a limitation instead of a
+population. An over-applied limit is worse than an over-applied guard: it does
+not produce a false finding, it produces A REFUSAL TO LOOK, and nothing revisits
+a thing declared unmeasurable.
+
+A NUMBER BUILT WHERE NO CLOCK COULD REACH is not a wrong measurement but an
+UNMEASURABLE one, and the honest report is "unmeasurable", not a reconstruction.
+The ~730 ms of unexplained client latency was chased through two reasonable and
+wrong hypotheses before the clamp above explained it, and the corrected figure —
+debounce plus server plus render — IS A RECONSTRUCTION ASSEMBLED FROM PARTS, THE
+SAME KIND OF CLAIM AS THE WRONG FIGURE IT REPLACED. Naming the environment is
+necessary and NOT SUFFICIENT when the environment puts the clock out of reach.
+
+THE ESTABLISHED CONVENTION IS NOT EVIDENCE OF CORRECTNESS. Two date fields
+lacked a today-default and the proposed repair was to copy the convention —
+NINETEEN EXISTING SITES. A sweep refused it: all nineteen compute the day in
+UTC, and `new Date().toISOString().slice(0,10)` returns the 20th on a machine
+whose wall clock says the 21st. Wrong in both directions, with the correct
+helper already on the page. NINETEEN CALL SITES AGREEING IS EXACTLY WHAT A
+COPIED BUG LOOKS LIKE; "follow the existing pattern" is sound advice and also
+the mechanism that propagates one, and only a guard over the convention tells
+the two apart. This file has reasoned from convention itself — "the same page
+carries ten correctly bound pairs, so the codebase knows how" — which is the
+same inference and was luckier.
+
 A SEAM BETWEEN TWO HONEST GUARDS IS NOT ANY OF THE POPULATION CLASSES ABOVE,
 because every one of those is about ONE guard's corpus being wrong. A unit sweep
 checks that required fields are MARKED, reads dialog markup, and passes. An e2e
