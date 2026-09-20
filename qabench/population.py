@@ -270,6 +270,33 @@ call comes in", which does not merely word it wrongly, it asserts something
 false about their data. Same shape in both: the helper is correct, the
 population is the CALLERS of the helper, and the surface has lists outside it.
 
+CLASS-KEYED POPULATION is the sharpest sub-class of everything above, and it had
+FOUR instances in one day: the denominator is the MARKER THE COMPLIANT CASES
+SHARE, so a non-compliant case is excluded by the very property that makes it
+non-compliant.
+
+    STA-02  population = elements with class="empty-state"   -> hand-rolled ones invisible
+    LST-08  population = tables with class="data-table"      -> 16 of 146 outside, 10 growable
+    LST-05  population = tables declaring data-row-actions   -> 2 record lists outside
+    LST-04  population = lists that CALL the helper          -> 14 render their empty row by hand
+
+What makes it worse than an ordinary corpus gap is that THE MARKER IS APPLIED BY
+THE CONVERSION. STA-02's ratchet drove hand-rolled empty states 75 → 38 → 0 by
+moving them onto the helper, each conversion adding the class, so the population
+is exactly "the things already fixed" and the number measures the conversion
+rather than the surface. And one hole hid TWO rows for months: STA-02 and LST-04
+both read implemented, and the same fourteen hand-rolled empty rows were
+invisible to both, because both keyed on the marker the converted cases carry.
+
+The check is cheap: count the things that would qualify STRUCTURALLY and
+compare. Not "how many carry the class" but "how many are the kind of thing the
+requirement is about" — for LST-08, `<table>` elements whose rows are built from
+a collection; for STA-02, render paths that branch on a zero-length result. Both
+derivable; neither derived until something asked. So a marker-keyed population
+is permitted ONLY with `population.superset:`, the structural set it is a subset
+OF, and the difference is reported. A denominator made of an implementation
+detail of the fix can only ever measure the fix.
+
 A TELL IS A PRIORITISER, NEVER A FILTER — and this matters for anything that
 might one day rank which guards to suspect. The tell that works is vocabulary: a
 reason that cannot be stated without naming an implementation detail is
@@ -559,6 +586,12 @@ REFUSED = {
                        "the property instead",
     "marker": "a marker is carried by the compliant cases; the population is the cases that OUGHT to carry it",
 }
+#: The marker family: refused outright, UNLESS the guard declares the structural
+#: superset its marked set is a subset OF, and lets the difference be reported.
+#: A refusal alone only makes people write `derived_from: ast` and carry on; the
+#: superset turns the refusal into a measurement.
+MARKER_FAMILY = ("conversion_marker", "class_attribute", "marker")
+
 EXEMPTION_KEYS = ("member", "reason", "evidence", "review_by")
 SHRUNK_KEYS = ("reason", "evidence", "date")
 
@@ -593,6 +626,7 @@ class Row:
     unrunnable: bool = False                              # a command exited non-zero: did not run
     capability: bool = False                              # a self-test proved the detector still detects
     detectors: dict = field(default_factory=dict)         # name -> members, when a requirement has several
+    outside: list = field(default_factory=list)           # in the structural superset, outside the marked set
     covered_by: dict = field(default_factory=dict)        # reach guards: layer -> how much of the bypass it covers
     note: str = ""                                        # reported, not judged
 
@@ -795,9 +829,12 @@ def judge(spec: dict, root: Path, today: dt.date, *, run=read_members) -> Row:
     pop_spec = spec.get("population") or {}
     sub_spec = spec.get("subject") or {}
     derived = str(pop_spec.get("derived_from") or "")
-    if derived in REFUSED:
+    superset = pop_spec.get("superset") or {}
+    if derived in MARKER_FAMILY and superset.get("cmd") and superset.get("describes"):
+        derived = ""                      # permitted, and measured against the superset below
+    elif derived in REFUSED:
         row.problems.append(f"population.derived_from: {derived!r} is refused — {REFUSED[derived]}")
-    elif derived not in DERIVATIONS:
+    elif derived and derived not in DERIVATIONS:
         row.problems.append(f"population.derived_from must be one of {', '.join(DERIVATIONS)}, not {derived!r}")
     detectors = sub_spec.get("detectors")
     if detectors and sub_spec.get("cmd"):
@@ -877,6 +914,21 @@ def judge(spec: dict, root: Path, today: dt.date, *, run=read_members) -> Row:
                             "anything was swept. Declare a `capability:` self-test on a corpus that cannot go "
                             "empty, exclude the guard by declaration, or fix the enumeration")
         return row
+
+    if superset.get("cmd") and superset.get("describes"):
+        whole = run(root, superset["cmd"])
+        if whole.error:
+            row.unrunnable = True
+            row.problems.append(whole.error)
+            return row
+        outside = [m for m in whole.members if m not in set(pop.members)]
+        row.outside = outside
+        if outside:
+            row.problems.append(
+                f"{len(outside)} of {len(whole.members)} {superset['describes']} are OUTSIDE the declared "
+                f"population entirely: " + ", ".join(outside[:8])
+                + ". A marker is applied by the fix, so a denominator made of it can only ever measure the fix — "
+                "a case that never entered the conversion is not a survivor of it, it was never in it")
 
     missing = [m for m in pop.members if m not in set(sub.members)]
     row.exempted = len([m for m in missing if m in excused])

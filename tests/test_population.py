@@ -543,3 +543,48 @@ def test_a_verification_reading_a_new_source_is_fine(repo):
 def test_declaring_one_of_the_pair_requires_the_other(repo):
     assert any("declares both" in p for p in judged(repo, cites=["qa/lists.yml"])["problems"])
     assert any("declares both" in p for p in judged(repo, subject={"reads": ["x"]})["problems"])
+
+
+def test_a_marker_population_with_a_declared_superset_reports_the_difference(repo):
+    """LST-08: 146 tables exist, 130 carry class="data-table", and ten of the
+    sixteen outside build their rows from a collection and so can grow and
+    scroll. The marker is applied by the fix, so a denominator made of it can
+    only ever measure the fix."""
+    row = judged(repo, population={"derived_from": "class_attribute",
+                                   "faculty": "static parse",
+                                   "cmd": emit("a", "b", "c"), "count": 3,
+                                   "superset": {"cmd": emit("a", "b", "c", "unmarked-table"),
+                                                "describes": "<table> elements whose rows come from a collection"}})
+    assert row["outside"] == ["unmarked-table"]
+    assert any("OUTSIDE the declared population entirely" in p and "unmarked-table" in p
+               for p in row["problems"])
+    assert any("never entered the conversion" in p for p in row["problems"])
+    assert not any("refused" in p for p in row["problems"])
+
+
+def test_a_marker_population_without_a_superset_is_still_refused(repo):
+    row = judged(repo, population={"derived_from": "class_attribute"})
+    assert any("refused" in p for p in row["problems"])
+
+
+def test_a_superset_that_adds_nothing_is_clean(repo):
+    row = judged(repo, population={"derived_from": "marker", "faculty": "static parse",
+                                   "cmd": emit("a", "b", "c"), "count": 3,
+                                   "superset": {"cmd": emit("a", "b", "c"), "describes": "every table"}})
+    assert row["outside"] == [] and row["problems"] == []
+
+
+def test_a_superset_that_cannot_run_is_did_not_run(repo):
+    row = judged(repo, population={"derived_from": "marker", "faculty": "static parse",
+                                   "cmd": emit("a", "b", "c"), "count": 3,
+                                   "superset": {"cmd": "/bin/sh -c exit2", "describes": "every table"}})
+    assert row["unrunnable"]
+
+
+def test_a_superset_must_say_what_it_describes(repo):
+    """Without the sentence, the difference is a number nobody can act on: "ten
+    outside" means nothing until somebody says ten of WHAT."""
+    row = judged(repo, population={"derived_from": "marker", "faculty": "static parse",
+                                   "cmd": emit("a"), "count": 1,
+                                   "superset": {"cmd": emit("a", "b")}})
+    assert any("refused" in p for p in row["problems"])
