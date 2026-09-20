@@ -921,3 +921,33 @@ def test_a_metric_must_name_the_environment_it_was_measured_in(repo):
     A row that goes green on that rests on the wrong measurement."""
     row = judged(repo, metric="search latency to last response", capability=cap())
     assert any("NAMES THE ENVIRONMENT IT WAS MEASURED IN" in p for p in row["problems"])
+
+
+def test_the_seam_between_two_honest_guards_is_named(repo):
+    """A unit sweep checks required fields are MARKED and reads dialog markup.
+    An e2e sweep checks they are ASSOCIATED and never opens a dialog. Each is
+    correct in its own scope, and 78 unnamed controls live in the space both
+    exclude — not a dishonest guard anywhere, a seam between two honest ones."""
+    root = repo([guard(id="marked-in-markup", subject={"cmd": emit("a")},
+                       abuts="associated-in-the-browser",
+                       jointly={"cmd": emit("a", "b", "dialog-field"),
+                                "describes": "every required control a person can reach"}),
+                 guard(id="associated-in-the-browser", subject={"cmd": emit("b")})])
+    row = population.run_population(root, {"register": "qa/guards.yml"}, today=TODAY)["rows"][0]
+    assert row["seam"] == ["dialog-field"]
+    assert any("fall in the SEAM between this guard and associated-in-the-browser" in p
+               for p in row["problems"])
+    assert any("Each guard is correct in its own scope" in p for p in row["problems"])
+
+
+def test_two_guards_that_meet_leave_no_seam(repo):
+    root = repo([guard(id="one", subject={"cmd": emit("a")}, abuts="two",
+                       jointly={"cmd": emit("a", "b"), "describes": "every control"}),
+                 guard(id="two", subject={"cmd": emit("b", "c")})])
+    row = population.run_population(root, {"register": "qa/guards.yml"}, today=TODAY)["rows"][0]
+    assert row["seam"] == [] and not any("SEAM" in p for p in row["problems"])
+
+
+def test_abuts_without_a_joint_population_is_refused(repo):
+    row = judged(repo, abuts="some-other-guard")
+    assert any("comes with `jointly:" in p and "SEAM" in p for p in row["problems"])

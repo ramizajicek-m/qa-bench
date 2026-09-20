@@ -232,6 +232,34 @@ after the same gap was found from a browser report on STA-02, with no knowledge
 of the first: two independent routes to one finding is the closest thing to
 validation this method gets, and it is worth more than any number in the table.
 
+A SEAM BETWEEN TWO HONEST GUARDS IS NOT ANY OF THE POPULATION CLASSES ABOVE,
+because every one of those is about ONE guard's corpus being wrong. A unit sweep
+checks that required fields are MARKED, reads dialog markup, and passes. An e2e
+sweep checks that required fields are ASSOCIATED with a label, and never opens a
+dialog, so it never sees them. EACH IS CORRECT IN ITS OWN SCOPE, and 78 unnamed
+required controls live precisely in the space both exclude: not a dishonest
+guard anywhere, not a narrow corpus anybody chose, TWO RIGHT CORPORA THAT DO NOT
+MEET.
+
+So a guard may declare `abuts:` — another guard in the register whose scope must
+meet this one's — together with `jointly:`, the population the PAIR is
+responsible for. The module runs both subjects and names what falls in neither.
+Nothing else here asks whether two well-scoped checks overlap or at least abut,
+and the defect sat in the seam.
+
+AND AN UNSIZED DEFERRAL IS THE SAME DEFECT ONE LEVEL UP. Asked to STATE a modal
+exclusion the way a parser's script-blindness had been stated, the session
+measured it instead: 86 required controls sit in the DOM unjudged across the 78
+pages that run, worst two files at 20 each, shrink-only, mutation red at 87. The
+number falls either when somebody fixes a field or when somebody teaches the
+sweep to open a dialog, so THE RATCHET REWARDS BOTH. Two details worth copying:
+it took a different ratchet shape than its own instinct because a six-page
+sample showed the first idea — a floor on "pages that judge at least one field"
+— starts at zero-or-one on nearly every page that matters, correct and
+unshippable as a gate; and the shape it chose keeps "JUDGED 0 OF 16" APART FROM
+"JUDGED 0 OF 0", because a page with nothing to check is not a failure to check,
+which is what makes an empty corpus legible rather than silently green.
+
 ONE REQUIREMENT MAY HAVE SEVERAL DETECTORS, and then the population is the
 REQUIREMENT'S rather than any one detector's. STA-02 — "an empty screen explains
 why it is empty and offers the next action" — was guarded by three tests: the
@@ -1130,6 +1158,7 @@ class Row:
     unrunnable: bool = False                              # a command exited non-zero: did not run
     capability: bool = False                              # a self-test proved the detector still detects
     detectors: dict = field(default_factory=dict)         # name -> members, when a requirement has several
+    seam: list = field(default_factory=list)              # in neither this guard's scope nor its abutting one's
     outside: list = field(default_factory=list)           # in the structural superset, outside the marked set
     covered_by: dict = field(default_factory=dict)        # reach guards: layer -> how much of the bypass it covers
     note: str = ""                                        # reported, not judged
@@ -1576,6 +1605,33 @@ def judge(spec: dict, root: Path, today: dt.date, *, run=read_members, surfaces=
                 "nor dismiss it, because declaring them false positives would be the same error as fixing them "
                 "blindly. Report `path::anchor`, naming the element the thing was expected near")
             return row
+
+    abuts, jointly = spec.get("abuts"), spec.get("jointly") or {}
+    if abuts or jointly:
+        by_id = {str(g.get("id")): g for g in register if isinstance(g, dict)}
+        other = by_id.get(str(abuts))
+        if not other or not jointly.get("cmd") or not jointly.get("describes"):
+            row.problems.append(
+                "`abuts:` names a guard in this register and comes with `jointly: {cmd, describes}` — the "
+                "population the PAIR is responsible for. A unit sweep checking that required fields are MARKED "
+                "and an e2e sweep checking they are ASSOCIATED were each correct in their own scope, and 78 "
+                "unnamed controls lived in the space both excluded: not a dishonest guard anywhere, a SEAM "
+                "between two honest ones")
+            return row
+        theirs = run(root, ((other.get("subject") or {}).get("cmd")) or "")
+        whole = run(root, jointly["cmd"])
+        if theirs.error or whole.error:
+            row.unrunnable = True
+            row.problems.append(theirs.error or whole.error)
+            return row
+        covered = set(sub.members) | set(theirs.members)
+        seam = [m for m in whole.members if m not in covered]
+        row.seam = seam
+        if seam:
+            row.problems.append(
+                f"{len(seam)} of {len(whole.members)} {jointly['describes']} fall in the SEAM between this "
+                f"guard and {abuts}: " + ", ".join(seam[:8])
+                + ". Each guard is correct in its own scope and the pair does not meet")
 
     missing = [m for m in pop.members if m not in set(sub.members)]
     row.exempted = len([m for m in missing if m in excused])
