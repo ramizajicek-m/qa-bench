@@ -1,6 +1,6 @@
 # qabench
 
-**Every recorded conclusion in a tree is dated, and nothing re-reads any of them.** The instruments below are the enforcement.
+**Every recorded conclusion in a tree is dated, and nothing re-reads any of them.** The instruments below are the enforcement — and `mutate --replay` is only as good as the record, which most projects do not have: a repo with years of "watched red" claims in docstrings and commit messages holds dated assertions only a person can check, so extracting them into a record is a real piece of work rather than a command. An empty record reads exit 3 and says so.
 
 The comprehensive QA tier as one package, driven by a project's `qa/manifest.yml`. Six projects run this instead of six copies that drift.
 

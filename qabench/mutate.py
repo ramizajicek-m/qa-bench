@@ -128,7 +128,12 @@ def replay(path: pathlib.Path, *, echo=print) -> int:
     """
     records = _load(path)
     if not records:
-        echo(f"mutate --replay: no mutations recorded in {path} — nothing re-run (exit 3)")
+        echo(f"mutate --replay: no mutations recorded in {path} — nothing re-run (exit 3). This is the NORMAL "
+             "state of a project that has never recorded one, not a configuration fault: REPLAY IS ONLY AS GOOD "
+             "AS THE RECORD, and most projects do not have one. A repo with years of 'watched red' claims in "
+             "docstrings and commit messages has dated assertions only a person can check — extracting them into "
+             "a record is a real piece of work rather than a command, and until it is done there is no rate to "
+             "quote, only the claims.")
         return 3
     stale, survived = [], []
     for r in records:
@@ -161,7 +166,8 @@ def main(argv: list[str] | None = None) -> int:
         argv = argv[:i] + argv[i + 2:]
     if len(argv) < 3:
         print(__doc__.strip().splitlines()[0], file=sys.stderr)
-        print("usage: python -m qabench mutate <file> '<expr>' -- <command...>",
+        print("usage: python -m qabench mutate [--record RECORD.json] <file> '<expr>' -- <command...>\n"
+              "       python -m qabench mutate --replay RECORD.json",
               file=sys.stderr)
         return 2
     path, expr = argv[0], argv[1]

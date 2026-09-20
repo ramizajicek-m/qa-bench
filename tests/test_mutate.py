@@ -150,3 +150,20 @@ def test_replaying_an_empty_record_is_three_not_zero(tmp_path):
     from qabench.mutate import replay
     (tmp_path / "none.json").write_text('{"mutations": []}', encoding="utf-8")
     assert replay(tmp_path / "none.json", echo=lambda *_: None) == 3
+
+
+def test_the_usage_line_names_every_flag_the_command_takes(capsys):
+    """The usage line is itself a recorded conclusion, and it did not move when
+    --record and --replay landed: somebody probing with a bare `mutate` read the
+    old signature off the NEW code and reported the flags missing."""
+    assert main([]) == 2
+    err = capsys.readouterr().err
+    assert "--record" in err and "--replay" in err
+
+
+def test_an_empty_record_says_it_is_the_normal_state_not_a_fault(tmp_path, capsys):
+    from qabench.mutate import replay
+    said = []
+    (tmp_path / "none.json").write_text('{"mutations": []}', encoding="utf-8")
+    assert replay(tmp_path / "none.json", echo=said.append) == 3
+    assert "REPLAY IS ONLY AS GOOD AS THE RECORD" in said[0] and "not a configuration fault" in said[0]
