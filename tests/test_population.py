@@ -413,3 +413,47 @@ def test_a_complement_layer_that_cannot_run_is_did_not_run(repo):
     inflate the residue — a finding invented by a broken command."""
     row = judged(repo, **reachy(complement=[{"name": "wrappers", "cmd": "/bin/sh -c exit2"}]))
     assert row["unrunnable"] and row["missing"] != ["d"]
+
+
+def sized(n) -> str:
+    return emit(str(n))
+
+
+def test_a_transform_that_guts_the_corpus_is_red(repo):
+    """Stripping comments with a DOTALL `/*.*?*/` blanked 58%, 73% and 76% of
+    three real files, and two checks had already been watched going green over
+    the gutted corpus and recorded as mutations passed. A destroyed corpus
+    reports exactly like a clean one."""
+    row = judged(repo, transform=[{"name": "strip comments", "before": sized(100000),
+                                   "after": sized(42000), "keeps": 0.9}])
+    assert any("kept 42%" in p and "reports EXACTLY like a clean tree" in p for p in row["problems"])
+    assert "passing over nothing" in row["problems"][0]
+
+
+def test_a_transform_inside_its_declared_shrink_passes(repo):
+    row = judged(repo, transform=[{"name": "strip comments", "before": sized(100000),
+                                   "after": sized(95000), "keeps": 0.9}])
+    assert row["problems"] == []
+
+
+def test_a_transform_must_declare_what_it_keeps(repo):
+    row = judged(repo, transform=[{"name": "strip comments", "before": sized(100), "after": sized(50)}])
+    assert "needs `before:`, `after:` and `keeps:`" in row["problems"][0]
+
+
+def test_a_corpus_empty_before_the_transform_is_named(repo):
+    row = judged(repo, transform=[{"name": "strip", "before": sized(0), "after": sized(0), "keeps": 0.9}])
+    assert "there was nothing to transform" in row["problems"][0]
+
+
+def test_a_transform_whose_measurement_cannot_run_is_did_not_run(repo):
+    row = judged(repo, transform=[{"name": "strip", "before": "/bin/sh -c exit2",
+                                   "after": sized(1), "keeps": 0.9}])
+    assert row["unrunnable"]
+
+
+def test_the_derivation_travels_with_the_numbers(repo):
+    """Two sessions derived the same population and got 17 and 12, both
+    sincerely, and neither number said which to trust."""
+    assert judged(repo)["derived_from"] == "ast"
+    assert judged(repo, population={"derived_from": "reachability"})["derived_from"] == "reachability"

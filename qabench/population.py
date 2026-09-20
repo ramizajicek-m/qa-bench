@@ -1,4 +1,4 @@
-"""population — a guard's SUBJECT is the property's population, not the example's neighbourhood.
+r"""population — a guard's SUBJECT is the property's population, not the example's neighbourhood.
 
     python -m qabench population                 # the `population:` block of qa/manifest.yml
     python -m qabench population --json          # the rows, for a test to read
@@ -76,6 +76,36 @@ FOUR RULES, each paid for by one of the rows above:
      commit that raises it; it may fall only behind `shrunk:` with a reason,
      evidence and a date. A corpus that quietly returns to a naming heuristic
      fails here.
+
+A TRANSFORM IS PART OF THE GUARD, AND A DESTROYED CORPUS REPORTS EXACTLY LIKE A
+CLEAN ONE. A guard tripping on the COMMENT that explained a fix was made to
+strip comments first — `<!--.*?-->|/\*.*?\*/|^[ \t]*//.*$` with DOTALL — and a
+stray `/*` inside a script string found a distant partner, blanking 58 % of one
+real file, 73 % of another and 76 % of a third. Two checks had ALREADY been
+watched going green over that gutted corpus and recorded as mutations passed.
+This is the false-green shape arriving from the direction nobody watches: not
+the check, not the oracle, but the NORMALISATION STEP in between, which nobody
+thinks of as part of the verdict. Anything that transforms a corpus before the
+assertion owes the same proof as the assertion — declare `transform:` with the
+size before and after and the shrink you INTENDED, and an unintended shrink is
+red. One line, and it would have caught this instantly.
+
+AND THE SELECTION EFFECT UNDERNEATH IT, which is the part worth carrying to
+every project: real source has prose in it, and THE PROSE CLUSTERS EXACTLY WHERE
+THE DEFECTS WERE, because that is where people stop to explain themselves. So a
+text-matching guard is systematically MOST likely to be wrong at the very sites
+it was written for. That is not bad luck, it is selection — prose density
+correlates with defect history. Two failures in one file in one hour came from
+it: the guard above, and a click-handler detector matching
+`addEventListener('click', … [^{}]{0,200} … AnatDialog.close(` whose window was
+pushed past 200 characters by the three-line comment explaining the fix, so
+restoring the defect left the test GREEN and only the mutation found it.
+
+The rule all three collapse into: THE CORPUS A GUARD ASSERTS OVER MUST BE THE
+CORPUS A BROWSER OR RUNTIME ACTS ON, transformed as little as possible, with
+every transform proving it did not shrink what it touched. Anchor to structure —
+a tag, an AST node — rather than cleaning text to make a pattern work. When a
+pattern needs the text cleaned to be correct, the pattern is wrong.
 
 REACH IS A DENOMINATOR, AND A DENOMINATOR NEEDS ITS OWN COVERAGE MEASUREMENT.
 For every blessed helper, how many call sites go through it? Mechanical,
@@ -361,6 +391,14 @@ class Row:
     id: str
     check: str
     claims: str
+    #: HOW the population was derived, printed with the numbers. Two sessions
+    #: derived the same population the same day and got 17 and 12, both
+    #: sincerely — one scanned a text window from one dialog id to the next,
+    #: which runs past its own dialog so a neighbour's attribute counted as
+    #: compliance; the other traced the close path. Neither number carried
+    #: anything saying which to trust. A derived population ships with its
+    #: derivation, not just its result.
+    derived_from: str = ""
     population: int = 0
     subject: int = 0
     missing: list[str] = field(default_factory=list)      # in the population, never examined
@@ -399,6 +437,37 @@ def judge_exemption(ex, root: Path, today: dt.date) -> str:
     One contract, in `qabench.warrant`: four files had written it out four
     times, and a contract with four copies is four contracts."""
     return warrant.judge(ex, root, today, subject="member", label="exemption")
+
+
+def judge_transform(t, root: Path, run) -> str:
+    """A normalisation step proves it did not gut the corpus, or it is not trusted.
+
+    `before:` and `after:` each print ONE number — bytes, nodes, lines, whatever
+    the transform is measured in — and `keeps:` is the fraction that must
+    survive, stated because the shrink you intended is a fact you know and the
+    shrink you did not is the defect.
+    """
+    if not isinstance(t, dict) or not t.get("before") or not t.get("after") or t.get("keeps") is None:
+        return f"transform {t!r} needs `before:`, `after:` and `keeps:` (the fraction that must survive)"
+    name = t.get("name", "transform")
+    sizes = []
+    for half in ("before", "after"):
+        got = run(root, t[half])
+        if got.error:
+            return f"{name}: {half} could not run: {got.error}"
+        try:
+            sizes.append(float(got.members[0]))
+        except (IndexError, ValueError):
+            return f"{name}: {half} did not print a single number"
+    before, after = sizes
+    if before <= 0:
+        return f"{name}: the corpus measured {before} BEFORE the transform — there was nothing to transform"
+    kept = after / before
+    if kept < float(t["keeps"]):
+        return (f"{name} kept {kept:.0%} of the corpus ({after:.0f} of {before:.0f}), declared to keep at least "
+                f"{float(t['keeps']):.0%} — a transform that guts its corpus reports EXACTLY like a clean tree, "
+                "and every check downstream of it has been passing over nothing")
+    return ""
 
 
 NEAR_MISS_KEYS = ("cmd", "from", "was")
@@ -464,7 +533,9 @@ def judge_pin(pinned, actual: int, shrunk, root: Path) -> str:
 
 def judge(spec: dict, root: Path, today: dt.date, *, run=read_members) -> Row:
     """One guard: run both sides, compare by member, apply the four rules."""
-    row = Row(id=str(spec.get("id") or "?"), check=str(spec.get("check") or ""), claims=str(spec.get("claims") or ""))
+    row = Row(id=str(spec.get("id") or "?"), check=str(spec.get("check") or ""),
+              claims=str(spec.get("claims") or ""),
+              derived_from=str((spec.get("population") or {}).get("derived_from") or "?"))
     if not spec.get("id"):
         row.problems.append("a guard with no `id:` — a finding nobody can look up")
     if not row.check:
@@ -485,6 +556,7 @@ def judge(spec: dict, root: Path, today: dt.date, *, run=read_members) -> Row:
             "have started a rewrite — but three other global fetch wrappers give every raw call the loading "
             "indicator, session activity, the CSRF header and the 401 bounce, 538 of them check status "
             "themselves and 297 report a failure to a person. The actionable number is 109, not 783")
+    transforms = spec.get("transform") or []
     cap_spec = spec.get("capability") or {}
     pop_spec = spec.get("population") or {}
     sub_spec = spec.get("subject") or {}
@@ -515,6 +587,13 @@ def judge(spec: dict, root: Path, today: dt.date, *, run=read_members) -> Row:
                 row.unrunnable = True
                 return row
         row.capability = True
+
+    for t in transforms:
+        problem = judge_transform(t, root, run)
+        if problem:
+            row.problems.append(problem)
+            row.unrunnable = "could not run" in problem or "did not print" in problem
+            return row
 
     pop = run(root, pop_spec["cmd"])
     # ONE REQUIREMENT, SEVERAL DETECTORS: the population is the REQUIREMENT'S,
@@ -671,6 +750,7 @@ def run(argv: list[str], *, today: dt.date | None = None) -> int:
         for r in out["rows"]:
             mark = "RED " if r["problems"] else "ok  "
             print(f"  {mark}{r['id']:38} {r['check']:4} {r['subject']:>5}/{r['population']:<5} swept"
+                  + f"  [{r['derived_from']}]"
                   + ("  [capability proven]" if r["capability"] else "")
                   + (f"   ({r['exempted']} exempted)" if r["exempted"] else ""))
             if r["note"]:
