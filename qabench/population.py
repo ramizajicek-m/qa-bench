@@ -402,6 +402,37 @@ silently by anyone who widens the sweep: extending it to 77 never-measured
 screens returned 0 out of reach, the expected number, and every future extension
 would have carried the blindness forward while the number looked better.
 
+AN OBSERVER THAT SHARES A RESOURCE WITH THE OBSERVED CANNOT REPORT A TIMING.
+A search-latency measurement returned 1998 ms, twice, consistently, right at the
+row's ceiling — from a polling loop re-querying the table every 25 ms, each tick
+running a querySelectorAll plus a filter over every row. IT WAS TIMING THE
+SEARCH PLUS ITS OWN MEASUREMENT OF THE SEARCH. Re-done with a MutationObserver,
+event-driven and zero polling: 1233 ms to first mutation, 1419 ms to last
+response. THE POLLING INFLATED THE RESULT BY ~700 ms, more than a third.
+
+Every other instrument failure in this file produced a wrong answer ABOUT
+SOMETHING THAT EXISTED. This one CHANGED THE SUBJECT WHILE MEASURING IT. And the
+tell that was mistaken for reassurance is worth naming: THE NUMBER WAS
+REPRODUCIBLE — twice, consistently — AND THE CONSISTENCY WAS EVIDENCE OF THE
+INSTRUMENT'S COST, NOT OF THE PRODUCT'S BEHAVIOUR. Polling a DOM to time a DOM
+operation is the canonical case; the event-driven equivalent is not merely more
+accurate, IT IS THE ONLY KIND THAT IS VALID.
+
+A PERFORMANCE CEILING NAMES THE ENVIRONMENT IT WAS MEASURED IN, OR IT IS NOT A
+MEASUREMENT. Those figures are staging, on a different instance from production,
+from one laptop on one network with one client's data volume: what they
+establish is the SHAPE — server fast, client slow before the request — and not
+the absolute values. The session declined to flip the performance rows green on
+them, because a row that goes green on one laptop's reading of staging is a row
+resting on the wrong measurement. So `metric:` requires `measured_in:`, and the
+verdict prints it.
+
+(The finding underneath survives the retraction: three server calls, none over
+240 ms, a 250 ms debounce, and THE FIRST REQUEST DOES NOT START UNTIL 984 ms
+after the keystroke — ~730 ms of client-side delay before any network, of which
+the debounce explains 250 and a second timer in the same file might explain 300,
+leaving ~430 ms unaccounted. It was not chased and was not guessed at.)
+
 THE CHECK IS CHEAP AND THE DISTINCTION IN IT IS THE WHOLE THING: mutate the
 property THE REQUIREMENT NAMES and see whether the number moves. Moving a save
 bar from `position: sticky` to `position: static` left the count at 0 while ten
@@ -1166,7 +1197,8 @@ def judge_transform(t, root: Path, run) -> str:
 NEAR_MISS_KEYS = ("cmd", "from", "was")
 
 
-def judge_capability(cap: dict, root: Path, *, metric: str = "", stimulus: str = "") -> list[str]:
+def judge_capability(cap: dict, root: Path, *, metric: str = "", stimulus: str = "",
+                     measured_in: str = "") -> list[str]:
     """A capability proves the detector DISCRIMINATES, or it proves nothing.
 
     `fires:` is the positive. `silent:` is one or more REAL near-misses — a
@@ -1186,6 +1218,13 @@ def judge_capability(cap: dict, root: Path, *, metric: str = "", stimulus: str =
             "orderings, saw nothing twice and was nearly filed — and neither experiment could have produced an "
             "indicator, because the wrapper captured `window.fetch` at parse time and both available orderings "
             "put the delay on the wrong side of it. The null result was a property of the instrument")
+    if metric and not measured_in:
+        out.append(
+            f"this guard computes a metric ({metric}) and names no `measured_in:` — A PERFORMANCE CEILING NAMES "
+            "THE ENVIRONMENT IT WAS MEASURED IN, OR IT IS NOT A MEASUREMENT. A search latency of 1998 ms was "
+            "staging, on a different instance from production, from one laptop on one network with one client's "
+            "data volume, and the session declined to flip its rows green on it: a row that goes green on one "
+            "laptop's reading of staging rests on the wrong measurement")
     if metric and isinstance(fires, list) and not any(
             isinstance(f, dict) and f.get("by_mutating") and f.get("moved") for f in fires):
         out.append(
@@ -1429,7 +1468,8 @@ def judge(spec: dict, root: Path, today: dt.date, *, run=read_members, surfaces=
 
     if cap_spec:
         problems = judge_capability(cap_spec, root, metric=str(spec.get("metric") or ""),
-                                    stimulus=str(spec.get("stimulus") or ""))
+                                    stimulus=str(spec.get("stimulus") or ""),
+                                    measured_in=str(spec.get("measured_in") or ""))
         if problems:
             row.problems.extend(problems)
             return row

@@ -716,13 +716,15 @@ def test_a_metric_must_be_shown_able_to_produce_a_failing_value(repo):
     fold — as comfortably in reach. Corpus complete, floors on both sides,
     ratchet at zero. The metric knew "too high" and could not express "not on
     the screen at all"."""
-    row = judged(repo, metric="the primary action's centre as a % of viewport height", capability=cap())
+    row = judged(repo, metric="the primary action's centre as a % of viewport height",
+                 measured_in="staging, 1440x900, seeded tenant", capability=cap())
     assert any("must be shown able to PRODUCE A FAILING VALUE" in p and "proves the arithmetic" in p
                for p in row["problems"])
 
 
 def test_a_metric_with_a_product_mutation_and_a_movement_is_accepted(repo):
     row = judged(repo, metric="the primary action's centre as a % of viewport height",
+                 measured_in="staging, 1440x900, seeded tenant",
                  capability=cap(fires=[{"cmd": emit("caught it"), "from": "docs/ledger.md",
                                         "was": "the settings save at 131%",
                                         "by_mutating": "the save bar from position:sticky to position:static",
@@ -739,6 +741,7 @@ def test_naming_the_mutation_without_the_number_it_moved_is_not_enough(repo):
     A mutation nobody watched the number under is a claim, not a measurement —
     the count staying at 0 IS the finding, and only the figure records it."""
     row = judged(repo, metric="the primary action's centre as a % of viewport height",
+                 measured_in="staging, 1440x900, seeded tenant",
                  capability=cap(fires=[{"cmd": emit("caught it"), "from": "docs/ledger.md",
                                         "was": "the settings save at 131%",
                                         "by_mutating": "the save bar from sticky to static"}]))
@@ -911,3 +914,10 @@ def test_an_absence_claim_with_anchored_members_is_judged_normally(repo):
 
 def test_a_presence_claim_is_unaffected(repo):
     assert judged(repo)["problems"] == []
+
+
+def test_a_metric_must_name_the_environment_it_was_measured_in(repo):
+    """1998ms was staging, one laptop, one network, one client's data volume.
+    A row that goes green on that rests on the wrong measurement."""
+    row = judged(repo, metric="search latency to last response", capability=cap())
+    assert any("NAMES THE ENVIRONMENT IT WAS MEASURED IN" in p for p in row["problems"])
