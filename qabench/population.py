@@ -160,6 +160,30 @@ login error must not reveal whether the account exists) and that is a different
 question, not a gap. A sweep whose exclusion list was filled in quickly to get
 green would be the defect wearing the fix's clothes.
 
+THE CORPUS IS WHAT THE MECHANISM CAN SEE, NOT WHAT THE CLAIM COVERS. ACT-07
+says "leaving a form with unsaved changes warns, with three choices". Its e2e is
+a good test by every standard in this file: it asserts the labels EXACTLY —
+["Keep editing", "Discard changes", "Save"] — then clicks each one and checks
+its effect, which is not a presence check. What nothing asked is WHICH DIALOGS
+REACH THE HELPER. 146 have an id; 133 delegate their close through it; 12 close
+directly and were never in anybody's population. The helper is not failing, it
+is not reached, and the e2e's fixture is a compliant dialog, so it can only ever
+confirm compliance.
+
+That is also the argument for driving a real browser rather than reading better.
+The session that closed this row clean had read the code carefully the same
+morning and stopped, because the helper WAS correct. Reading source tells you
+what a mechanism does; it does not tell you what reaches the mechanism. A
+reachability population is the static form of the browser's question, and it is
+derivable — but nobody derives it until something asks.
+
+THREE NUMBERS, NOT ONE, when a finding like this is reported: 12 of 146 broken,
+7 of those harmful (the rest hold no real fields), and ZERO harm on the one the
+browser demonstrated, because that dialog happens to persist every keystroke to
+local storage and restore it. The browser picked the least harmful of the twelve.
+Report the demonstrated instance, the broken population and the harmful subset,
+or the row is prioritised off whichever number was nearest.
+
 A LIVE CORPUS OF ONE IS THE HARD CASE, and it is where `capability:` comes
 from. A cross-reference check over a 109-row tracker — does a row justify itself
 by asserting another row's status, and is that status still true — found exactly
@@ -264,7 +288,15 @@ from . import warrant
 #: ("every row whose wording talks about failing, erroring or succeeding is a
 #: part of GEN-03 or is answered with the reason it is a different question"),
 #: it names ACT-11 and FRM-13 by id.
-DERIVATIONS = ("ast", "route_table", "schema", "enumeration", "filesystem", "requirement_text")
+#: `reachability` is the sixth and it is not a set of files at all: it is
+#: "everything whose path REACHES the guarded mechanism", and its complement is
+#: the defect. ACT-07 is the cleanest example this estate has produced —
+#: 146 dialogs have an id, 133 route their close through the helper that prompts
+#: for unsaved changes, and 12 close directly and never reach it. The helper is
+#: CORRECT; the e2e asserts its three labels exactly and clicks each one; the
+#: corpus is the entire defect. Derivable from the delegation attribute, with
+#: the twelve as exactly the complement.
+DERIVATIONS = ("ast", "route_table", "schema", "enumeration", "filesystem", "requirement_text", "reachability")
 REFUSED = {
     "names": "ACT-11: the corpus was routes whose PATH contained batch|bulk; the property was routes that iterate a collection",
     "naming": "a naming heuristic is the defect, not a derivation",

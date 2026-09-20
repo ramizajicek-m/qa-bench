@@ -346,3 +346,16 @@ def test_a_detector_that_cannot_run_is_did_not_run(repo):
     row = judged(repo, subject={"cmd": None, "detectors": [{"name": "one", "cmd": emit("a")},
                                                           {"name": "two", "cmd": "/bin/sh -c exit2"}]})
     assert row["unrunnable"]
+
+
+def test_a_reachability_population_is_a_derivation(repo):
+    """ACT-07: 146 dialogs have an id, 133 delegate their close through the
+    helper that prompts for unsaved changes, 12 close directly. The helper is
+    correct and the corpus is the entire defect, so the population is not a set
+    of files — it is everything whose path REACHES the mechanism, and the
+    complement is the finding."""
+    row = judged(repo, population={"derived_from": "reachability",
+                                   "cmd": emit("add-modal", "customers", "vehicle"), "count": 3},
+                 subject={"cmd": emit("customers", "vehicle")})
+    assert row["missing"] == ["add-modal"]
+    assert not any("refused" in p or "must be one of" in p for p in row["problems"])
