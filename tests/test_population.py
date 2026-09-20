@@ -255,7 +255,8 @@ def test_an_empty_live_corpus_is_allowed_only_when_the_detector_is_proven(repo):
 def cap(**over) -> dict:
     """A capability that proves BOTH halves: it fires, and it stays silent on a
     REAL near-miss out of the tree."""
-    c = {"fires": [{"cmd": emit("caught the stale citation"), "from": "docs/ledger.md",
+    c = {"plausible": "[1, 21]; a ratio of 1.0 on rendered text is unreachable",
+         "fires": [{"cmd": emit("caught the stale citation"), "from": "docs/ledger.md",
                     "was": "PRF-06 justifies itself by STA-01 being absent"}],
          "silent": [{"cmd": emit("silent"), "from": "docs/ledger.md",
                      "was": "the one thing that was missing is now supplied by the PRT-03 work"}]}
@@ -951,3 +952,13 @@ def test_two_guards_that_meet_leave_no_seam(repo):
 def test_abuts_without_a_joint_population_is_refused(repo):
     row = judged(repo, abuts="some-other-guard")
     assert any("comes with `jointly:" in p and "SEAM" in p for p in row["problems"])
+
+
+def test_a_metric_declares_the_range_a_working_system_produces(repo):
+    """303 located contrast failures, every one wrong, many at a ratio of
+    exactly 1.0 — invisible text on a page somebody was reading. No review,
+    mutation or control caught it; the impossibility did."""
+    row = judged(repo, metric="contrast ratio of every text element",
+                 measured_in="staging, light theme, 1440x900",
+                 capability=cap(plausible=None))
+    assert any("declares no `plausible:` range" in p and "INSTRUMENT FAULT" in p for p in row["problems"])

@@ -485,6 +485,48 @@ means the honest record belongs upstream, the second means the case is fixed.
 Every project in the estate carries lists of this kind — exclusion maps, skip
 budgets, ratchet baselines — and nothing was checking any of them this way.
 
+"LOCATED" IS NOT A SYNONYM FOR "TRUE", and this is the correction to the rule
+that a located finding beats a counted one. A contrast sweep reported 303
+FAILURES, EACH WITH A SELECTOR AND A COMPUTED VALUE — exactly the located
+evidence this file spends pages demanding. Every one was wrong. Its background
+resolver took the first non-transparent `backgroundColor` up the chain and
+accepted `rgba(124,58,237,0.05)` as the painted colour, so A FIVE PERCENT TINT
+WAS TREATED AS SOLID PURPLE; the design tints everything at 5–8%, so nearly
+every element got a fabricated background and many computed to a ratio of
+EXACTLY 1.0 — foreground identical to background, invisible text, ON A PAGE
+SOMEBODY WAS LOOKING AT AND COULD READ. Compositing every translucent layer over
+the page background: 747 measured, 5 failing. A SIXTY-FOLD DIFFERENCE.
+
+A finding with a selector is checkable BY SOMEBODY WHO CHECKS, and 303 of them
+is past the number anyone checks. WHAT CAUGHT IT WAS NOT A REVIEW, A MUTATION OR
+A CONTROL — it was a SANITY INVARIANT: a ratio of 1.0 on legible text is
+impossible. So a guard computing a PHYSICAL QUANTITY declares `plausible:`, the
+range the quantity can take in a working system, and a value outside it is an
+INSTRUMENT FAULT rather than a finding. Contrast ratios live in [1, 21] and 1.0
+on rendered text is unreachable; a latency of 0 ms, a font size of 0 px and a
+viewport of 0 are the same shape.
+
+(Two more from the same work. A DOCUMENTED RATIO MEASURED AGAINST THE WRONG
+BACKGROUND: a token's comment records 5.0:1, measured against WHITE, while the
+failing pairing is that colour on a 10% tint OVER white — adopting the
+documented figure without compositing reproduces the original error one
+generation later, WITH A CITED NUMBER THE NEXT PERSON WILL TRUST. A recorded
+measurement that does not name its conditions is a trap with a reference
+attached, which is the dated-conclusion class with the written-downness as the
+aggravating factor. And a guard keyed on the offending TOKEN would be mostly
+false, because the same colour passes at large sizes and most of its uses are
+24 px figures; keyed on computed size under 18.66 px it finds exactly the five
+that matter. SAME TOKEN, OPPOSITE VERDICTS, DECIDED BY RENDERED SIZE.)
+
+A CROSS-CHECK WHOSE FAILURE MODES ARE GENUINELY DISJOINT is the positive
+counterpart to the false corroboration above, and the difference is the whole
+rule. Two sweeps found the same five elements: one measured EVERY visible text
+element and ranked by computed ratio, the other filtered on the computed colour
+TOKEN. Different populations, different mechanisms, and no shared assumption —
+one cannot be fooled by the colour, the other cannot be fooled by the ranking.
+The question is never "were they independent" but "COULD THEY FAIL THE SAME
+WAY", and here the answer is no, WHICH IS WHY THE AGREEMENT COUNTS.
+
 A MEASURE THAT CANNOT FAIL IN ONE DIRECTION is the fourth face, and it is not
 the corpus and not the conclusion. A guard for "the primary action is within
 thumb reach on a phone" walks every screen, computes the emphasised button's
@@ -1319,6 +1361,14 @@ def judge_capability(cap: dict, root: Path, *, metric: str = "", stimulus: str =
             "orderings, saw nothing twice and was nearly filed — and neither experiment could have produced an "
             "indicator, because the wrapper captured `window.fetch` at parse time and both available orderings "
             "put the delay on the wrong side of it. The null result was a property of the instrument")
+    if metric and not cap.get("plausible"):
+        out.append(
+            f"this guard computes a metric ({metric}) and declares no `plausible:` range — the values the "
+            "quantity can take in a WORKING system, outside which a reading is an INSTRUMENT FAULT rather than "
+            "a finding. A contrast sweep reported 303 located failures, every one wrong, many at a ratio of "
+            "EXACTLY 1.0 — foreground identical to background, invisible text, on a page somebody was reading. "
+            "A review did not catch it, a mutation did not catch it, a control did not catch it: the "
+            "IMPOSSIBILITY did. 747 measured and 5 failing once the translucent layers were composited")
     if metric and not measured_in:
         out.append(
             f"this guard computes a metric ({metric}) and names no `measured_in:` — A PERFORMANCE CEILING NAMES "
