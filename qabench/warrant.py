@@ -18,6 +18,30 @@ One copy, because a contract with four copies is four contracts. The estate
 learned this with `test_qa_conformance.py`, which was a template copied into six
 repos and drifted into six meanings of `implemented`.
 
+EVERY RECORDED CONCLUSION IN THIS TREE IS DATED, AND NOTHING RE-READS ANY OF
+THEM. That is the general statement the rest of this module is an instance of,
+and four forms of it turned up in one day across two codebases, independently:
+
+  * a mutation watched red two days ago that silently stopped being able to
+    fail, because the product grew a mechanism producing the same observable;
+  * a reason asserting another row's status that had since changed;
+  * a line number in a justification that drifted 333 lines because the file
+    grew above it;
+  * A ROW'S REVIEW ITSELF, which goes stale when a row it depends on is
+    reviewed later — the composite case being the special case.
+
+All four were TRUE WHEN RECORDED and quietly stopped being load-bearing, and
+none was careless. That is what separates this from the denominator classes: a
+marker-keyed or surface-default population is wrong from the start, while these
+are CORRECT CONCLUSIONS EXPIRING, which no amount of re-reading can show.
+
+Two design properties, and they are why `judge_freshness` reports the way it
+does. REPORT STALE, NEVER WRONG: a dependency moving does not falsify the
+dependent, it means nobody has looked since the ground moved, and conflating
+those makes people redo sound work. And NAME WHICH DEPENDENCY MOVED AND WHEN —
+"GEN-03 is stale: ACT-05 reviewed 09-21, GEN-03 reviewed 09-20" is a lead;
+"GEN-03 is stale" is a chore.
+
 A JUSTIFICATION MAY NOT CONTAIN A POINTER THAT CAN MOVE INDEPENDENTLY OF THE
 CLAIM. This replaces "reasons go stale", which is both weaker and unactionable —
 it tells you to re-read everything, which nobody does. Three instances from one
@@ -234,4 +258,40 @@ def judge_claims(claims, statuses: dict, *, unresolved: int, unresolved_pin=None
         out.append(f"the extractor refused {unresolved} claim(s), pinned at {unresolved_pin}. Fewer refusals is "
                    "not automatically better: it is what disabling the confidence filter looks like, and that is "
                    "how phantoms get attributed. Move the pin in the commit that moves the parser")
+    return out
+
+
+def judge_freshness(rows) -> list[str]:
+    """Rows whose conclusion predates something it rests on. STALE, never wrong.
+
+    `rows` is [{id, reviewed: YYYY-MM-DD, depends_on: [id, ...]}] — the
+    cross-reference scan already resolves a reason's claims about other rows,
+    and a composite's parts table names its parts outright, so this is four
+    lines over data that exists.
+
+    A dependency moving does not falsify the dependent. It means nobody has
+    looked since the ground moved, and saying "wrong" where "stale" is true
+    makes people redo sound work — so the sentence names WHICH dependency moved
+    and WHEN, which turns a chore into a lead.
+    """
+    when, out = {}, []
+    for r in rows:
+        if isinstance(r, dict) and r.get("id") and r.get("reviewed"):
+            when[str(r["id"])] = str(r["reviewed"])
+    for r in rows:
+        if not isinstance(r, dict) or not r.get("id"):
+            out.append(f"row {r!r} has no id")
+            continue
+        mine = when.get(str(r["id"]))
+        if not mine:
+            out.append(f"{r['id']} carries no `reviewed:` date — a conclusion with no date cannot be told from "
+                       "one nobody has revisited")
+            continue
+        for dep in (r.get("depends_on") or []):
+            theirs = when.get(str(dep))
+            if theirs is None:
+                out.append(f"{r['id']} depends on {dep}, which this table does not hold")
+            elif theirs > mine:
+                out.append(f"{r['id']} is STALE: {dep} reviewed {theirs}, {r['id']} reviewed {mine} — not wrong, "
+                           "but nobody has looked since the ground moved")
     return out

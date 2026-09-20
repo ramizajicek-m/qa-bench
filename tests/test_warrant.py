@@ -123,3 +123,37 @@ def test_a_member_citation_is_not_a_coordinate(root):
 def test_a_coordinate_anywhere_in_a_list_is_refused(root):
     assert "LINE COORDINATE" in warrant.judge(
         w(evidence=["docs/ledger.md", "docs/ledger.md:40"]), root, TODAY)
+
+
+def test_a_row_reviewed_before_something_it_depends_on_is_stale_not_wrong():
+    """GEN-03 rests on ACT-05; ACT-05 was re-reviewed the next day. Nobody has
+    looked at GEN-03 since the ground moved — which is not the same as GEN-03
+    being wrong, and conflating them makes people redo sound work."""
+    out = warrant.judge_freshness([
+        {"id": "GEN-03", "reviewed": "2026-09-20", "depends_on": ["ACT-05", "MSG-04"]},
+        {"id": "ACT-05", "reviewed": "2026-09-21"},
+        {"id": "MSG-04", "reviewed": "2026-09-19"}])
+    assert out == ["GEN-03 is STALE: ACT-05 reviewed 2026-09-21, GEN-03 reviewed 2026-09-20 — not wrong, "
+                   "but nobody has looked since the ground moved"]
+
+
+def test_the_sentence_names_which_dependency_moved_and_when():
+    """"GEN-03 is stale" is a chore; naming the dependency and the date is a lead."""
+    out = warrant.judge_freshness([{"id": "A", "reviewed": "2026-09-01", "depends_on": ["B"]},
+                                   {"id": "B", "reviewed": "2026-09-05"}])
+    assert "B reviewed 2026-09-05" in out[0] and "A reviewed 2026-09-01" in out[0]
+
+
+def test_a_row_reviewed_after_its_dependencies_is_fresh():
+    assert warrant.judge_freshness([{"id": "A", "reviewed": "2026-09-10", "depends_on": ["B"]},
+                                    {"id": "B", "reviewed": "2026-09-05"}]) == []
+
+
+def test_an_undated_conclusion_is_named():
+    out = warrant.judge_freshness([{"id": "A", "depends_on": ["B"]}, {"id": "B", "reviewed": "2026-09-05"}])
+    assert "carries no `reviewed:` date" in out[0]
+
+
+def test_a_dependency_outside_the_table_is_named():
+    out = warrant.judge_freshness([{"id": "A", "reviewed": "2026-09-10", "depends_on": ["TICKET-9"]}])
+    assert "which this table does not hold" in out[0]

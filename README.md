@@ -1,5 +1,7 @@
 # qabench
 
+**Every recorded conclusion in a tree is dated, and nothing re-reads any of them.** The instruments below are the enforcement.
+
 The comprehensive QA tier as one package, driven by a project's `qa/manifest.yml`. Six projects run this instead of six copies that drift.
 
 What it proves, against a **running deployment** (it never boots the app):
