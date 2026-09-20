@@ -10,6 +10,7 @@ tool correctly four times first.
 """
 from __future__ import annotations
 
+import json
 import pathlib
 import subprocess
 import sys
@@ -97,3 +98,55 @@ def test_a_clean_target_is_not_warned_about(tmp_path, capsys):
     f = _repo(tmp_path)
     main([str(f), 's.replace("2", "4")', "--", sys.executable, "-c", "pass"])
     assert "UNCOMMITTED" not in capsys.readouterr().err
+
+
+def test_a_recorded_mutation_is_re_run_and_red_when_it_no_longer_fails(tmp_path, capsys):
+    """A mutation watched red once is a claim with an expiry nobody tracks. A
+    mutation recorded for "the typed value is still there" went red; two days
+    later drafts restored on mount landed, and the same mutation left all four
+    cases green. The record still read as evidence and had stopped being able
+    to fail."""
+    f = _repo(tmp_path)
+    record = tmp_path / "qa" / "mutations.json"
+
+    # Recorded on a day when the guard caught it.
+    caught = main(["--record", str(record), str(f), 's.replace("2", "99")',
+                   "--", sys.executable, "-c", "raise SystemExit(1)"])
+    assert caught == 1
+    assert json.loads(record.read_text())["mutations"][0]["verdict"] == "caught"
+
+    # Replayed on a day when nothing sees it any more.
+    import qabench.mutate as m
+    original = m.subprocess.run
+    m.subprocess.run = lambda cmd, *a, **k: (subprocess.CompletedProcess(cmd, 0)
+                                             if cmd and cmd[0] == sys.executable else original(cmd, *a, **k))
+    try:
+        assert m.replay(record, echo=lambda *_: None) == 1
+    finally:
+        m.subprocess.run = original
+
+
+def test_a_replayed_mutation_still_caught_is_green(tmp_path):
+    f = _repo(tmp_path)
+    record = tmp_path / "qa" / "mutations.json"
+    main(["--record", str(record), str(f), 's.replace("2", "99")',
+          "--", sys.executable, "-c", "raise SystemExit(1)"])
+    from qabench.mutate import replay
+    assert replay(record, echo=lambda *_: None) == 0
+
+
+def test_a_stale_anchor_is_a_stale_record_not_a_pass(tmp_path):
+    """The expression no longer applies: the code moved under the record."""
+    f = _repo(tmp_path)
+    record = tmp_path / "qa" / "mutations.json"
+    main(["--record", str(record), str(f), 's.replace("2", "99")',
+          "--", sys.executable, "-c", "raise SystemExit(1)"])
+    f.write_text("value = 7  # the anchor is gone\n")
+    from qabench.mutate import replay
+    assert replay(record, echo=lambda *_: None) == 1
+
+
+def test_replaying_an_empty_record_is_three_not_zero(tmp_path):
+    from qabench.mutate import replay
+    (tmp_path / "none.json").write_text('{"mutations": []}', encoding="utf-8")
+    assert replay(tmp_path / "none.json", echo=lambda *_: None) == 3

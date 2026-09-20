@@ -27,11 +27,38 @@ checkpoint BEFORE mutating, never after — and a warning at the moment of the
 mutation is where it can still be read.
 
     python -m qabench mutate <file> '<python expr over s>' -- <command...>
+    python -m qabench mutate --record qa/mutations.json <file> '<expr>' -- <command...>
+    python -m qabench mutate --replay qa/mutations.json
 
 The expression returns the mutated text, e.g. 's.replace("== 2", "== 1", 1)'.
 The command is arbitrary, so this serves a pytest repo and an `npm test` repo
 alike. Exit code is the COMMAND's, so 0 means the mutation SURVIVED — your guard
 cannot see it — and non-zero means a test caught it. Read it the right way round.
+
+A RECORDED MUTATION CAN OUTLIVE THE CODE IT WAS RECORDED AGAINST, which is why
+`--record` and `--replay` exist. A mutation was recorded for "the typed value is
+still there" and watched red. Two days later, drafts written per keystroke and
+restored on mount landed in the same product — so a remounted subtree now puts
+the typing straight back, and applying THE SAME RECORDED MUTATION leaves all
+four cases GREEN. The record still reads as evidence; it stopped being able to
+fail. Nothing about re-reading the file shows this, and only re-running the
+mutation does. So a mutation watched red once is a claim with an expiry nobody
+tracks, and treating it as permanent evidence is exactly the "green means
+nothing changed" error this kit exists to refuse.
+
+`--replay` re-applies every recorded mutation and is RED when one that was
+caught now survives, or when its expression no longer applies at all (a stale
+anchor is a stale record, not a pass). The rule the repair generalises to: A
+MUTATION MUST DISTINGUISH THE PROPERTY IT CLAIMS FROM A MECHANISM THAT MERELY
+PRODUCES THE SAME OBSERVABLE. There, asserting that no restore banner appeared
+separated SURVIVED from RESTORED, and the mutation went red on the crossing case
+and green on the other — which is its real behaviour.
+
+Its sibling, from the same row: a rotation fixture turned 390x844 into 844x390
+while the client asks `max-width: 900` in all three places, so both ends sit on
+the same side of every breakpoint and both cases would have passed with every
+viewport listener deleted. A FIXTURE THAT VARIES A PARAMETER ACROSS NO THRESHOLD
+IS NOT VARYING IT.
 
 Two refusals, both earned:
 
@@ -49,6 +76,8 @@ Two refusals, both earned:
 """
 from __future__ import annotations
 
+import datetime as dt
+import json
 import os
 import pathlib
 import shutil
@@ -79,8 +108,57 @@ def _uncommitted(target: pathlib.Path) -> bool:
     return p.returncode != 0 or bool(p.stdout.strip())
 
 
+def _record_path(argv: list[str], flag: str) -> pathlib.Path | None:
+    return pathlib.Path(argv[argv.index(flag) + 1]) if flag in argv and len(argv) > argv.index(flag) + 1 else None
+
+
+def _load(path: pathlib.Path) -> list[dict]:
+    try:
+        return json.loads(path.read_text(encoding="utf-8")).get("mutations", [])
+    except (OSError, ValueError):
+        return []
+
+
+def replay(path: pathlib.Path, *, echo=print) -> int:
+    """Re-run every recorded mutation. RED when one that was caught now survives.
+
+    A record is a claim with an expiry: the product can grow a mechanism that
+    produces the same observable the assertion was watching, and the mutation
+    then cannot fail. Re-reading the file never shows that.
+    """
+    records = _load(path)
+    if not records:
+        echo(f"mutate --replay: no mutations recorded in {path} — nothing re-run (exit 3)")
+        return 3
+    stale, survived = [], []
+    for r in records:
+        code = main([r["file"], r["expr"], "--", *r["command"]])
+        if code == 2:
+            stale.append(r)
+            echo(f"  STALE   {r['file']}  {r['expr']}  — the expression no longer applies; a stale anchor is a "
+                 "stale record, not a pass")
+        elif code == 0 and r.get("verdict") == "caught":
+            survived.append(r)
+            echo(f"  SURVIVED {r['file']}  {r['expr']}  — recorded as CAUGHT on {r.get('recorded')}, and today "
+                 "nothing sees it. The record still reads as evidence and stopped being able to fail")
+        else:
+            echo(f"  ok      {r['file']}  {r['expr']}")
+    echo(f"mutate --replay: {len(records)} recorded, {len(survived)} no longer caught, {len(stale)} stale")
+    return 1 if (survived or stale) else 0
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
+    if argv and argv[0] == "--replay":
+        path = _record_path(argv, "--replay")
+        if not path:
+            print("mutate --replay: needs a record file", file=sys.stderr)
+            return 2
+        return replay(path)
+    record_to = _record_path(argv, "--record")
+    if record_to:
+        i = argv.index("--record")
+        argv = argv[:i] + argv[i + 2:]
     if len(argv) < 3:
         print(__doc__.strip().splitlines()[0], file=sys.stderr)
         print("usage: python -m qabench mutate <file> '<expr>' -- <command...>",
@@ -134,7 +212,16 @@ def main(argv: list[str] | None = None) -> int:
             # cannot see it". The file is restored either way by the `finally`.
             print(f"mutate: could not run {rest[0]!r}: {exc}", file=sys.stderr)
             return 2
-        return completed.returncode
+        rc = completed.returncode
+        if record_to:
+            records = [r for r in _load(record_to)
+                       if (r["file"], r["expr"]) != (str(target), expr)]
+            records.append({"file": str(target), "expr": expr, "command": rest,
+                            "verdict": "caught" if rc != 0 else "survived",
+                            "exit": rc, "recorded": dt.date.today().isoformat()})
+            record_to.parent.mkdir(parents=True, exist_ok=True)
+            record_to.write_text(json.dumps({"mutations": records}, indent=1), encoding="utf-8")
+        return rc
     finally:
         # From the BACKUP, never from HEAD. This line is the whole point.
         target.write_bytes(backup.read_bytes())
