@@ -8,6 +8,7 @@
     python -m qabench asked [--changed-since "7 days ago"] [--json]   # every surface's questions answered or owned
     python -m qabench census [--repo DIR] [--json]   # every declared key reaches every consumer layer, or is exempted with evidence
     python -m qabench population [--repo DIR] [--json]   # every guard sweeps the population it claims over, not the example it was written against
+    python -m qabench ran --name NAME [--json] -- COMMAND ...   # run it without a shell, keep the whole output, and refuse to call a run that did not finish a pass
     python -m qabench escapes [--ledger PATH] [--benchmark PATH] [--days N] [--json]   # escape rate + ODC trigger histogram; red on an unclassified finder
     python -m qabench gap [--repo DIR] [--slug OWNER/NAME] [--workflow F] [--since "1 day ago"] [--json]
 """
@@ -16,7 +17,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from . import __version__, scans, census, core, escapes, gap, manifest, nightly, population, report, requirements, shapes
+from . import __version__, scans, census, core, escapes, gap, manifest, nightly, population, ran as _ran, report, requirements, shapes
 from .stages import endpoints_by_role, explore, pages_by_role, smoke
 
 STAGES = {"smoke": smoke.main, "pages_by_role": pages_by_role.main, "endpoints_by_role": endpoints_by_role.main,
@@ -66,6 +67,8 @@ def main(argv: list[str] | None = None) -> int:
         return requirements.run_asked(rest)
     if cmd == "census":                     # reads source and descriptors, never a deployment
         return census.run(rest)
+    if cmd == "ran":                        # runs a command and judges its completion; no manifest pin
+        return _ran.run(rest)
     if cmd == "population":                 # reads the guard register and runs both sides, never a deployment
         return population.run(rest)
     if cmd == "escapes":                    # reads a ledger or the seeded-fault benchmark, never a deployment

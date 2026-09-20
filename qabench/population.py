@@ -67,9 +67,10 @@ path), a transport failure (the catch around fetch), and a SUCCESS carrying an
 unexpected body, which takes no error path at all and throws inside the
 renderer after the region has been cleared. The third is the one everybody
 forgets and the only one that produces STA-07's literal subject, a blank white
-screen; a sweep that sends 500 and only 500 cannot reach it. The same for ACT-10, a PAIRING — a
-button's verb against its success sentence — where the guard checked one end:
-20 of 183 messages resolved to a control and the other 163 were nobody's.
+screen; a sweep that sends 500 and only 500 cannot reach it. ACT-10 is the same
+shape in a PAIRING — a button's verb against its success sentence — where the
+guard checked one end: 20 of 183 messages resolved to a control, and the other
+163 were nobody's.
 
 The sharpest case of all is a differential whose corpus is the INTERSECTION of
 the two things it compares: the field app's 16 HTTP reason phrases against
@@ -86,6 +87,18 @@ makes afterwards. A subject command therefore prints only the members the guard
 PROVED it judged. Everything it could not resolve it leaves out, where this
 module names it as a gap — which is the honest denominator, and removes the
 reason to guess: a guard can no longer buy coverage with an attribution.
+
+A CLOSED DENOMINATOR IS ACHIEVABLE AT SCALE, and the obvious objection — that
+this only works on small corpora — has a counterexample in the tree. anat's
+MSG-04 guard does not report its unjudged share, it drives it to zero:
+`test_no_sentence_is_hidden_from_the_sweep` asserts that NO person-facing error
+detail is dynamic, so a sentence the AST walk cannot read is a failure rather
+than a quiet gap in the denominator. Page literals judged, the page helper
+executed under node with every branch judged by the same rule, pass-throughs
+traced to the server or to apiFetch, 1,399 server sentences judged, nothing
+left over. That is the reference implementation, and the ambition this module
+reports against: a guard states its denominator and drives the unjudged share
+to zero, or names what is in it.
 
 WHAT IT CANNOT SEE, stated: that the guard's ORACLE is right. A guard may sweep
 the whole population and still assert the wrong thing about each member — FRM-04
