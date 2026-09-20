@@ -79,11 +79,17 @@ phrases in both lists. It could not see the difference it existed to measure.
 The population there is the union; the subject was the intersection, and this
 module prints the twenty-three names in the first and not the second.
 
-REFUSE, DO NOT ATTRIBUTE — the failure in the other direction. A resolver that
-guessed each toast's button from the nearest enclosing named function produced
-three confident phantoms in one hour, and a phantom costs more than a miss: it
-costs somebody the time to disbelieve the guard, and then the real findings it
-makes afterwards. A subject command therefore prints only the members the guard
+REFUSE, DO NOT ATTRIBUTE — the failure in the other direction, and it now has a
+number. A resolver that guessed each toast's button from the nearest enclosing
+named function produced three confident phantoms in one hour, and a phantom
+costs more than a miss: it costs somebody the time to disbelieve the guard, and
+then the real findings it makes afterwards. Measured on a second corpus the same
+day: of 8 cross-references in a tracker's reasons, a strict extractor RESOLVED 3
+and REFUSED 5 — and both real defects were inside the 3. Refusing five of eight
+cost zero findings, while the loose pass over the same corpus produced two
+phantoms that had to be withdrawn by hand. Fewer claims examined, same defects
+found, none invented; the objection that a confident-only parser under-detects
+did not survive contact with the data. A subject command therefore prints only the members the guard
 PROVED it judged. Everything it could not resolve it leaves out, where this
 module names it as a gap — which is the honest denominator, and removes the
 reason to guess: a guard can no longer buy coverage with an attribution.

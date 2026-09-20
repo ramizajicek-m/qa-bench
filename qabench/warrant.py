@@ -107,3 +107,66 @@ def judge(entry, root: Path, today: dt.date, *, subject: str = "member", label: 
         return f"{label} {who!r} expired {due} — re-verify the reason against the code, or close the gap"
 
     return ""
+
+
+#: THE MEASURED CASE FOR REFUSING RATHER THAN ATTRIBUTING, which this kit has
+#: asserted all day without a number until now. Over the same 109 rows:
+#:
+#:     mentions of another row carrying a status word (hand scan):  8, of which 2 wrong
+#:     what a strict extractor RESOLVES:                            3
+#:     what it REFUSES:                                             5
+#:     wrong citations inside the resolved 3:                       BOTH
+#:
+#: Refusing five of eight cost ZERO findings. That is the answer to the obvious
+#: objection that a confident-only parser under-detects: it found everything the
+#: loose one found, while the loose one also produced two phantoms that had to be
+#: withdrawn by hand. Fewer claims examined, same defects found, none invented.
+#:
+#: The refusals are refused for stateable reasons — a sentence carrying both an
+#: open-word and a done-word near the id, or naming two different rows — which is
+#: genuine ambiguity rather than parser weakness, and is why the answer is to
+#: COUNT them rather than guess. The count is pinned, so the share of the table
+#: nothing examines cannot quietly grow, and disabling the confidence filter
+#: collapses it and fires the ratchet: the refusal is load-bearing, not decoration.
+CLAIM_KEYS = ("row", "cites", "asserts")
+
+
+def judge_claims(claims, statuses: dict, *, unresolved: int, unresolved_pin=None) -> list[str]:
+    """Every way a table's cross-references disagree with the table itself.
+
+    A justification that asserts ANOTHER ROW'S STATUS is not prose: it is a
+    claim about a value the table already holds, and it can be verified on every
+    run at zero cost. PRF-06 said STA-01 was absent and STA-01 was implemented;
+    PRT-08 said PRT-03 was missing and PRT-03 was implemented. Each encodes a
+    dependency the next person plans around, so the next person starts by
+    building something that already exists.
+
+    This is the JUDGING half only. Extraction stays in the project, where the
+    vocabulary lives and where all the risk is; six projects share the four
+    lines that compare, not the parser that guesses.
+
+    A claim whose blocker is OUTSIDE the table — a ticket, another repo, a
+    person, a vendor — is unresolvable by construction and belongs in the
+    project's own declared exclusions, never in `claims` and never read as clean.
+    """
+    out: list[str] = []
+    for c in claims:
+        if not isinstance(c, dict) or any(not c.get(k) for k in CLAIM_KEYS):
+            out.append(f"claim {c!r} lacks one of {', '.join(CLAIM_KEYS)}")
+            continue
+        actual = statuses.get(str(c["cites"]))
+        if actual is None:
+            out.append(f"{c['row']} cites {c['cites']}, which this table does not hold — a cross-reference to "
+                       "something outside the table is unresolvable by construction and is excluded by "
+                       "declaration, not by being compared to nothing")
+        elif str(actual) != str(c["asserts"]):
+            out.append(f"{c['row']} justifies itself by saying {c['cites']} is {c['asserts']!r}; {c['cites']} is "
+                       f"{actual!r} — a blocker that has since been built, and the next person plans around it")
+    if unresolved_pin is None:
+        out.append(f"the extractor refused {unresolved} claim(s) and nothing pins that number — an unresolved "
+                   "share that is not asserted is a share that can quietly grow")
+    elif unresolved != unresolved_pin:
+        out.append(f"the extractor refused {unresolved} claim(s), pinned at {unresolved_pin}. Fewer refusals is "
+                   "not automatically better: it is what disabling the confidence filter looks like, and that is "
+                   "how phantoms get attributed. Move the pin in the commit that moves the parser")
+    return out

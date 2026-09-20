@@ -62,3 +62,45 @@ def test_there_is_no_staleness_argument(root):
     import inspect
     assert "stale_after_days" not in inspect.signature(warrant.judge).parameters
     assert warrant.judge(w(verified="2020-01-01"), root, TODAY) == ""
+
+
+STATUSES = {"STA-01": "implemented", "PRT-03": "implemented", "ACT-11": "absent"}
+
+
+def test_a_row_justified_by_a_blocker_that_has_been_built_is_named():
+    """PRF-06 says STA-01 is absent; STA-01 is implemented. The next person
+    starts by building a loading indicator that already exists."""
+    problems = warrant.judge_claims(
+        [{"row": "PRF-06", "cites": "STA-01", "asserts": "absent"}], STATUSES, unresolved=5, unresolved_pin=5)
+    assert len(problems) == 1
+    assert "PRF-06 justifies itself" in problems[0] and "'implemented'" in problems[0]
+    assert "plans around it" in problems[0]
+
+
+def test_a_true_cross_reference_is_silent():
+    assert warrant.judge_claims(
+        [{"row": "X", "cites": "ACT-11", "asserts": "absent"}], STATUSES, unresolved=5, unresolved_pin=5) == []
+
+
+def test_a_citation_outside_the_table_is_not_compared_to_nothing():
+    problems = warrant.judge_claims(
+        [{"row": "X", "cites": "TICKET-4", "asserts": "absent"}], STATUSES, unresolved=0, unresolved_pin=0)
+    assert "does not hold" in problems[0] and "excluded by declaration" in problems[0]
+
+
+def test_the_refusal_count_must_be_pinned():
+    """An unresolved share that is not asserted is a share that can grow."""
+    problems = warrant.judge_claims([], STATUSES, unresolved=5)
+    assert "nothing pins that number" in problems[0]
+
+
+def test_fewer_refusals_is_not_automatically_better():
+    """Disabling the confidence filter collapses the count — which is exactly
+    how the two withdrawn phantoms would have been attributed. The pin is what
+    makes the refusal load-bearing rather than decoration."""
+    problems = warrant.judge_claims([], STATUSES, unresolved=0, unresolved_pin=5)
+    assert "Fewer refusals is not automatically better" in problems[0]
+
+
+def test_a_malformed_claim_is_named_not_skipped():
+    assert "lacks one of" in warrant.judge_claims([{"row": "X"}], STATUSES, unresolved=0, unresolved_pin=0)[0]
