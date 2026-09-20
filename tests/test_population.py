@@ -231,3 +231,32 @@ def test_a_population_read_from_requirement_prose_is_a_derivation(repo):
                               "evidence": "docs/ledger.md", "review_by": "2026-10-15"}])
     assert row["missing"] == ["ACT-11"] and row["exempted"] == 1
     assert row["problems"] == ["1 of 4 never examined: ACT-11"]   # the derivation itself is not a problem
+
+
+def test_an_empty_live_corpus_is_allowed_only_when_the_detector_is_proven(repo):
+    """A cross-reference check over a 109-row tracker found exactly one real
+    defect; correct it and the scan resolves ZERO. A guard whose only comparison
+    disappears the moment you fix what it found cannot fail afterwards, and an
+    empty corpus reads exactly like a clean table. Capability and corpus are two
+    claims."""
+    bare = judged(repo, population={"cmd": nothing(), "count": 0}, subject={"cmd": nothing()})
+    assert bare["unrunnable"] and "Declare a `capability:` self-test" in bare["problems"][-1]
+
+    proven = judged(repo, capability={"cmd": emit("detects a stale citation", "ignores a past-tense mention")},
+                    population={"cmd": nothing(), "count": 0}, subject={"cmd": nothing()})
+    assert proven["problems"] == [] and proven["capability"] is True
+    assert "live corpus is EMPTY" in proven["note"] and "proven elsewhere" in proven["note"]
+
+
+def test_a_detector_whose_self_test_fails_is_red_whatever_its_scan_says(repo):
+    """The converse of FRM-10: a detector that quietly stopped detecting over a
+    NON-empty corpus. The capability runs on every invocation, not only when the
+    corpus is empty."""
+    row = judged(repo, capability={"cmd": "/bin/sh -c exit2"})
+    assert row["unrunnable"] and "capability self-test did not pass" in row["problems"][0]
+    assert "is not proven, whatever its live scan reports" in row["problems"][0]
+
+
+def test_a_proven_detector_over_a_full_corpus_still_compares(repo):
+    row = judged(repo, capability={"cmd": emit("ok")}, subject={"cmd": emit("a")})
+    assert row["capability"] is True and row["missing"] == ["b", "c"]

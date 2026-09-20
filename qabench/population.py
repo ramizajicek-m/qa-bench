@@ -46,7 +46,15 @@ FOUR RULES, each paid for by one of the rows above:
      stops a widened corpus being narrowed back later.
   2. ZERO IS RED. A subject of nothing against a population of something is a
      finding, never a pass: a detector matching nothing is indistinguishable
-     from a clean tree (FRM-10).
+     from a clean tree (FRM-10). And its converse, which a live corpus of one
+     forced into the open: a guard whose POPULATION may legitimately be empty
+     declares a `capability:` command — a self-test on a permanent synthetic
+     corpus, proving the detector still detects — and then an empty live scan
+     is REPORTED rather than judged. Capability and corpus are two claims, and
+     the only honest way to let a live scan find nothing is to prove the
+     detector elsewhere. The capability runs on every invocation, not only when
+     the corpus is empty, because a detector that quietly stopped detecting
+     over a NON-empty corpus is FRM-10 itself.
   3. THE GAP IS NAMED MEMBER BY MEMBER, so "credited to every template alike"
      is impossible to write (FRM-01).
   4. THE POPULATION COUNT IS PINNED AND THE PIN IS EXACT. It may rise in the
@@ -111,6 +119,19 @@ each one read rather than filled in, because SEC-04 deliberately says less (a
 login error must not reveal whether the account exists) and that is a different
 question, not a gap. A sweep whose exclusion list was filled in quickly to get
 green would be the defect wearing the fix's clothes.
+
+A LIVE CORPUS OF ONE IS THE HARD CASE, and it is where `capability:` comes
+from. A cross-reference check over a 109-row tracker — does a row justify itself
+by asserting another row's status, and is that status still true — found exactly
+one real defect. Correct that defect and the scan resolves ZERO: its entire live
+corpus is the thing it was written for. A guard whose only comparison disappears
+the moment you fix what it found cannot fail afterwards, and an empty corpus
+reads exactly like a clean table. The class was real and detectable; the corpus
+was one. So the detector's capability is proven on synthetic prose that cannot
+go away — a subject-attached stale citation must be caught, a past-tense mention
+("the one thing that was missing is now supplied by the PRT-03 work") must not
+be, a bare pointer ("the same reasoning as NAV-03") must not be — and the live
+scan is then allowed to find nothing without that reading as a pass.
 
 A CLOSED DENOMINATOR IS ACHIEVABLE AT SCALE, and the obvious objection — that
 this only works on small corpora — has a counterexample in the tree. anat's
@@ -225,6 +246,8 @@ class Row:
     exempted: int = 0
     problems: list[str] = field(default_factory=list)     # why the row is red
     unrunnable: bool = False                              # a command exited non-zero: did not run
+    capability: bool = False                              # a self-test proved the detector still detects
+    note: str = ""                                        # reported, not judged
 
 
 def read_members(root: Path, cmd: str, *, timeout: float = 120.0) -> Set_:
@@ -287,6 +310,7 @@ def judge(spec: dict, root: Path, today: dt.date, *, run=read_members) -> Row:
     if not row.claims:
         row.problems.append("no `claims:` — the one sentence the population is the population OF")
 
+    cap = (spec.get("capability") or {}).get("cmd")
     pop_spec = spec.get("population") or {}
     sub_spec = spec.get("subject") or {}
     derived = str(pop_spec.get("derived_from") or "")
@@ -297,6 +321,15 @@ def judge(spec: dict, root: Path, today: dt.date, *, run=read_members) -> Row:
     if not pop_spec.get("cmd") or not sub_spec.get("cmd"):
         row.problems.append("a guard names both a population.cmd and a subject.cmd, or it is a claim about itself")
         return row
+
+    if cap:
+        proof = run(root, cap)
+        if proof.error:
+            row.problems.append(f"the capability self-test did not pass: {proof.error} — a detector whose "
+                                "self-test cannot run is not proven, whatever its live scan reports")
+            row.unrunnable = True
+            return row
+        row.capability = True
 
     pop, sub = run(root, pop_spec["cmd"]), run(root, sub_spec["cmd"])
     if pop.error or sub.error:
@@ -313,9 +346,17 @@ def judge(spec: dict, root: Path, today: dt.date, *, run=read_members) -> Row:
     excused = {str(e.get("member")) for e in exemptions if isinstance(e, dict) and not judge_exemption(e, root, today)}
 
     if not pop.members:
+        if row.capability:
+            # Reported, not judged. The detector is proven on a corpus that
+            # cannot go away, so a live scan of nothing is a fact about the
+            # tree rather than a verdict about the guard.
+            row.note = (f"live corpus is EMPTY; capability proven by {cap!r}. Nothing to compare, and that is "
+                        "allowed here precisely because the detector is proven elsewhere")
+            return row
         row.unrunnable = True
         row.problems.append(f"{pop_spec['cmd']!r} enumerated NOTHING — a population of nothing cannot show that "
-                            "anything was swept; exclude the guard by declaration or fix the enumeration")
+                            "anything was swept. Declare a `capability:` self-test on a corpus that cannot go "
+                            "empty, exclude the guard by declaration, or fix the enumeration")
         return row
 
     missing = [m for m in pop.members if m not in set(sub.members)]
@@ -391,7 +432,10 @@ def run(argv: list[str], *, today: dt.date | None = None) -> int:
         for r in out["rows"]:
             mark = "RED " if r["problems"] else "ok  "
             print(f"  {mark}{r['id']:38} {r['check']:4} {r['subject']:>5}/{r['population']:<5} swept"
+                  + ("  [capability proven]" if r["capability"] else "")
                   + (f"   ({r['exempted']} exempted)" if r["exempted"] else ""))
+            if r["note"]:
+                print(f"       {r['note']}")
             for p in r["problems"]:
                 print(f"       {p}")
         for c in out["unregistered"]:
