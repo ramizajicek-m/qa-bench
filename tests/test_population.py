@@ -251,7 +251,8 @@ def test_an_empty_live_corpus_is_allowed_only_when_the_detector_is_proven(repo):
 def cap(**over) -> dict:
     """A capability that proves BOTH halves: it fires, and it stays silent on a
     REAL near-miss out of the tree."""
-    c = {"fires": emit("caught the stale citation"),
+    c = {"fires": [{"cmd": emit("caught the stale citation"), "from": "docs/ledger.md",
+                    "was": "PRF-06 justifies itself by STA-01 being absent"}],
          "silent": [{"cmd": emit("silent"), "from": "docs/ledger.md",
                      "was": "the one thing that was missing is now supplied by the PRT-03 work"}]}
     c.update(over)
@@ -263,7 +264,8 @@ def test_a_capability_with_no_negative_case_is_refused_by_name(repo):
     DISCRIMINATES — FRM-04's switch tested against the cases in the switch, and
     over an empty corpus indistinguishable from a detector that fires on
     everything."""
-    row = judged(repo, capability={"fires": emit("caught it")})
+    row = judged(repo, capability={"fires": [{"cmd": emit("caught it"), "from": "docs/ledger.md",
+                                              "was": "the known bypass"}]})
     assert any("no `silent:` — REFUSED by name" in p and "FIRES, never that it DISCRIMINATES" in p
                for p in row["problems"])
 
@@ -292,7 +294,8 @@ def test_a_detector_whose_self_test_fails_is_red_whatever_its_scan_says(repo):
     """The converse of FRM-10: a detector that quietly stopped detecting over a
     NON-empty corpus. The capability runs on every invocation, not only when the
     corpus is empty."""
-    row = judged(repo, capability=cap(fires="/bin/sh -c exit2"))
+    row = judged(repo, capability=cap(fires=[{"cmd": "/bin/sh -c exit2", "from": "docs/ledger.md",
+                                              "was": "the known bypass"}]))
     assert row["unrunnable"] and "capability self-test did not pass" in row["problems"][0]
     assert "is not proven, whatever its live scan reports" in row["problems"][0]
 
@@ -457,3 +460,19 @@ def test_the_derivation_travels_with_the_numbers(repo):
     sincerely, and neither number said which to trust."""
     assert judged(repo)["derived_from"] == "ast"
     assert judged(repo, population={"derived_from": "reachability"})["derived_from"] == "reachability"
+
+
+def test_a_known_positive_must_be_a_real_case_not_a_bare_command(repo):
+    """A detector is written from a MEMORY of the instance it was built for. A
+    verifier reported 16 of 23 verified and had the one independently confirmed
+    bypass in the CLEARED list; re-running found nothing, re-reading found
+    nothing, and checking the case whose answer was already known found it."""
+    row = judged(repo, capability=cap(fires=emit("caught it")))
+    assert any("must be a list of REAL known-positives" in p and "MEMORY of the instance" in p
+               for p in row["problems"])
+
+
+def test_a_known_positive_names_where_it_comes_from(repo):
+    row = judged(repo, capability=cap(fires=[{"cmd": emit("caught it"), "from": "docs/invented.md",
+                                              "was": "a case nobody has"}]))
+    assert any("must be REAL, out of the tree" in p for p in row["problems"])

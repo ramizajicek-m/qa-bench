@@ -296,7 +296,10 @@ And the register:
         subject:
           cmd: "python3 scripts/guards/act11.py --subjects"
         capability:                        # required when the live corpus may be empty
-          fires: "python3 scripts/guards/act11.py --selftest-positive"
+          fires:                           # REAL known-positives, best of all the originating instance
+            - cmd: "python3 scripts/guards/act11.py --selftest add-modal"
+              from: templates/admin/clients.html
+              was: "data-close-add-modal wired straight to _closeAddModal"
           silent:                          # REAL near-misses the looser sibling fired on
             - cmd: "python3 scripts/guards/act11.py --selftest past-tense"
               from: qa/ui-standard.md
@@ -483,8 +486,17 @@ def judge_capability(cap: dict, root: Path) -> list[str]:
     cannot drift into a synthetic case somebody wrote to be easy to pass.
     """
     out: list[str] = []
-    if not cap.get("fires"):
-        out.append("capability lacks `fires:` — the command proving the detector catches its positive case")
+    fires = cap.get("fires")
+    if isinstance(fires, str):
+        out.append("capability `fires:` must be a list of REAL known-positives, not a bare command. A detector is "
+                   "written from a MEMORY of the instance it was built for, not from the instance: a verifier "
+                   "that reported 16 of 23 dialogs cleared had the one independently-confirmed bypass in the "
+                   "CLEARED list, and no amount of re-running or re-reading found that — checking the one case "
+                   "whose answer was already known did")
+        return out
+    if not fires:
+        out.append("capability lacks `fires:` — at least one REAL known-positive the detector must catch, best "
+                   "of all the instance it was written for")
     silent = cap.get("silent")
     if not silent:
         out.append("capability has no `silent:` — REFUSED by name, like a population derived from naming. An "
@@ -494,7 +506,7 @@ def judge_capability(cap: dict, root: Path) -> list[str]:
         return out
     if not isinstance(silent, list):
         return out + ["capability `silent:` must be a list of near-misses"]
-    for n in silent:
+    for n in list(silent) + (fires if isinstance(fires, list) else []):
         if not isinstance(n, dict):
             out.append(f"near-miss {n!r} is not a mapping with {', '.join(NEAR_MISS_KEYS)}")
             continue
@@ -579,7 +591,7 @@ def judge(spec: dict, root: Path, today: dt.date, *, run=read_members) -> Row:
         if problems:
             row.problems.extend(problems)
             return row
-        for cmd in [cap_spec["fires"]] + [n["cmd"] for n in cap_spec["silent"]]:
+        for cmd in [n["cmd"] for n in cap_spec["fires"]] + [n["cmd"] for n in cap_spec["silent"]]:
             proof = run(root, cmd)
             if proof.error:
                 row.problems.append(f"the capability self-test did not pass: {proof.error} — a detector whose "
@@ -633,7 +645,8 @@ def judge(spec: dict, root: Path, today: dt.date, *, run=read_members) -> Row:
             # Reported, not judged. The detector is proven on a corpus that
             # cannot go away, so a live scan of nothing is a fact about the
             # tree rather than a verdict about the guard.
-            row.note = (f"live corpus is EMPTY; capability proven by {cap_spec['fires']!r} against "
+            row.note = (f"live corpus is EMPTY; capability proven by {len(cap_spec['fires'])} known-positive(s) "
+                        f"against "
                         f"{len(cap_spec['silent'])} real near-miss(es). Nothing to compare, and that is "
                         "allowed here precisely because the detector is proven elsewhere")
             return row
