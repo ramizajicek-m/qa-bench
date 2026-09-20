@@ -128,6 +128,30 @@ every transform proving it did not shrink what it touched. Anchor to structure �
 a tag, an AST node — rather than cleaning text to make a pattern work. When a
 pattern needs the text cleaned to be correct, the pattern is wrong.
 
+A COVERAGE RATCHET AND A PROPERTY RATCHET ARE DIFFERENT INSTRUMENTS AND A
+PROJECT NEEDS BOTH. Measuring a migration is a real thing to measure; it is just
+not the property, and the day a project confuses them is the day its guards go
+green by being emptied. A RATCHET KEYED ON THE SHAPE OF THE OLD CODE EMPTIES AS
+THE FIX LANDS, AND AN EMPTY RATCHET IS GREEN — the number falls as the codebase
+improves and reads as progress the whole way down. So the question to ask of any
+new ratchet is one line: WHAT DOES THIS COUNT WHEN THE WORK SUCCEEDS?
+
+Three ceilings over 672 raw call sites — 55 with nothing at all, 145 checking
+`.ok` and dying on a rejection — every number true, every ceiling shrink-only,
+and all three emptying as the migration proceeds. THE REPAIR IS NOT A
+REPLACEMENT: a FOURTH bucket keyed on the PROPERTY rather than the call shape —
+helper sites that use the result without testing it, six today. The helper
+reports failures by default, so the banner is there; what those sites add is a
+screen that ALSO renders a fallback as fact beside it, an empty state asserting
+"you have none" next to a banner saying the load failed. A CARELESS MIGRATION
+LOWERS THE FIRST THREE AND RAISES THE FOURTH. No single ceiling can see that;
+the four together can, which is why `paired_with:` is required on a reach guard.
+
+And the mutation that demonstrates it is the model, because THE NON-MOVEMENT IS
+THE DEMONSTRATION: a carelessly migrated call takes the fourth to 7 against a
+ceiling of 6 AND THE RAW CEILINGS DO NOT MOVE. Asserting what must not move is
+as much of the proof as asserting what must.
+
 REACH IS A DENOMINATOR, AND A DENOMINATOR NEEDS ITS OWN COVERAGE MEASUREMENT.
 For every blessed helper, how many call sites go through it? Mechanical,
 countable, and nobody was asking. On anat: AnatFlash.toast 987 against one stray
@@ -1033,7 +1057,7 @@ def judge_pin(pinned, actual: int, shrunk, root: Path) -> str:
             "while the work that was meant to make it meaningful is happening")
 
 
-def judge(spec: dict, root: Path, today: dt.date, *, run=read_members, surfaces=()) -> Row:
+def judge(spec: dict, root: Path, today: dt.date, *, run=read_members, surfaces=(), register=()) -> Row:
     """One guard: run both sides, compare by member, apply the four rules."""
     row = Row(id=str(spec.get("id") or "?"), check=str(spec.get("check") or ""),
               claims=str(spec.get("claims") or ""),
@@ -1124,6 +1148,24 @@ def judge(spec: dict, root: Path, today: dt.date, *, run=read_members, surfaces=
     if kind not in ("sweep", "reach"):
         row.problems.append(f"kind must be `sweep` or `reach`, not {kind!r}")
     complement = spec.get("complement")
+    if kind == "reach":
+        paired = spec.get("paired_with")
+        by_id = {str(g.get("id")): g for g in register if isinstance(g, dict)}
+        if not paired:
+            row.problems.append(
+                "a `reach` guard names `paired_with:` — the id of a PROPERTY guard whose count moves the "
+                "OPPOSITE way. A RATCHET KEYED ON THE SHAPE OF THE OLD CODE EMPTIES AS THE FIX LANDS, AND AN "
+                "EMPTY RATCHET IS GREEN: three ceilings over 672 raw call sites, every number true and every "
+                "ceiling shrink-only, all three emptying as the migration proceeds. The repair is not a "
+                "replacement but a FOURTH bucket keyed on the property — helper sites that use the result "
+                "without testing it — which RISES when a careless migration lowers the other three. Ask of any "
+                "new ratchet: WHAT DOES THIS COUNT WHEN THE WORK SUCCEEDS?")
+        elif str(paired) not in by_id:
+            row.problems.append(f"`paired_with: {paired}` names no guard in this register")
+        elif str((by_id[str(paired)].get("kind") or "sweep")) == "reach":
+            row.problems.append(
+                f"`paired_with: {paired}` is another REACH guard — two coverage ratchets empty together. The "
+                "pair must be a PROPERTY guard, which moves the opposite way")
     if kind == "reach" and not complement:
         row.problems.append(
             "a `reach` guard MUST declare `complement:` — REFUSED by name, like a population derived from "
@@ -1340,7 +1382,7 @@ def run_population(root: Path, cfg: dict, *, today: dt.date | None = None, run=r
     doc = yaml.safe_load(reg_path.read_text(encoding="utf-8")) if reg_path.exists() else None
     guards = (doc or {}).get("guards") or []
     surfaces = tuple(cfg.get("surfaces") or ())
-    rows = [judge(g, root, today, run=run, surfaces=surfaces) for g in guards]
+    rows = [judge(g, root, today, run=run, surfaces=surfaces, register=guards) for g in guards]
 
     # The completeness half. A check the manifest calls `implemented` with no
     # registered guard is the state every row above was found in: evidence that

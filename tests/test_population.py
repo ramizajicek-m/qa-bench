@@ -370,8 +370,9 @@ def test_a_reachability_population_is_a_derivation(repo):
 
 def reachy(**over):
     """A reach guard: the population is every call site, the subject is those
-    that go through the blessed helper."""
-    g = {"kind": "reach",
+    that go through the blessed helper. Paired by default with the property
+    guard that moves the opposite way, since the module now requires it."""
+    g = {"kind": "reach", "paired_with": "uses-the-result-without-testing-it",
          "population": {"derived_from": "ast", "cmd": emit("a", "b", "c", "d"), "count": 4},
          "subject": {"cmd": emit("a")}}
     g.update(over)
@@ -397,7 +398,8 @@ def test_the_complement_is_partitioned_and_only_the_residue_is_a_finding(repo):
 
 
 def test_a_fully_covered_complement_is_clean(repo):
-    row = judged(repo, **reachy(complement=[{"name": "global wrappers", "cmd": emit("b", "c", "d"), "proven_by": "tests/test_x.py::test_global"}]))
+    row = reach_judged(repo, complement=[{"name": "global wrappers", "cmd": emit("b", "c", "d"),
+                                          "proven_by": "tests/test_x.py::test_global"}])
     assert row["problems"] == [] and row["missing"] == []
     assert "leaving 0 covered by NOTHING" in row["note"]
 
@@ -753,9 +755,9 @@ def test_a_complement_layer_must_prove_it_covers(repo):
 
 
 def test_a_proven_layer_is_accepted(repo):
-    row = judged(repo, **reachy(complement=[
+    row = reach_judged(repo, complement=[
         {"name": "global wrappers", "cmd": emit("b", "c", "d"),
-         "proven_by": "tests/test_wrappers.py::test_a_rejected_fetch_still_bounces"}]))
+         "proven_by": "tests/test_wrappers.py::test_a_rejected_fetch_still_bounces"}])
     assert row["problems"] == [] and row["covered_by"] == {"global wrappers": 3}
 
 
@@ -771,3 +773,38 @@ def test_an_explained_fall_still_asks_the_migration_question(repo):
         "reason": "two routes deleted", "evidence": "docs/ledger.md", "date": "2026-09-18"}},
         subject={"cmd": emit("a")})
     assert any("if the fall is a MIGRATION" in p and "shrinks to nothing" in p for p in row["problems"])
+
+
+def reach_judged(repo, **over):
+    """A reach guard AND the property guard it is paired with, since a coverage
+    ratchet is not allowed to stand alone."""
+    root = repo([guard(**reachy(**over)), guard(id="uses-the-result-without-testing-it")])
+    return population.run_population(root, {"register": "qa/guards.yml"}, today=TODAY)["rows"][0]
+
+
+def test_a_reach_guard_must_be_paired_with_a_property_guard(repo):
+    # built without the pair the fixture supplies
+    """A ratchet keyed on the shape of the old code empties as the fix lands,
+    and an empty ratchet is green."""
+    row = judged(repo, **reachy(paired_with=None, complement=[{"name": "wrappers", "cmd": emit("b", "c", "d"),
+                                                               "proven_by": "tests/x.py::t"}]))
+    assert any("WHAT DOES THIS COUNT WHEN THE WORK SUCCEEDS?" in p for p in row["problems"])
+    assert any("EMPTY RATCHET IS GREEN" in p for p in row["problems"])
+
+
+def test_a_reach_guard_paired_with_a_property_guard_is_accepted(repo):
+    root = repo([guard(**reachy(paired_with="uses-the-result-without-testing-it",
+                                complement=[{"name": "wrappers", "cmd": emit("b", "c", "d"),
+                                             "proven_by": "tests/x.py::t"}])),
+                 guard(id="uses-the-result-without-testing-it")])
+    rows = population.run_population(root, {"register": "qa/guards.yml"}, today=TODAY)["rows"]
+    assert rows[0]["problems"] == []
+
+
+def test_two_coverage_ratchets_empty_together(repo):
+    root = repo([guard(**reachy(paired_with="another-reach",
+                                complement=[{"name": "w", "cmd": emit("b", "c", "d"),
+                                             "proven_by": "tests/x.py::t"}])),
+                 guard(id="another-reach", kind="reach")])
+    rows = population.run_population(root, {"register": "qa/guards.yml"}, today=TODAY)["rows"]
+    assert any("two coverage ratchets empty together" in p for p in rows[0]["problems"])
