@@ -239,6 +239,37 @@ login error must not reveal whether the account exists) and that is a different
 question, not a gap. A sweep whose exclusion list was filled in quickly to get
 green would be the defect wearing the fix's clothes.
 
+A PARAPHRASE CHECKED AGAINST ITS OWN SOURCE ALWAYS AGREES. There is a good test
+doing the rounds — a reason that cannot be stated without naming an
+implementation detail is probably describing something narrower than the
+requirement, so restate it in the person's vocabulary and see whether it still
+holds. It has a hole, and the hole cost two real overclaims before anyone saw
+it: LST-07's claim was restated honestly as "long lists page rather than loading
+every row", and then verified AGAINST THE ROW'S OWN EVIDENCE — five database
+tables that all page. It read as passing. A browser then found a client Contacts
+tab rendering all 316 rows unpaged. Both were true: the row cited "contacts
+(946)", the GLOBAL list, which pages; the browser hit
+`/api/clients/{id}/contacts`, a different surface with the same noun, which
+takes no limit or offset. Not an endpoint but a CATEGORY — every per-client
+sub-list, 0 paged and 15 unpaged.
+
+THE VOCABULARY CHANGED AND THE DENOMINATOR DID NOT. So the restatement must be
+verified against the SURFACE A PERSON TOUCHES, never against the evidence
+already cited, and that is a structural property rather than a discipline: THE
+VERIFICATION MUST READ SOMETHING THE ROW DOES NOT CITE. Declare `cites:` (what
+the claim already rests on) and `subject.reads:` (what the verification looks
+at), and a verification whose sources are a subset of the citations is refused.
+Otherwise the test is a paraphrase with extra steps.
+
+Measured, on seven implemented rows: the incomplete test found ZERO gaps; the
+same seven with the surface check found TWO overclaims, both real — 15 unpaged
+per-client sub-lists outside a population of top-level lists, and 14 admin lists
+rendering their empty row BY HAND with one fixed sentence, so a person who
+filters a lead list to nothing reads "No leads yet. They will appear here when a
+call comes in", which does not merely word it wrongly, it asserts something
+false about their data. Same shape in both: the helper is correct, the
+population is the CALLERS of the helper, and the surface has lists outside it.
+
 A CORPUS DEFINED BY THE PROPERTY UNDER TEST, which is not the denominator
 problem and needs its own name, because the usual fix does not work on it.
 
@@ -694,6 +725,18 @@ def judge(spec: dict, root: Path, today: dt.date, *, run=read_members) -> Row:
                 f"detector {d.get('name')!r} is found by the claim's own faculty ({claims_faculty!r}) — two "
                 "detectors sharing a faculty can cover each other perfectly and both be blind, so a complete "
                 "union is necessary and not sufficient")
+    cites = spec.get("cites")
+    reads = (spec.get("subject") or {}).get("reads")
+    if cites or reads:
+        if not cites or not reads:
+            row.problems.append("a guard declaring one of `cites:` / `subject.reads:` declares both — what the "
+                                "claim already rests on, and what the verification looks at")
+        elif set(map(str, reads)) <= set(map(str, cites)):
+            row.problems.append(
+                "the verification reads nothing the claim does not already cite — a paraphrase checked against "
+                "its own source always agrees. LST-07's claim was restated honestly and verified against the "
+                "row's own five paging tables; a browser then found 15 unpaged per-client sub-lists, a category "
+                "outside the population entirely. Verify against the SURFACE a person touches")
     if not spec.get("undecided"):
         row.problems.append(
             "no `undecided:` — one sentence for what this guard does NOT judge. ACT-05 swept 146 dialogs "

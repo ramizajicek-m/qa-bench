@@ -524,3 +524,22 @@ def test_a_detector_sharing_the_claims_faculty_is_refused(repo):
                                                       "cmd": emit("a", "b", "c")}]})
     assert any("found by the claim's own faculty" in p and "necessary and not sufficient" in p
                for p in row["problems"])
+
+
+def test_a_verification_reading_only_what_the_row_cites_is_refused(repo):
+    """LST-07 restated honestly, then verified against the row's own five paging
+    tables. It read as passing; a browser found 15 unpaged per-client sub-lists.
+    The vocabulary changed and the denominator did not."""
+    row = judged(repo, cites=["qa/lists.yml", "docs/ledger.md"], subject={"reads": ["qa/lists.yml"]})
+    assert any("paraphrase checked against its own source always agrees" in p for p in row["problems"])
+    assert any("SURFACE a person touches" in p for p in row["problems"])
+
+
+def test_a_verification_reading_a_new_source_is_fine(repo):
+    row = judged(repo, cites=["qa/lists.yml"], subject={"reads": ["qa/lists.yml", "the rendered page"]})
+    assert row["problems"] == []
+
+
+def test_declaring_one_of_the_pair_requires_the_other(repo):
+    assert any("declares both" in p for p in judged(repo, cites=["qa/lists.yml"])["problems"])
+    assert any("declares both" in p for p in judged(repo, subject={"reads": ["x"]})["problems"])

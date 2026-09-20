@@ -117,6 +117,21 @@ Three mechanics carry it, each paid for by one of the incidents above:
   containers, snapshot before the run and written into the artefact. Reported,
   not a finding: see the withdrawal above.
 
+A REFUSAL TO VERIFY IS DATA, AND IT MAY NOT BE OVERRIDDEN WITH A DIFFERENT KIND
+OF EVIDENCE. The same day this module was written, a browser pass reported one
+row UNVERIFIED — it could not find an unfiltered-empty list to compare — and
+that refusal was then settled from SOURCE evidence, which showed the helper was
+correct. The helper was correct. Fourteen lists rendered their empty row by hand
+and never called it, and two sessions got the row wrong the same morning,
+independently, by the same move. SOURCE EVIDENCE CAN SHOW A MECHANISM IS RIGHT;
+IT CANNOT SHOW WHAT REACHES THE PERSON. When a browser result and a source
+result disagree about what someone SEES, the browser wins — and when the browser
+says "I could not verify this", that is not an invitation to settle it from
+source. The weaker observation was the honest one. This is the INVALID rule
+below, one level out: a verdict that could not be reached is not a verdict, and
+substituting a different question's answer for it is exactly how "no failures"
+becomes "success".
+
 WHAT IT CANNOT SEE, stated: whether the run's ASSERTIONS were any good. This is
 the completion half only. A suite that reached the end and executed 2,321
 honest-looking tests over the wrong population is exactly what `qabench
