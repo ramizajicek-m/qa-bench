@@ -253,11 +253,49 @@ means the honest record belongs upstream, the second means the case is fixed.
 Every project in the estate carries lists of this kind — exclusion maps, skip
 budgets, ratchet baselines — and nothing was checking any of them this way.
 
-THE THREE REQUIREMENTS ARE ONE REQUIREMENT: a guard must be shown able to fail,
-a near-miss must be a real near-miss, and an exemption must be shown able to
-bite. SHOW THE THING CAPABLE OF THE OUTCOME IT CLAIMS. The exemption is the one
-where the failure is invisible by construction, because an exemption's whole job
-is to make something not happen.
+A MEASURE THAT CANNOT FAIL IN ONE DIRECTION is the fourth face, and it is not
+the corpus and not the conclusion. A guard for "the primary action is within
+thumb reach on a phone" walks every screen, computes the emphasised button's
+centre as a percentage of viewport height, and counts it out of reach below a
+45 % arc. Corpus complete, vacuity floors on both sides, ratchet at zero,
+written by somebody being careful. A BUTTON AT 199 % — a third of a page below
+the fold, reachable only by scrolling — SCORES AS COMFORTABLY IN REACH. The
+metric knows "too high" and has no way to express "not on the screen at all",
+which is the same failure from the other end and the more common one, because
+content grows downward.
+
+Nothing about the corpus is wrong and nothing about the conclusion is stale. THE
+METRIC IS INCAPABLE OF EXPRESSING THE FAILURE, and the blindness is inherited
+silently by anyone who widens the sweep: extending it to 77 never-measured
+screens returned 0 out of reach, the expected number, and every future extension
+would have carried the blindness forward while the number looked better.
+
+THE CHECK IS CHEAP AND THE DISTINCTION IN IT IS THE WHOLE THING: mutate the
+property THE REQUIREMENT NAMES and see whether the number moves. Moving a save
+bar from `position: sticky` to `position: static` left the count at 0 while ten
+of twenty-four screens moved their save to between 142 % and 199 %. Lowering the
+threshold, or feeding a synthetic 200, proves the ARITHMETIC; breaking the
+product and watching the number is what proves the METRIC. So a guard declaring
+`metric:` must carry a known-positive with `by_mutating:` — the product property
+broken — and `moved:`, what the number did, because only a number somebody
+watched move is evidence the measure can fail.
+
+(When that metric was repaired it found two defects immediately: a print button
+at 102 % on a screen whose toolbar wraps on a phone, so the one verb the screen
+exists for fell off the bottom edge, and a settings save at 131 %, below every
+setting on the page. Both had been there since those screens were written, under
+a guard reporting zero. And `min(pct)` as the way to pick "the" primary action
+became wrong in the new terms — it judges a screen by whichever emphasised
+button sits HIGHEST rather than by its best one — so the selection rule had to
+change with the metric. A threshold change is rarely only a threshold change.)
+
+THE FOUR REQUIREMENTS ARE ONE REQUIREMENT — SHOW THE THING CAPABLE OF THE
+OUTCOME IT CLAIMS: a guard must be shown able to fail, a near-miss must be a
+real near-miss, an exemption must be shown able to bite, and a metric must be
+shown able to produce a failing value. Each is a face where the thing looks
+present and is not load-bearing; the exemption and the metric are the two where
+the failure is invisible BY CONSTRUCTION, because an exemption's job is to make
+something not happen and a metric's is to return a number either way.
 
 AND WHEN A REQUIREMENT ENUMERATES OPTIONS, THE TEST POPULATION IS THE
 ENUMERATION, NOT ONE MEMBER OF IT. ACT-07 asks for three choices on leaving a
@@ -875,7 +913,7 @@ def judge_transform(t, root: Path, run) -> str:
 NEAR_MISS_KEYS = ("cmd", "from", "was")
 
 
-def judge_capability(cap: dict, root: Path) -> list[str]:
+def judge_capability(cap: dict, root: Path, *, metric: str = "") -> list[str]:
     """A capability proves the detector DISCRIMINATES, or it proves nothing.
 
     `fires:` is the positive. `silent:` is one or more REAL near-misses — a
@@ -886,6 +924,16 @@ def judge_capability(cap: dict, root: Path) -> list[str]:
     """
     out: list[str] = []
     fires = cap.get("fires")
+    if metric and isinstance(fires, list) and not any(
+            isinstance(f, dict) and f.get("by_mutating") and f.get("moved") for f in fires):
+        out.append(
+            f"this guard computes a metric ({metric}) and no known-positive names `by_mutating:` and `moved:`. "
+            "A metric must be shown able to PRODUCE A FAILING VALUE, and only a mutation of the property the "
+            "requirement names shows that: lowering the threshold or feeding a synthetic value proves the "
+            "arithmetic. A thumb-reach guard scored a button at 199%, a third of a page below the fold, as "
+            "comfortably in reach — it knew 'too high' and could not express 'not on the screen at all', and "
+            "moving a save bar from sticky to static left its count at 0 while ten of twenty-four screens moved "
+            "their save to between 142% and 199%")
     if isinstance(fires, str):
         out.append("capability `fires:` must be a list of REAL known-positives, not a bare command. A detector is "
                    "written from a MEMORY of the instance it was built for, not from the instance: a verifier "
@@ -1064,7 +1112,7 @@ def judge(spec: dict, root: Path, today: dt.date, *, run=read_members, surfaces=
         return row
 
     if cap_spec:
-        problems = judge_capability(cap_spec, root)
+        problems = judge_capability(cap_spec, root, metric=str(spec.get("metric") or ""))
         if problems:
             row.problems.extend(problems)
             return row

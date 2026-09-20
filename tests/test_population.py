@@ -707,3 +707,37 @@ def test_a_guard_must_say_what_one_member_is(repo):
     row = judged(repo, unit=None)
     assert any("no `unit:`" in p and "invisible by construction" in p for p in row["problems"])
     assert any("still matched somewhere in the same file" in p for p in row["problems"])
+
+
+def test_a_metric_must_be_shown_able_to_produce_a_failing_value(repo):
+    """A thumb-reach guard scored a button at 199% — a third of a page below the
+    fold — as comfortably in reach. Corpus complete, floors on both sides,
+    ratchet at zero. The metric knew "too high" and could not express "not on
+    the screen at all"."""
+    row = judged(repo, metric="the primary action's centre as a % of viewport height", capability=cap())
+    assert any("must be shown able to PRODUCE A FAILING VALUE" in p and "proves the arithmetic" in p
+               for p in row["problems"])
+
+
+def test_a_metric_with_a_product_mutation_and_a_movement_is_accepted(repo):
+    row = judged(repo, metric="the primary action's centre as a % of viewport height",
+                 capability=cap(fires=[{"cmd": emit("caught it"), "from": "docs/ledger.md",
+                                        "was": "the settings save at 131%",
+                                        "by_mutating": "the save bar from position:sticky to position:static",
+                                        "moved": "0 -> 10 of 24 screens, between 142% and 199%"}]))
+    assert row["problems"] == []
+
+
+def test_a_guard_with_no_metric_is_unaffected(repo):
+    assert judged(repo, capability=cap())["problems"] == []
+
+
+def test_naming_the_mutation_without_the_number_it_moved_is_not_enough(repo):
+    """`by_mutating:` says what was broken; `moved:` says what the number did.
+    A mutation nobody watched the number under is a claim, not a measurement —
+    the count staying at 0 IS the finding, and only the figure records it."""
+    row = judged(repo, metric="the primary action's centre as a % of viewport height",
+                 capability=cap(fires=[{"cmd": emit("caught it"), "from": "docs/ledger.md",
+                                        "was": "the settings save at 131%",
+                                        "by_mutating": "the save bar from sticky to static"}]))
+    assert any("must be shown able to PRODUCE A FAILING VALUE" in p for p in row["problems"])
