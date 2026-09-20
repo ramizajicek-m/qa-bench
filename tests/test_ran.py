@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import socket
+import subprocess
 import sys
 from pathlib import Path
 
@@ -259,3 +260,31 @@ def test_the_artefact_names_the_gates_nobody_attempted(repo):
     assert ran.run(["--repo", str(root), "--name", "suite", "--"] + say("4 passed"), echo=lambda *_: None) == 0
     art = json.loads((root / "qa" / "runs" / "suite.json").read_text())
     assert art["not_attempted"] == ["semgrep"] and art["verdict"] == ran.PASS
+
+
+def test_an_artefact_stamps_the_commit_it_decided_about(repo, tmp_path):
+    """Pass, fail and did-not-run are the three states anybody plans. The fourth
+    is a PREVIOUS RUN'S verdict, readable before the next run clears it —
+    well-formed, and about different code."""
+    root = repo()
+    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+    (root / "x.txt").write_text("one", encoding="utf-8")
+    subprocess.run(["git", "add", "."], cwd=root, check=True)
+    subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "one"],
+                   cwd=root, check=True)
+
+    ran.run(["--repo", str(root), "--name", "suite", "--"] + say("4 passed"), echo=lambda *_: None)
+    art = json.loads((root / "qa" / "runs" / "suite.json").read_text())
+    assert len(art["decides_about"]["sha"]) == 40
+    assert ran.stale(art, root) == ""          # about the tree in front of you
+
+    (root / "x.txt").write_text("two", encoding="utf-8")
+    subprocess.run(["git", "add", "."], cwd=root, check=True)
+    subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "two"],
+                   cwd=root, check=True)
+    why = ran.stale(art, root)
+    assert "a previous run's verdict" in why and "about different code" in why
+
+
+def test_an_artefact_with_no_stamp_cannot_be_told_from_an_earlier_run(tmp_path):
+    assert "cannot be told from an earlier run" in ran.stale({"verdict": "PASS"}, tmp_path)

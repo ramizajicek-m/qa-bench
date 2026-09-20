@@ -117,6 +117,14 @@ Three mechanics carry it, each paid for by one of the incidents above:
   containers, snapshot before the run and written into the artefact. Reported,
   not a finding: see the withdrawal above.
 
+A DECISION FILE HAS A FOURTH STATE NOBODY DESIGNS FOR. Pass, fail and
+did-not-run are the three anybody plans. The fourth is A PREVIOUS RUN'S VERDICT,
+readable before the next run clears it: perfectly well-formed, and about
+different code. So every artefact stamps the commit it decided about, and
+`stale()` says so when the tree has moved — because without it a reader cannot
+distinguish "this run passed" from "some earlier run passed", and the second
+reads exactly like the first.
+
 A REFUSAL TO VERIFY IS DATA, AND IT MAY NOT BE OVERRIDDEN WITH A DIFFERENT KIND
 OF EVIDENCE. The same day this module was written, a browser pass reported one
 row UNVERIFIED — it could not find an unfiltered-empty list to compare — and
@@ -203,6 +211,46 @@ def _listening(port: int, host: str = "127.0.0.1") -> bool:
     with socket.socket() as s:
         s.settimeout(0.25)
         return s.connect_ex((host, int(port))) == 0
+
+
+def decides_about(root: Path, ignore: str = "") -> dict:
+    """WHICH TREE this verdict is about. A DECISION FILE HAS A FOURTH STATE
+    NOBODY DESIGNS FOR: a previous run's verdict, readable before the next run
+    clears it. Pass / fail / did-not-run are the three anybody plans; the fourth
+    is a verdict that is perfectly well-formed and about a different commit.
+    Stamping the sha it decides about is what tells them apart — without it a
+    reader cannot distinguish "this run passed" from "some earlier run passed".
+    """
+    out = {"sha": "", "dirty": None}
+    try:
+        head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=root, capture_output=True, text=True, timeout=20)
+        if head.returncode == 0:
+            out["sha"] = head.stdout.strip()
+            st = subprocess.run(["git", "status", "--porcelain"], cwd=root, capture_output=True, text=True, timeout=30)
+            if st.returncode == 0:
+                # The run's own artefacts do not make the tree it judged
+                # unrecoverable — everything else does.
+                lines = [l for l in st.stdout.splitlines()
+                         if l.strip() and not (ignore and ignore in l)]
+                out["dirty"] = bool(lines)
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return out
+
+
+def stale(record: dict, root: Path) -> str:
+    """"" when this artefact is about the tree in front of you; otherwise why not."""
+    was = (record or {}).get("decides_about") or {}
+    now = decides_about(root, ignore=str(was.get("ignored") or ""))
+    if not was.get("sha") or not now.get("sha"):
+        return "this artefact does not say which commit it decided about — it cannot be told from an earlier run's"
+    if was["sha"] != now["sha"]:
+        return (f"this artefact decided about {was['sha'][:12]}, and the tree is at {now['sha'][:12]} — a "
+                "previous run's verdict, readable and well-formed and about different code")
+    if was.get("dirty") or now.get("dirty"):
+        return (f"this artefact decided about {was['sha'][:12]} with uncommitted changes present — the tree it "
+                "judged is not recoverable, so the verdict is about a state nobody can return to")
+    return ""
 
 
 def snapshot(declared: dict) -> Host:
@@ -355,6 +403,8 @@ def run_one(root: Path, cfg: dict, name: str, argv: list[str], *, now=None, echo
         # pytest-shaped defaults, which are right for a pytest run and a guess
         # for anything else.
         "declared": bool(spec), "verdict": v, "why": why, "exit_code": code,
+        "decides_about": {**decides_about(root, ignore=str(art_dir.relative_to(root))),
+                          "ignored": str(art_dir.relative_to(root))},
         # Named in the artefact as well as in the sentence: the next session
         # reads the JSON, and a gate nobody attempted is exactly what a green
         # local run otherwise fails to mention.
