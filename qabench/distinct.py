@@ -72,6 +72,8 @@ from pathlib import Path
 
 import yaml
 
+from . import warrant
+
 EXEMPTION_KEYS = ("pair", "reason", "evidence", "review_by")
 
 
@@ -138,22 +140,13 @@ def longest_shared(rows: list[dict], *, cap: int | None = None) -> tuple[int, li
 
 
 def judge_exemption(ex, root: Path, today: dt.date) -> str:
-    if not isinstance(ex, dict):
-        return f"exemption {ex!r} is not a mapping with {', '.join(EXEMPTION_KEYS)}"
-    lacking = [k for k in EXEMPTION_KEYS if not ex.get(k)]
-    if lacking:
-        return f"exemption {ex.get('pair', '?')!r} lacks {', '.join(lacking)}"
-    if not isinstance(ex["pair"], list) or len(ex["pair"]) != 2:
+    """The shared warrant contract, plus the one thing that is this module's
+    own: a pair is exactly two row ids."""
+    if isinstance(ex, dict) and ex.get("pair") is not None and (
+            not isinstance(ex["pair"], list) or len(ex["pair"]) != 2):
         return f"exemption pair {ex['pair']!r} must be exactly two row ids"
-    if not (root / str(ex["evidence"]).split("::")[0]).exists():
-        return f"exemption {ex['pair']!r}: evidence {ex['evidence']!r} does not exist"
-    try:
-        due = dt.date.fromisoformat(str(ex["review_by"]))
-    except ValueError:
-        return f"exemption {ex['pair']!r}: review_by {ex['review_by']!r} is not a date"
-    if due < today:
-        return f"exemption {ex['pair']!r} expired {due} — re-read the two rows, or close the overlap"
-    return ""
+    problem = warrant.judge(ex, root, today, subject="pair", label="exemption")
+    return problem
 
 
 def judge_table(name: str, spec: dict, root: Path, today: dt.date, *, read=read_rows) -> dict:

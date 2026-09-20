@@ -158,6 +158,8 @@ from pathlib import Path
 
 import yaml
 
+from . import warrant
+
 #: How a population may be derived: by asking what a thing IS. Every one of
 #: these reads a structure — a parse tree, the app's own route table, the
 #: schema, an explicit enumeration, the filesystem, or the REQUIREMENT PROSE
@@ -233,24 +235,11 @@ def read_members(root: Path, cmd: str, *, timeout: float = 120.0) -> Set_:
 
 
 def judge_exemption(ex, root: Path, today: dt.date) -> str:
-    """"" when the exemption stands; otherwise why it does not."""
-    if not isinstance(ex, dict):
-        return f"exemption {ex!r} is not a mapping with {', '.join(EXEMPTION_KEYS)}"
-    lacking = [k for k in EXEMPTION_KEYS if not ex.get(k)]
-    if lacking:
-        return f"exemption {ex.get('member', '?')!r} lacks {', '.join(lacking)}"
-    evidence = ex["evidence"] if isinstance(ex["evidence"], list) else [ex["evidence"]]
-    absent = [e for e in evidence if not (root / str(e).split("::")[0]).exists()]
-    if absent:
-        return f"exemption {ex['member']!r}: evidence does not exist: {', '.join(absent)}"
-    try:
-        due = dt.date.fromisoformat(str(ex["review_by"]))
-    except ValueError:
-        return f"exemption {ex['member']!r}: review_by {ex['review_by']!r} is not a date"
-    if due < today:
-        return (f"exemption {ex['member']!r} expired {due} — re-verify the reason against the code, "
-                "or close the gap")
-    return ""
+    """"" when the exemption stands; otherwise why it does not.
+
+    One contract, in `qabench.warrant`: four files had written it out four
+    times, and a contract with four copies is four contracts."""
+    return warrant.judge(ex, root, today, subject="member", label="exemption")
 
 
 def judge_pin(pinned, actual: int, shrunk, root: Path) -> str:
