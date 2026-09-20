@@ -270,6 +270,35 @@ call comes in", which does not merely word it wrongly, it asserts something
 false about their data. Same shape in both: the helper is correct, the
 population is the CALLERS of the helper, and the surface has lists outside it.
 
+A FLOOR COUNTED FROM WHAT THE ENVIRONMENT HAPPENS TO CONTAIN IS NOT A FLOOR,
+and this is the same failure from the opposite direction: not a denominator too
+small to discriminate, but a denominator whose property was ASSERTED rather than
+CONSTRUCTED. A guard required at least three group/caller pairs to come back
+refused, so that a run in which everything was editable could not pass and be
+mistaken for the feature working. The number was derived, not guessed — group 1
+refuses both callers, group 2 refuses the non-superadmin, so three is a
+conservative margin under a deterministic four — and a reviewer checked the
+arithmetic and agreed. It is true of a laptop loaded from a customer extract and
+false of the seeded database CI runs against, whose groups do not start at id 1.
+It went red there having said nothing whatever about the code.
+
+THE DISCRIMINATING CASE MUST BE ONE THE TEST BUILDS, NOT ONE IT HOPES TO FIND.
+The fixture already created a group whose name trips the rule; that group is
+refused to one caller and open to the other in EVERY environment, by
+construction, so the floor became those two reads and the found-count became
+information printed beside them rather than a gate. Same discrimination, no
+environment coupling.
+
+So a population `observed_from:` an environment may not gate on a count of rows
+it did not create: its pin is printed and never enforced, and it must declare a
+`capability:` — which is exactly the constructed discriminator, the case the
+guard builds and therefore finds everywhere.
+
+And what caught it is worth as much as the rule: not review, and not the tier.
+Two reviewers and the author read the number and agreed with the reasoning; a
+run against the seeded CI database disagreed in four seconds. The reasoning was
+written down, was correct about its premises, and was wrong.
+
 CLASS-KEYED POPULATION is the sharpest sub-class of everything above, and it had
 FOUR instances in one day: the denominator is the MARKER THE COMPLIANT CASES
 SHARE, so a non-compliant case is excluded by the very property that makes it
@@ -791,6 +820,13 @@ def judge(spec: dict, root: Path, today: dt.date, *, run=read_members) -> Row:
                 f"detector {d.get('name')!r} is found by the claim's own faculty ({claims_faculty!r}) — two "
                 "detectors sharing a faculty can cover each other perfectly and both be blind, so a complete "
                 "union is necessary and not sufficient")
+    if (spec.get("population") or {}).get("observed_from") and not spec.get("capability"):
+        row.problems.append(
+            "this population is observed from an environment and the guard declares no `capability:` — a guard "
+            "whose pass/fail turns on a count of rows IT DID NOT CREATE is environment-coupled. A floor derived "
+            "from a laptop loaded with a customer extract read as three refusals; the seeded CI database, whose "
+            "ids start elsewhere, made it red while saying nothing about the code. The discriminating case must "
+            "be one the guard BUILDS and therefore finds everywhere")
     cites = spec.get("cites")
     reads = (spec.get("subject") or {}).get("reads")
     if cites or reads:
@@ -982,9 +1018,16 @@ def judge(spec: dict, root: Path, today: dt.date, *, run=read_members) -> Row:
                             f"expression is narrower than the guard: {shown}")
     for m in stale:
         row.problems.append(f"exemption {m!r} is stale: the guard now examines it — delete the entry")
-    pin = judge_pin(pop_spec.get("count"), row.population, pop_spec.get("shrunk"), root)
-    if pin:
-        row.problems.append(pin)
+    observed = pop_spec.get("observed_from")
+    if observed:
+        row.note = ((row.note + " · ") if row.note else "") + (
+            f"population observed from {observed}; its size ({row.population}) is INFORMATION, not a gate — a "
+            "floor counted from what an environment happens to contain is not a floor, and the discrimination "
+            "comes from the capability's constructed case")
+    else:
+        pin = judge_pin(pop_spec.get("count"), row.population, pop_spec.get("shrunk"), root)
+        if pin:
+            row.problems.append(pin)
     return row
 
 

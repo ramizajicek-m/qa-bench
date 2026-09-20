@@ -588,3 +588,25 @@ def test_a_superset_must_say_what_it_describes(repo):
                                    "cmd": emit("a"), "count": 1,
                                    "superset": {"cmd": emit("a", "b")}})
     assert any("refused" in p for p in row["problems"])
+
+
+def test_an_observed_population_may_not_gate_on_a_count_it_did_not_create(repo):
+    """A floor of three refusals, honestly derived and reviewed, was true of a
+    laptop loaded from a customer extract and false of the seeded CI database
+    whose ids start elsewhere. It went red having said nothing about the code."""
+    row = judged(repo, population={"observed_from": "the live database"})
+    assert any("environment-coupled" in p and "must be one the guard BUILDS" in p for p in row["problems"])
+
+
+def test_an_observed_population_with_a_capability_reports_its_size_instead_of_gating(repo):
+    """The discrimination comes from the constructed case; the found-count is
+    information printed beside it."""
+    row = judged(repo, capability=cap(), subject={"cmd": emit("a", "b")},
+                 population={"observed_from": "the live database", "cmd": emit("a", "b"), "count": 99})
+    assert row["problems"] == []          # the pin is NOT enforced
+    assert "is INFORMATION, not a gate" in row["note"] and "the live database" in row["note"]
+
+
+def test_a_constructed_population_still_pins_exactly(repo):
+    row = judged(repo, subject={"cmd": emit("a", "b")}, population={"cmd": emit("a", "b"), "count": 99})
+    assert any("FELL 99 → 2" in p for p in row["problems"])
