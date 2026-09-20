@@ -242,21 +242,61 @@ def test_an_empty_live_corpus_is_allowed_only_when_the_detector_is_proven(repo):
     bare = judged(repo, population={"cmd": nothing(), "count": 0}, subject={"cmd": nothing()})
     assert bare["unrunnable"] and "Declare a `capability:` self-test" in bare["problems"][-1]
 
-    proven = judged(repo, capability={"cmd": emit("detects a stale citation", "ignores a past-tense mention")},
-                    population={"cmd": nothing(), "count": 0}, subject={"cmd": nothing()})
+    proven = judged(repo, capability=cap(), population={"cmd": nothing(), "count": 0},
+                    subject={"cmd": nothing()})
     assert proven["problems"] == [] and proven["capability"] is True
     assert "live corpus is EMPTY" in proven["note"] and "proven elsewhere" in proven["note"]
+
+
+def cap(**over) -> dict:
+    """A capability that proves BOTH halves: it fires, and it stays silent on a
+    REAL near-miss out of the tree."""
+    c = {"fires": emit("caught the stale citation"),
+         "silent": [{"cmd": emit("silent"), "from": "docs/ledger.md",
+                     "was": "the one thing that was missing is now supplied by the PRT-03 work"}]}
+    c.update(over)
+    return c
+
+
+def test_a_capability_with_no_negative_case_is_refused_by_name(repo):
+    """An all-positives self-test proves a detector FIRES, never that it
+    DISCRIMINATES — FRM-04's switch tested against the cases in the switch, and
+    over an empty corpus indistinguishable from a detector that fires on
+    everything."""
+    row = judged(repo, capability={"fires": emit("caught it")})
+    assert any("no `silent:` — REFUSED by name" in p and "FIRES, never that it DISCRIMINATES" in p
+               for p in row["problems"])
+
+
+def test_a_near_miss_must_be_real(repo):
+    """Out of the tree, not written to be easy to pass."""
+    row = judged(repo, capability=cap(silent=[{"cmd": emit("silent"), "from": "docs/invented.md",
+                                               "was": "a sentence nobody wrote"}]))
+    assert any("does not exist" in p and "must be REAL, out of the tree" in p for p in row["problems"])
+
+
+def test_a_near_miss_names_the_thing_it_stands_for(repo):
+    row = judged(repo, capability=cap(silent=[{"cmd": emit("silent")}]))
+    assert any("lacks from, was" in p for p in row["problems"])
+
+
+def test_a_silent_case_that_fires_is_red(repo):
+    """The near-miss command must pass; a detector that fires on it is not
+    discriminating, whatever its positive case says."""
+    row = judged(repo, capability=cap(silent=[{"cmd": "/bin/sh -c exit2", "from": "docs/ledger.md",
+                                               "was": "the past-tense mention"}]))
+    assert row["unrunnable"] and "capability self-test did not pass" in row["problems"][0]
 
 
 def test_a_detector_whose_self_test_fails_is_red_whatever_its_scan_says(repo):
     """The converse of FRM-10: a detector that quietly stopped detecting over a
     NON-empty corpus. The capability runs on every invocation, not only when the
     corpus is empty."""
-    row = judged(repo, capability={"cmd": "/bin/sh -c exit2"})
+    row = judged(repo, capability=cap(fires="/bin/sh -c exit2"))
     assert row["unrunnable"] and "capability self-test did not pass" in row["problems"][0]
     assert "is not proven, whatever its live scan reports" in row["problems"][0]
 
 
 def test_a_proven_detector_over_a_full_corpus_still_compares(repo):
-    row = judged(repo, capability={"cmd": emit("ok")}, subject={"cmd": emit("a")})
+    row = judged(repo, capability=cap(), subject={"cmd": emit("a")})
     assert row["capability"] is True and row["missing"] == ["b", "c"]

@@ -176,6 +176,15 @@ And the register:
           count: 11                      # exact; raise it in the commit that raises it
         subject:
           cmd: "python3 scripts/guards/act11.py --subjects"
+        capability:                        # required when the live corpus may be empty
+          fires: "python3 scripts/guards/act11.py --selftest-positive"
+          silent:                          # REAL near-misses the looser sibling fired on
+            - cmd: "python3 scripts/guards/act11.py --selftest past-tense"
+              from: qa/ui-standard.md
+              was: "the one thing that was missing is now supplied by the PRT-03 work"
+            - cmd: "python3 scripts/guards/act11.py --selftest bare-pointer"
+              from: qa/ui-standard.md
+              was: "the same reasoning as NAV-03, which this follows"
         exemptions:
           - member: "app/api/legacy.py::export_csv"
             reason: "deleted in the 2026-10 cutover; no caller since 09-02"
@@ -280,6 +289,44 @@ def judge_exemption(ex, root: Path, today: dt.date) -> str:
     return warrant.judge(ex, root, today, subject="member", label="exemption")
 
 
+NEAR_MISS_KEYS = ("cmd", "from", "was")
+
+
+def judge_capability(cap: dict, root: Path) -> list[str]:
+    """A capability proves the detector DISCRIMINATES, or it proves nothing.
+
+    `fires:` is the positive. `silent:` is one or more REAL near-misses — a
+    sentence, route, element or record that actually exists in the tree and
+    that the detector's looser sibling DID fire on. Real, not invented: `from:`
+    is a path that must exist, and `was:` quotes the thing itself, so the entry
+    cannot drift into a synthetic case somebody wrote to be easy to pass.
+    """
+    out: list[str] = []
+    if not cap.get("fires"):
+        out.append("capability lacks `fires:` — the command proving the detector catches its positive case")
+    silent = cap.get("silent")
+    if not silent:
+        out.append("capability has no `silent:` — REFUSED by name, like a population derived from naming. An "
+                   "all-positives self-test proves a detector FIRES, never that it DISCRIMINATES (FRM-04: a "
+                   "switch tested against the cases in the switch), and over an empty corpus it is "
+                   "indistinguishable from a detector that fires on everything")
+        return out
+    if not isinstance(silent, list):
+        return out + ["capability `silent:` must be a list of near-misses"]
+    for n in silent:
+        if not isinstance(n, dict):
+            out.append(f"near-miss {n!r} is not a mapping with {', '.join(NEAR_MISS_KEYS)}")
+            continue
+        lacking = [k for k in NEAR_MISS_KEYS if not n.get(k)]
+        if lacking:
+            out.append(f"near-miss {n.get('was', n.get('cmd', '?'))!r} lacks {', '.join(lacking)}")
+            continue
+        if not (root / str(n["from"]).split("::")[0]).exists():
+            out.append(f"near-miss {n['was']!r} says it comes from {n['from']!r}, which does not exist — a "
+                       "near-miss must be REAL, out of the tree, not one written to be easy to pass")
+    return out
+
+
 def judge_pin(pinned, actual: int, shrunk, root: Path) -> str:
     """The ratchet. Exact, because only an exact pin can catch a narrowing."""
     if not isinstance(pinned, int):
@@ -313,7 +360,7 @@ def judge(spec: dict, root: Path, today: dt.date, *, run=read_members) -> Row:
     if not row.claims:
         row.problems.append("no `claims:` — the one sentence the population is the population OF")
 
-    cap = (spec.get("capability") or {}).get("cmd")
+    cap_spec = spec.get("capability") or {}
     pop_spec = spec.get("population") or {}
     sub_spec = spec.get("subject") or {}
     derived = str(pop_spec.get("derived_from") or "")
@@ -325,13 +372,18 @@ def judge(spec: dict, root: Path, today: dt.date, *, run=read_members) -> Row:
         row.problems.append("a guard names both a population.cmd and a subject.cmd, or it is a claim about itself")
         return row
 
-    if cap:
-        proof = run(root, cap)
-        if proof.error:
-            row.problems.append(f"the capability self-test did not pass: {proof.error} — a detector whose "
-                                "self-test cannot run is not proven, whatever its live scan reports")
-            row.unrunnable = True
+    if cap_spec:
+        problems = judge_capability(cap_spec, root)
+        if problems:
+            row.problems.extend(problems)
             return row
+        for cmd in [cap_spec["fires"]] + [n["cmd"] for n in cap_spec["silent"]]:
+            proof = run(root, cmd)
+            if proof.error:
+                row.problems.append(f"the capability self-test did not pass: {proof.error} — a detector whose "
+                                    "self-test cannot run is not proven, whatever its live scan reports")
+                row.unrunnable = True
+                return row
         row.capability = True
 
     pop, sub = run(root, pop_spec["cmd"]), run(root, sub_spec["cmd"])
@@ -353,7 +405,8 @@ def judge(spec: dict, root: Path, today: dt.date, *, run=read_members) -> Row:
             # Reported, not judged. The detector is proven on a corpus that
             # cannot go away, so a live scan of nothing is a fact about the
             # tree rather than a verdict about the guard.
-            row.note = (f"live corpus is EMPTY; capability proven by {cap!r}. Nothing to compare, and that is "
+            row.note = (f"live corpus is EMPTY; capability proven by {cap_spec['fires']!r} against "
+                        f"{len(cap_spec['silent'])} real near-miss(es). Nothing to compare, and that is "
                         "allowed here precisely because the detector is proven elsewhere")
             return row
         row.unrunnable = True
