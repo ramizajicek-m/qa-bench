@@ -773,6 +773,38 @@ Widening does not help, which is what makes it a different shape: ANY
 ENUMERATION PERFORMED BY THE MECHANISM UNDER TEST INHERITS ITS BLIND SPOT.
 Tabbing to find things in order to check whether they are tabbable is circular.
 
+A WRONG DETECTOR CAN PRODUCE A FALSE DEMOTION AND CONCEAL A REAL FINDING IN THE
+SAME PASS, AND THE TWO LOOK LIKE ONE RESULT. A check for "every required field
+carries a visible required marker" read label `textContent` for "*" or
+"required", found ZERO of eleven marked, and was one message from filing the row
+as broken. The asterisk is a CSS `::after` with `content: " *"`:
+`getComputedStyle(label, '::after').content` returns " *" on five of six
+sampled, so THE ROW HOLDS and the detector was measuring a surface the marker
+does not live on. Generated content, ARIA attributes and anything set at runtime
+are all invisible to a text read of markup, and the failure direction was a
+FALSE DEMOTION OF CORRECT CODE.
+
+And underneath it, in the SAME eleven elements, a real defect: ten of the eleven
+required controls have NO ACCESSIBLE NAME — the label is a SIBLING of the input,
+not a wrapper, with no `for` and no id. A screen-reader user hears ten unnamed
+controls, clicking the visible label does nothing, and the asterisk is painted
+on a label that is not associated with its field, so assistive technology gets
+neither the name nor the requirement. One field has no label element at all,
+only a placeholder that disappears on typing. The same page carries ten
+correctly bound pairs.
+
+HAD THE FALSE DEMOTION BEEN FILED, THE SESSION WOULD HAVE "FOUND SOMETHING" AND
+STOPPED LOOKING, one layer above the finding that mattered. So: READ THE MARKUP
+AFTER A DETECTOR FIRES, NOT ONLY WHEN IT STAYS SILENT. This file has been
+treating "a clean result deserves suspicion" as the rule; this is the converse,
+and it is the more expensive direction, because a positive result feels like
+work completed.
+
+(The guard that replaced it is structural and cannot be gamed by a marker: every
+`[required]` control must be associated with a label by for/id or by wrapping.
+No class, no attribute the fix adds, no naming convention — which is what this
+module asks for, arriving from a session that had just been burnt by a marker.)
+
 THE TEST FOR THE SHAPE: ask whether the corpus COULD CONTAIN A FAILING MEMBER.
 If members are found by the same faculty the property is about, it cannot, and
 the check is decorative however carefully it is written:
