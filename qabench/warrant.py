@@ -51,14 +51,16 @@ switched off — a rule nobody can defend when it fires is worse than no rule, a
 one sitting unused with a docstring saying "pending a measurement" is an
 invitation to site it badly later. The measurement is in; the answer is no.
 
-WHAT IS MECHANISABLE IS NARROWER AND IS WHERE THE COST LANDS: a justification
-that asserts ANOTHER ROW'S STATUS is not prose, it is a claim about a value the
-table already holds, and it can be verified on every run at zero cost. Over the
-same 109 rows: 8 such cross-references, 2 of them stale — PRF-06 says STA-01 is
-absent (implemented), PRT-08 says PRT-03 is missing (implemented). Both encode a
-dependency the next person plans around, so the next person starts by building
-something that already exists. Two of eight wrong, in a file three days old,
-maintained carefully: that is the rate when nothing re-reads.
+WHAT LOOKS MECHANISABLE IS NARROWER, AND HAS NOT EARNED ITS PLACE YET: a
+justification that asserts ANOTHER ROW'S STATUS is not prose, it is a claim
+about a value the table already holds, and it can be verified on every run at
+zero cost. Over the same 109 rows there are 8 such mentions. ONE is genuinely
+wrong — PRF-06 says STA-01 is absent and STA-01 is implemented, a blocker that
+has since been built, so the next person starts by building a loading indicator
+that already exists. One is correctly passed. One was a PHANTOM of the
+extractor, retracted within the hour, and the other five it refused. One real
+finding in a carefully maintained file three days old is still a rate worth
+having; two was not the rate, and the difference is the detector's own error.
 
 The general case — "is this reason still true" — stays unmechanisable and should
 stay that way. A keyword pass over those same reasons produced two phantoms that
@@ -112,15 +114,33 @@ def judge(entry, root: Path, today: dt.date, *, subject: str = "member", label: 
 #: THE MEASURED CASE FOR REFUSING RATHER THAN ATTRIBUTING, which this kit has
 #: asserted all day without a number until now. Over the same 109 rows:
 #:
-#:     mentions of another row carrying a status word (hand scan):  8, of which 2 wrong
+#:     mentions of another row carrying a status word (hand scan):  8
 #:     what a strict extractor RESOLVES:                            3
 #:     what it REFUSES:                                             5
-#:     wrong citations inside the resolved 3:                       BOTH
+#:     inside the resolved 3:   1 genuinely wrong · 1 correctly passed · 1 PHANTOM
 #:
-#: Refusing five of eight cost ZERO findings. That is the answer to the obvious
-#: objection that a confident-only parser under-detects: it found everything the
-#: loose one found, while the loose one also produced two phantoms that had to be
-#: withdrawn by hand. Fewer claims examined, same defects found, none invented.
+#: Refusing five of eight cost ZERO findings: the one genuine defect (PRF-06
+#: citing STA-01 as absent, when STA-01 is implemented) was inside the 3. That is
+#: the answer to the standing objection that a confident-only parser
+#: under-detects, and it is the half of this measurement that holds.
+#:
+#: The half that does NOT hold was retracted within the hour by the person who
+#: took it. The first reading reported two defects; the second was a phantom the
+#: extractor's own author had written the prose for that morning. "The one thing
+#: that was missing is now supplied by the PRT-03 work in this same pass"
+#: asserts nothing about PRT-03's status — a capability was missing, past tense,
+#: and PRT-03's work supplied it — but a status word within 45 characters of an
+#: id looked like a claim. ONE IN THREE OF THE RESOLVED CLAIMS WAS FALSE, which
+#: is not shippable, and the check is not landing until it is narrowed and
+#: re-measured. The defect is TENSE AND GRAMMATICAL ROLE, not window size: "was
+#: missing" is not "is missing", and a status word must attach to the id as its
+#: SUBJECT rather than sit near it. If narrowing to that also loses the one real
+#: finding, the honest conclusion is that this class is not mechanisable either,
+#: and that is what gets reported — a guard that cries wolf is switched off, and
+#: then nothing guards the real case.
+#:
+#: So `judge_claims` below is correct and is NOT evidence that anything should
+#: be wired to it yet. The four lines that compare were never the risk.
 #:
 #: The refusals are refused for stateable reasons — a sentence carrying both an
 #: open-word and a done-word near the id, or naming two different rows — which is
@@ -137,9 +157,10 @@ def judge_claims(claims, statuses: dict, *, unresolved: int, unresolved_pin=None
     A justification that asserts ANOTHER ROW'S STATUS is not prose: it is a
     claim about a value the table already holds, and it can be verified on every
     run at zero cost. PRF-06 said STA-01 was absent and STA-01 was implemented;
-    PRT-08 said PRT-03 was missing and PRT-03 was implemented. Each encodes a
-    dependency the next person plans around, so the next person starts by
-    building something that already exists.
+    it is implemented, so the next person starts by building a loading indicator
+    that already exists. (The second instance first reported alongside it,
+    PRT-08 citing PRT-03, was retracted as a phantom of the extractor: see the
+    measurement above. One real finding in 8 mentions, not two.)
 
     This is the JUDGING half only. Extraction stays in the project, where the
     vocabulary lives and where all the risk is; six projects share the four
