@@ -77,6 +77,19 @@ FOUR RULES, each paid for by one of the rows above:
      evidence and a date. A corpus that quietly returns to a naming heuristic
      fails here.
 
+THE REACH TABLE'S VALUE IS TELLING YOU WHICH ROWS DESERVE THE SUSPICION, not
+which are broken, and that is the argument for running it routinely rather than
+as an investigation. Reviewing FRM-07, knowing it rested on a helper whose close
+path reaches 123 of 146 dialogs, the review became "check that specific hole"
+instead of "read this file looking for nothing in particular" — and most of the
+cost of a review is deciding what to look for. The answer was a NEGATIVE: Enter
+is a document-level keydown scoped to `.modal-overlay.open`, so it reaches every
+dialog however its close is wired, while the unsaved-changes prompt hangs off a
+delegation that 23 bypass. Two mechanisms, one shared helper, one bounded and
+one not. That result took minutes and is worth having on its own, because it
+also proves ACT-07's defect was never in the save helper — which stops somebody
+"fixing" a helper that is fine.
+
 A COVERAGE MEASUREMENT MUST BE ABLE TO EXONERATE, and is not trustworthy until
 it has. Triaging the 109 uncovered fetches above against STA-04 ("loss of
 connectivity is announced") found it genuinely NOT implicated: progress.js wraps
