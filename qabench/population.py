@@ -320,6 +320,20 @@ swept its eleven types and asked the implementation what the answer was, FRM-05
 drove one field where every ordering agrees. Population is the denominator;
 discrimination is a separate question and this module does not answer it.
 
+The sharpest instance of that half, from ana-log the same week, because it shows
+a RIGHT corpus with an oracle satisfied BY the defect: `/group-permissions/:id`
+crashed to the error boundary on every load for a day — a hook added below an
+early return, so render one calls eight hooks and render two calls nine. EIGHT
+e2e files drive that route and not one went red, because every one of them
+asserts a FAILURE state: a corrupted response, an empty catalogue, a stalled
+request, a problem screen with a working exit, a save that fails. A screen
+permanently in a failure state satisfies all eight. A TEST THAT ASSERTS AN ERROR
+BOUNDARY VOUCHES FOR NOTHING BEHIND IT, AND EIGHT OF THEM VOUCH FOR NOTHING
+EIGHT TIMES. The ninth test, in another file, does assert the rendered screen and
+was red on main — unseen, because that project's e2e tier is not in CI. No
+population check would have caught this: the corpus was right and the oracle was
+wrong in the same direction eight times over.
+
 Exit: 0 every guard sweeps its population · 1 a gap, a vacuous subject, a bad
 pin or a bad exemption · 3 no register, or a population command that could not
 run (never reported as 0).
