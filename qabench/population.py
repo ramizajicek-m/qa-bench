@@ -270,6 +270,49 @@ call comes in", which does not merely word it wrongly, it asserts something
 false about their data. Same shape in both: the helper is correct, the
 population is the CALLERS of the helper, and the surface has lists outside it.
 
+THE DEFAULT POPULATION IS THE SURFACE THE AUTHOR WORKS IN — a second named
+class, distinct from the marker-keyed one and needing a different fix. Three
+instances in one day, all independent:
+
+  FRM-01 required fields are marked. The mark comes from a rule in style.css and
+         the sweep credited it to every template alike; the six customer-facing
+         token pages are standalone documents that never load the sheet, so the
+         required SIGNATURE field on the proposal, change-order and submittal
+         approval pages had no mark at all, on a novalidate form that says
+         nothing until Approve is pressed.
+  ACC-06 the display holds at 200 % zoom. Population: 79 admin owner pages.
+         Outside it: the portal and twelve public and token templates — and
+         200 % is exactly the setting someone reading an invoice ON A PHONE is
+         likeliest to have on, who is not an admin.
+  ACC-05 meaning is never carried by colour alone. The reasoning walks the admin
+         templates' dot indicators; the portal is not in the argument at all.
+
+The marker-keyed class is about HOW A GUARD FINDS THINGS and its fix is a
+derivation. This one is about WHERE NOBODY THOUGHT TO LOOK, and NO DERIVATION
+FIXES IT: a perfectly derived population of the wrong directory is still wrong,
+because templates/admin is the surface the author develops against, reviews in
+and pictures when reading the requirement.
+
+The fix is cheaper: the surfaces are LISTED BEFORE ANYONE STARTS — "admin shell,
+contractor portal, public token pages, marketing site, field app" — and every
+guard names each one as covered or excluded with a reason. Leaving one out
+becomes an act rather than an oversight. It matters more than its frequency
+suggests, because the excluded surfaces are where CUSTOMERS meet the product —
+approving a proposal, paying an invoice, signing a submittal — so the omission
+is systematically worst exactly where the stakes are highest, and invisible
+precisely because the admin surface is what everyone works in. An admin meets a
+defect and files a ticket; a customer meets one and forms a view of the
+contractor who sent them the link.
+
+AND A ROW THAT CANNOT DETECT ITS OWN FALSIFICATION, which belongs beside it:
+ACC-05's claim currently holds because badges are text on a colour — BY
+CONSTRUCTION, not by the mechanism its reason describes, which is about dots.
+Ship one badge variant that is an icon on a colour with no text and the row is
+false while its own reason still reads perfectly correct. A row whose stated
+mechanism is not the thing making it true cannot notice when it stops being
+true, and the only cheap check is a CONSTRUCTED known-positive: build the
+icon-only badge in `capability.fires` and watch whether the guard sees it.
+
 A FLOOR COUNTED FROM WHAT THE ENVIRONMENT HAPPENS TO CONTAIN IS NOT A FLOOR,
 and this is the same failure from the opposite direction: not a denominator too
 small to discriminate, but a denominator whose property was ASSERTED rather than
@@ -515,6 +558,7 @@ Manifest shape:
 
     population:
       register: qa/guards.yml
+      surfaces: [admin shell, contractor portal, public token pages, field app]
 
 And the register:
 
@@ -788,7 +832,7 @@ def judge_pin(pinned, actual: int, shrunk, root: Path) -> str:
     return f"the population fell {pinned} → {actual} and `shrunk:` explains it — set population.count to {actual}"
 
 
-def judge(spec: dict, root: Path, today: dt.date, *, run=read_members) -> Row:
+def judge(spec: dict, root: Path, today: dt.date, *, run=read_members, surfaces=()) -> Row:
     """One guard: run both sides, compare by member, apply the four rules."""
     row = Row(id=str(spec.get("id") or "?"), check=str(spec.get("check") or ""),
               claims=str(spec.get("claims") or ""),
@@ -827,6 +871,26 @@ def judge(spec: dict, root: Path, today: dt.date, *, run=read_members) -> Row:
             "from a laptop loaded with a customer extract read as three refusals; the seeded CI database, whose "
             "ids start elsewhere, made it red while saying nothing about the code. The discriminating case must "
             "be one the guard BUILDS and therefore finds everywhere")
+    if surfaces:
+        declared = spec.get("surfaces")
+        if not isinstance(declared, dict):
+            row.problems.append(
+                "no `surfaces:` — THE DEFAULT POPULATION IS THE SURFACE THE AUTHOR WORKS IN. Name every surface "
+                f"this project has ({', '.join(surfaces)}) as covered or excluded WITH A REASON, so leaving one "
+                "out is an act rather than an oversight")
+        else:
+            for name in surfaces:
+                if name not in declared:
+                    row.problems.append(
+                        f"surface {name!r} is neither covered nor excluded. A perfectly derived population of "
+                        "the wrong directory is still wrong, and the surfaces left out are systematically the "
+                        "ones where CUSTOMERS meet the product")
+            for name in declared:
+                if name not in surfaces:
+                    row.problems.append(f"surface {name!r} is not one this project declares ({', '.join(surfaces)})")
+            for name, how in declared.items():
+                if how is not True and not (isinstance(how, str) and how.strip()):
+                    row.problems.append(f"surface {name!r} is excluded with no reason — `true`, or a sentence")
     cites = spec.get("cites")
     reads = (spec.get("subject") or {}).get("reads")
     if cites or reads:
@@ -1036,7 +1100,8 @@ def run_population(root: Path, cfg: dict, *, today: dt.date | None = None, run=r
     reg_path = root / cfg["register"]
     doc = yaml.safe_load(reg_path.read_text(encoding="utf-8")) if reg_path.exists() else None
     guards = (doc or {}).get("guards") or []
-    rows = [judge(g, root, today, run=run) for g in guards]
+    surfaces = tuple(cfg.get("surfaces") or ())
+    rows = [judge(g, root, today, run=run, surfaces=surfaces) for g in guards]
 
     # The completeness half. A check the manifest calls `implemented` with no
     # registered guard is the state every row above was found in: evidence that

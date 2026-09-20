@@ -610,3 +610,49 @@ def test_an_observed_population_with_a_capability_reports_its_size_instead_of_ga
 def test_a_constructed_population_still_pins_exactly(repo):
     row = judged(repo, subject={"cmd": emit("a", "b")}, population={"cmd": emit("a", "b"), "count": 99})
     assert any("FELL 99 → 2" in p for p in row["problems"])
+
+
+SURFACES = ("admin shell", "contractor portal", "public token pages")
+
+
+def surfaced(repo, guard_surfaces, **over):
+    root = repo([guard(**over) | ({"surfaces": guard_surfaces} if guard_surfaces is not None else {})])
+    return population.run_population(root, {"register": "qa/guards.yml", "surfaces": list(SURFACES)},
+                                     today=TODAY)["rows"][0]
+
+
+def test_a_guard_must_account_for_every_surface_the_project_has(repo):
+    """FRM-01's sweep credited a style.css rule to every template alike; the six
+    customer-facing token pages never load the sheet, so the required signature
+    field on the proposal approval page had no mark at all."""
+    row = surfaced(repo, {"admin shell": True})
+    assert any("'contractor portal' is neither covered nor excluded" in p for p in row["problems"])
+    assert any("'public token pages' is neither covered nor excluded" in p for p in row["problems"])
+    assert any("where CUSTOMERS meet the product" in p for p in row["problems"])
+
+
+def test_a_guard_with_no_surfaces_block_is_told_the_class(repo):
+    row = surfaced(repo, None)
+    assert any("THE DEFAULT POPULATION IS THE SURFACE THE AUTHOR WORKS IN" in p for p in row["problems"])
+    assert any("admin shell, contractor portal, public token pages" in p for p in row["problems"])
+
+
+def test_an_excluded_surface_needs_a_reason(repo):
+    row = surfaced(repo, {"admin shell": True, "contractor portal": True, "public token pages": ""})
+    assert any("excluded with no reason" in p for p in row["problems"])
+
+
+def test_an_excluded_surface_with_a_reason_is_accepted(repo):
+    row = surfaced(repo, {"admin shell": True, "contractor portal": True,
+                          "public token pages": "no forms; read-only receipts, checked under PRT-02"})
+    assert row["problems"] == []
+
+
+def test_a_surface_the_project_does_not_declare_is_named(repo):
+    row = surfaced(repo, {"admin shell": True, "contractor portal": True,
+                          "public token pages": True, "marketing site": True})
+    assert any("'marketing site' is not one this project declares" in p for p in row["problems"])
+
+
+def test_a_project_declaring_no_surfaces_is_unaffected(repo):
+    assert judged(repo)["problems"] == []
