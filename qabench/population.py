@@ -360,6 +360,14 @@ rather than the surface. And one hole hid TWO rows for months: STA-02 and LST-04
 both read implemented, and the same fourteen hand-rolled empty rows were
 invisible to both, because both keyed on the marker the converted cases carry.
 
+When a marker-keyed detector was replaced by a SHAPE-keyed one — a colspan cell
+whose text opens with No/Nothing/None rather than an element carrying a class —
+the count went UP, 14 to 19. It was the only number that rose that day, and it
+is the cleanest evidence that the marker was hiding cases rather than bounding
+them: the rule is NEVER KEY A POPULATION ON THE THING THE FIX ADDS. Derive from
+what both kinds share — tag, route, AST node, rendered text — and let the marker
+be what you ASSERT, never what you search for.
+
 The check is cheap: count the things that would qualify STRUCTURALLY and
 compare. Not "how many carry the class" but "how many are the kind of thing the
 requirement is about" — for LST-08, `<table>` elements whose rows are built from
@@ -368,6 +376,19 @@ derivable; neither derived until something asked. So a marker-keyed population
 is permitted ONLY with `population.superset:`, the structural set it is a subset
 OF, and the difference is reported. A denominator made of an implementation
 detail of the fix can only ever measure the fix.
+
+A SCAN GENERATES CANDIDATES, NEVER COUNTS — on prose-bearing source at least,
+and a scaled count is an UPPER BOUND until one instance has been read by hand.
+Nine times in one day a confident scaled heuristic was beaten by a targeted
+read, twice agreeing with the wrong answer. The instance that settles it is
+recursive: a sweep for marker-keyed guards reported 35, three were read by hand,
+and ALL THREE WERE FALSE POSITIVES — the heuristic could not tell a guard that
+ASSERTS a marker from one that DERIVES its population from one, which is the
+very distinction it existed to make. Every number that held up that day came
+from a structural derivation or from reading the sites. That is what
+`capability.fires` is for: a real known-positive, named with `from:` and `was:`,
+is a hand-read instance, and a guard that cannot produce one is reporting an
+upper bound.
 
 A TELL IS A PRIORITISER, NEVER A FILTER — and this matters for anything that
 might one day rank which guards to suspect. The tell that works is vocabulary: a
