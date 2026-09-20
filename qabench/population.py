@@ -77,6 +77,14 @@ FOUR RULES, each paid for by one of the rows above:
      evidence and a date. A corpus that quietly returns to a naming heuristic
      fails here.
 
+A COVERAGE MEASUREMENT MUST BE ABLE TO EXONERATE, and is not trustworthy until
+it has. Triaging the 109 uncovered fetches above against STA-04 ("loss of
+connectivity is announced") found it genuinely NOT implicated: progress.js wraps
+window.fetch globally, so a DISCONNECT is announced on all 109, while a 500 on a
+read is not. A triage that implicates everything it touches is not a triage —
+`complement:` is the same mechanism used in the honest direction, and a run that
+never clears anything is evidence about the run rather than about the code.
+
 A TRANSFORM IS PART OF THE GUARD, AND A DESTROYED CORPUS REPORTS EXACTLY LIKE A
 CLEAN ONE. A guard tripping on the COMMENT that explained a fix was made to
 strip comments first — `<!--.*?-->|/\*.*?\*/|^[ \t]*//.*$` with DOTALL — and a
@@ -218,6 +226,45 @@ login error must not reveal whether the account exists) and that is a different
 question, not a gap. A sweep whose exclusion list was filled in quickly to get
 green would be the defect wearing the fix's clothes.
 
+THE TWO WAYS A POPULATION GOES UNSTATED, and the worked example is a pair of
+rows that are both HONEST, both well written, and both unbounded — which is why
+it is the better example: the others could be dismissed as sloppiness.
+
+  ACT-05 "a failed save leaves the user in the form with everything they
+         entered, and states why it failed" — swept over every dialog on every
+         admin page an owner can open, filled, answered 500, its own save
+         pressed. 146 dialogs, and the sweep proves exactly what it claims. Its
+         population IS dialogs and its own reason says so in the first line.
+         What nobody said is that a save can also be fired from a PAGE: 32 raw
+         fetches with a mutating method neither check their status nor report a
+         failure. The person presses, the screen does not change, nothing
+         appears. A ROW THAT NAMES ITS POPULATION AND IS BOUNDED BY IT WITHOUT
+         SAYING THE BOUNDARY IS A BOUNDARY.
+
+  MSG-02 "one message hierarchy: toast for success, persistent banner for a
+         screen-level error" — the rule is right and the hierarchy is
+         implemented. What was never counted is how many loads can fail without
+         saying so: 74 raw reads that draw the screen check no status and report
+         nothing, so a failed read renders THE EMPTY STATE. The person reads "no
+         data" when the truth is "this did not load", concludes there are no
+         invoices, and acts on it — worse than a missing banner, a wrong answer
+         presented calmly. A ROW THAT STATES A RULE AND NEVER COUNTS THE CALL
+         SITES THE RULE APPLIES TO.
+
+Those are the only two shapes, and the fixes differ: the first needs its
+denominator widened or its scope written into the requirement; the second needs
+a denominator at all. Hence `claims:` AND `undecided:` on every guard — one
+sentence for what it proves, one for what it does not judge. ACT-05's would have
+read "page-level saves are not judged", where a reader could challenge it; and
+MSG-02 could not have been written without answering "of how many?".
+
+`undecided:` also survives what nothing mechanical survives: TWO WRONG METHODS
+AGREEING. Two sessions derived the same population and got 17 and 12, and the
+truth was outside both because the dominant real pattern was a third shape
+neither looked for; had they agreed, the agreement would have been read as
+confirmation. A statement of what was NOT decided is the one field a second
+wrong method cannot accidentally reproduce.
+
 THE CORPUS IS WHAT THE MECHANISM CAN SEE, NOT WHAT THE CLAIM COVERS. ACT-07
 says "leaving a form with unsaved changes warns, with three choices". Its e2e is
 a good test by every standard in this file: it asserts the labels EXACTLY —
@@ -289,6 +336,7 @@ And the register:
       - id: act11-count-reporting-routes
         check: C6
         claims: "a route that iterates a collection and reports a count reports its failures too"
+        undecided: "routes that report no count at all; anything reached from a background job"
         population:
           derived_from: ast
           cmd: "python3 scripts/qa/pop_count_routes.py"
@@ -402,6 +450,7 @@ class Row:
     #: anything saying which to trust. A derived population ships with its
     #: derivation, not just its result.
     derived_from: str = ""
+    undecided: str = ""                                   # what this guard does NOT judge
     population: int = 0
     subject: int = 0
     missing: list[str] = field(default_factory=list)      # in the population, never examined
@@ -547,13 +596,21 @@ def judge(spec: dict, root: Path, today: dt.date, *, run=read_members) -> Row:
     """One guard: run both sides, compare by member, apply the four rules."""
     row = Row(id=str(spec.get("id") or "?"), check=str(spec.get("check") or ""),
               claims=str(spec.get("claims") or ""),
-              derived_from=str((spec.get("population") or {}).get("derived_from") or "?"))
+              derived_from=str((spec.get("population") or {}).get("derived_from") or "?"),
+              undecided=str(spec.get("undecided") or ""))
     if not spec.get("id"):
         row.problems.append("a guard with no `id:` — a finding nobody can look up")
     if not row.check:
         row.problems.append("no `check:` — every guard serves one of C1–C12, or it is runtime with no owner")
     if not row.claims:
         row.problems.append("no `claims:` — the one sentence the population is the population OF")
+    if not spec.get("undecided"):
+        row.problems.append(
+            "no `undecided:` — one sentence for what this guard does NOT judge. ACT-05 swept 146 dialogs "
+            "honestly and its population was dialogs; saves fired from a PAGE were never in it, and nothing "
+            "in a correct, well-written row said so. A boundary nobody states is a boundary nobody can "
+            "challenge, and it is the one field a second method arriving at the same wrong answer cannot "
+            "accidentally reproduce")
 
     kind = str(spec.get("kind") or "sweep")
     if kind not in ("sweep", "reach"):
@@ -766,6 +823,8 @@ def run(argv: list[str], *, today: dt.date | None = None) -> int:
                   + f"  [{r['derived_from']}]"
                   + ("  [capability proven]" if r["capability"] else "")
                   + (f"   ({r['exempted']} exempted)" if r["exempted"] else ""))
+            if r["undecided"]:
+                print(f"       does not judge: {r['undecided']}")
             if r["note"]:
                 print(f"       {r['note']}")
             for p in r["problems"]:

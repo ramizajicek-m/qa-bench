@@ -71,6 +71,7 @@ def guard(**over) -> dict:
         "id": "act11-count-reporting-routes",
         "check": "C6",
         "claims": "a route that iterates a collection and reports a count reports its failures too",
+        "undecided": "routes that report no count at all",
         "population": {"derived_from": "ast", "cmd": emit("a", "b", "c"), "count": 3},
         "subject": {"cmd": emit("a", "b", "c")},
     }
@@ -476,3 +477,16 @@ def test_a_known_positive_names_where_it_comes_from(repo):
     row = judged(repo, capability=cap(fires=[{"cmd": emit("caught it"), "from": "docs/invented.md",
                                               "was": "a case nobody has"}]))
     assert any("must be REAL, out of the tree" in p for p in row["problems"])
+
+
+def test_a_guard_must_say_what_it_does_not_judge(repo):
+    """ACT-05 swept 146 dialogs honestly and its population WAS dialogs; saves
+    fired from a page were never in it, and nothing in a correct, well-written
+    row said so. A boundary nobody states is a boundary nobody can challenge."""
+    row = judged(repo, undecided=None)
+    assert any("no `undecided:`" in p and "cannot accidentally reproduce" in p for p in row["problems"])
+
+
+def test_what_is_not_judged_travels_with_the_verdict(repo):
+    row = judged(repo, undecided="page-level saves are not judged")
+    assert row["undecided"] == "page-level saves are not judged" and row["problems"] == []
