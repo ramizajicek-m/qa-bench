@@ -372,7 +372,7 @@ def reachy(**over):
     """A reach guard: the population is every call site, the subject is those
     that go through the blessed helper. Paired by default with the property
     guard that moves the opposite way, since the module now requires it."""
-    g = {"kind": "reach", "paired_with": "uses-the-result-without-testing-it",
+    g = {"kind": "reach", "for": "property", "paired_with": "uses-the-result-without-testing-it",
          "population": {"derived_from": "ast", "cmd": emit("a", "b", "c", "d"), "count": 4},
          "subject": {"cmd": emit("a")}}
     g.update(over)
@@ -849,3 +849,24 @@ def test_a_stimulus_with_a_positive_control_is_accepted(repo):
                                         "produced": "indicator visible 1.4s, via route interception below the "
                                                     "page's own wrapper"}]))
     assert row["problems"] == []
+
+
+def test_a_reach_guard_declares_what_it_is_for(repo):
+    """A property ratchet and a holding ratchet look identical in the file — a
+    shrink-only count with a ceiling — and have opposite correct endings."""
+    row = judged(repo, **reachy(**{"for": None}))
+    assert any("OPPOSITE CORRECT ENDINGS" in p and "end state is DELETION" in p for p in row["problems"])
+
+
+def test_a_holding_ratchet_needs_no_pair_but_must_say_when_it_ends(repo):
+    """A ceiling of 119 unparseable functions exists only to stop that number
+    growing while the parser is known wrong. When a real parser lands, delete
+    it — do not invent a property bucket beside it."""
+    row = judged(repo, **reachy(**{"for": "holding", "paired_with": None}))
+    assert any("names `ends_when:`" in p and "deletable" in p.lower() for p in row["problems"])
+
+    ok = judged(repo, **reachy(**{"for": "holding", "paired_with": None,
+                                  "ends_when": "the AST parser replaces the brace matcher; delete this file"},
+                               complement=[{"name": "w", "cmd": emit("b", "c", "d"),
+                                            "proven_by": "tests/x.py::t"}]))
+    assert ok["problems"] == []

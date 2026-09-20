@@ -128,6 +128,18 @@ every transform proving it did not shrink what it touched. Anchor to structure �
 a tag, an AST node — rather than cleaning text to make a pattern work. When a
 pattern needs the text cleaned to be correct, the pattern is wrong.
 
+A RATCHET HAS TWO POSSIBLE PURPOSES AND THEY HAVE OPPOSITE CORRECT ENDINGS, so
+`for:` is declared. A ratchet measuring a PROPERTY the fix must preserve must
+not be keyed on the shape of the old code, because it empties and goes green
+while the property is unmeasured — that is the case below. A ratchet that is a
+HOLDING ACTION against a known-broken mechanism SHOULD empty when the mechanism
+is replaced, and its end state is DELETION: a ceiling of 119 unparseable
+functions exists only to stop that number growing while the parser is known
+wrong, and when a real parser lands the honest move is to delete the ceiling,
+not to invent a property-keyed bucket beside it. LEAVING IT GREEN IS THE ERROR,
+NOT THE EMPTYING. Both look identical in the file — a shrink-only count with a
+ceiling — and only the declaration says which.
+
 A COVERAGE RATCHET AND A PROPERTY RATCHET ARE DIFFERENT INSTRUMENTS AND A
 PROJECT NEEDS BOTH. Measuring a migration is a real thing to measure; it is just
 not the property, and the day a project confuses them is the day its guards go
@@ -1220,23 +1232,39 @@ def judge(spec: dict, root: Path, today: dt.date, *, run=read_members, surfaces=
                 "TRUE OF THE HELPER")
     complement = spec.get("complement")
     if kind == "reach":
+        purpose = str(spec.get("for") or "")
         paired = spec.get("paired_with")
         by_id = {str(g.get("id")): g for g in register if isinstance(g, dict)}
-        if not paired:
+        if purpose not in ("property", "holding"):
             row.problems.append(
-                "a `reach` guard names `paired_with:` — the id of a PROPERTY guard whose count moves the "
-                "OPPOSITE way. A RATCHET KEYED ON THE SHAPE OF THE OLD CODE EMPTIES AS THE FIX LANDS, AND AN "
-                "EMPTY RATCHET IS GREEN: three ceilings over 672 raw call sites, every number true and every "
-                "ceiling shrink-only, all three emptying as the migration proceeds. The repair is not a "
-                "replacement but a FOURTH bucket keyed on the property — helper sites that use the result "
-                "without testing it — which RISES when a careless migration lowers the other three. Ask of any "
-                "new ratchet: WHAT DOES THIS COUNT WHEN THE WORK SUCCEEDS?")
-        elif str(paired) not in by_id:
-            row.problems.append(f"`paired_with: {paired}` names no guard in this register")
-        elif str((by_id[str(paired)].get("kind") or "sweep")) == "reach":
+                "a `reach` guard declares `for:` — `property` (measuring something the fix must PRESERVE) or "
+                "`holding` (bounding a known-broken mechanism until it is replaced). BOTH LOOK IDENTICAL IN "
+                "THE FILE, a shrink-only count with a ceiling, AND THEY HAVE OPPOSITE CORRECT ENDINGS: a "
+                "property ratchet keyed on the old shape empties and goes green while the property is "
+                "unmeasured, which is the failure; a holding ratchet SHOULD empty when the mechanism is "
+                "replaced, and its end state is DELETION — leaving it green is the error, not the emptying")
+        elif purpose == "property":
+            if not paired:
+                row.problems.append(
+                    "a `for: property` reach guard names `paired_with:` — the id of a PROPERTY guard whose "
+                    "count moves the OPPOSITE way. A RATCHET KEYED ON THE SHAPE OF THE OLD CODE EMPTIES AS THE "
+                    "FIX LANDS, AND AN EMPTY RATCHET IS GREEN: three ceilings over 672 raw call sites, every "
+                    "number true and every ceiling shrink-only, all three emptying as the migration proceeds. "
+                    "The repair is not a replacement but a FOURTH bucket keyed on the property, which RISES "
+                    "when a careless migration lowers the other three. Ask of any new ratchet: WHAT DOES THIS "
+                    "COUNT WHEN THE WORK SUCCEEDS?")
+            elif str(paired) not in by_id:
+                row.problems.append(f"`paired_with: {paired}` names no guard in this register")
+            elif str((by_id[str(paired)].get("kind") or "sweep")) == "reach":
+                row.problems.append(
+                    f"`paired_with: {paired}` is another REACH guard — two coverage ratchets empty together. "
+                    "The pair must be a PROPERTY guard, which moves the opposite way")
+        elif not spec.get("ends_when"):
             row.problems.append(
-                f"`paired_with: {paired}` is another REACH guard — two coverage ratchets empty together. The "
-                "pair must be a PROPERTY guard, which moves the opposite way")
+                "a `for: holding` reach guard names `ends_when:` — what makes this ceiling DELETABLE. It "
+                "exists only to stop a number growing while a mechanism is known-broken, so when the real fix "
+                "lands the honest move is to delete it rather than invent a property bucket beside it. "
+                "Without that sentence a holding ratchet sits green over nothing and is read as a measurement")
     if kind == "reach" and not complement:
         row.problems.append(
             "a `reach` guard MUST declare `complement:` — REFUSED by name, like a population derived from "
