@@ -295,8 +295,23 @@ and pictures when reading the requirement.
 
 The fix is cheaper: the surfaces are LISTED BEFORE ANYONE STARTS — "admin shell,
 contractor portal, public token pages, marketing site, field app" — and every
-guard names each one as covered or excluded with a reason. Leaving one out
-becomes an act rather than an oversight. It matters more than its frequency
+guard names each one as `{covered_by: <path prefix>}` or `{excluded: <reason>}`.
+Leaving one out becomes an act rather than an oversight.
+
+AND THE PREFIX IS CHECKED AGAINST THE POPULATION'S OWN OUTPUT, because the first
+version of this took a sentence and not evidence: a trial guard declared all
+four surfaces covered while its population command read templates/admin only,
+omitting nine required controls on the public and portal pages, AND IT PASSED.
+Nothing correlated the claim with what the command read. Now a surface claimed
+covered by `templates/portal/` with zero members under it in the population is a
+refusal rather than a sentence.
+
+SAY PLAINLY WHAT A GREEN SURFACES BLOCK IS AND IS NOT: it catches the
+CARELESSNESS — a surface nobody thought about, a prefix nothing reads — and it
+does not catch the BELIEF. A guard can name a prefix, read one file under it and
+claim the surface. Nobody may read a green surfaces block as coverage, and the
+first person who quotes one as coverage will be quoting this paragraph, so it
+says so here. It matters more than its frequency
 suggests, because the excluded surfaces are where CUSTOMERS meet the product —
 approving a proposal, paying an invoice, signing a submittal — so the omission
 is systematically worst exactly where the stakes are highest, and invisible
@@ -580,6 +595,14 @@ Manifest shape:
     population:
       register: qa/guards.yml
       surfaces: [admin shell, contractor portal, public token pages, field app]
+
+And in a guard:
+
+    surfaces:
+      admin shell:        {covered_by: templates/admin/}
+      contractor portal:  {covered_by: templates/portal/}
+      public token pages: {covered_by: templates/public/}
+      field app:          {excluded: "no forms; read-only, checked under MSG-03"}
 
 And the register:
 
@@ -897,8 +920,8 @@ def judge(spec: dict, root: Path, today: dt.date, *, run=read_members, surfaces=
         if not isinstance(declared, dict):
             row.problems.append(
                 "no `surfaces:` — THE DEFAULT POPULATION IS THE SURFACE THE AUTHOR WORKS IN. Name every surface "
-                f"this project has ({', '.join(surfaces)}) as covered or excluded WITH A REASON, so leaving one "
-                "out is an act rather than an oversight")
+                f"this project has ({', '.join(surfaces)}) as {{covered_by: <path prefix>}} or "
+                "{excluded: <reason>}, so leaving one out is an act rather than an oversight")
         else:
             for name in surfaces:
                 if name not in declared:
@@ -906,12 +929,14 @@ def judge(spec: dict, root: Path, today: dt.date, *, run=read_members, surfaces=
                         f"surface {name!r} is neither covered nor excluded. A perfectly derived population of "
                         "the wrong directory is still wrong, and the surfaces left out are systematically the "
                         "ones where CUSTOMERS meet the product")
-            for name in declared:
+            for name, how in declared.items():
                 if name not in surfaces:
                     row.problems.append(f"surface {name!r} is not one this project declares ({', '.join(surfaces)})")
-            for name, how in declared.items():
-                if how is not True and not (isinstance(how, str) and how.strip()):
-                    row.problems.append(f"surface {name!r} is excluded with no reason — `true`, or a sentence")
+                elif not isinstance(how, dict) or not (how.get("covered_by") or how.get("excluded")):
+                    row.problems.append(
+                        f"surface {name!r} must be {{covered_by: <path prefix>}} or {{excluded: <reason>}}. A "
+                        "sentence is not evidence: a guard declaring four surfaces covered while its population "
+                        "command read templates/admin only PASSED, and the false claim was invisible")
     cites = spec.get("cites")
     reads = (spec.get("subject") or {}).get("reads")
     if cites or reads:
@@ -1050,6 +1075,16 @@ def judge(spec: dict, root: Path, today: dt.date, *, run=read_members, surfaces=
                 f"population entirely: " + ", ".join(outside[:8])
                 + ". A marker is applied by the fix, so a denominator made of it can only ever measure the fix — "
                 "a case that never entered the conversion is not a survivor of it, it was never in it")
+
+    # THE SURFACE CLAIM IS CHECKED AGAINST WHAT THE POPULATION ACTUALLY READ.
+    # Declaring a surface covered is a sentence; a prefix with no member under
+    # it in the population's own output is a refusal.
+    for name, how in (spec.get("surfaces") or {}).items():
+        prefix = how.get("covered_by") if isinstance(how, dict) else None
+        if prefix and not any(str(prefix) in m for m in pop.members):
+            row.problems.append(
+                f"surface {name!r} is declared covered by {prefix!r} and the population contains NO member under "
+                "it — the declaration is a sentence and the command is the evidence; they disagree")
 
     missing = [m for m in pop.members if m not in set(sub.members)]
     row.exempted = len([m for m in missing if m in excused])
