@@ -216,3 +216,18 @@ def test_a_member_containing_a_space_stays_one_member(repo):
     row = judged(repo, population={"cmd": emit("templates/proposal sign.html", "b", "c"), "count": 3},
                  subject={"cmd": emit("b", "c")})
     assert row["missing"] == ["templates/proposal sign.html"]
+
+
+def test_a_population_read_from_requirement_prose_is_a_derivation(repo):
+    """GEN-03: an aggregate requirement's parts list is a denominator, and this
+    one was written by example — it did not name ACT-11, which is the row the
+    silent failure actually was. Prose the project maintains grows by itself
+    when a row is added; the hand-written tuple could not. The refusal is on
+    deriving from what the CODE is called, not on reading the spec."""
+    row = judged(repo, population={"derived_from": "requirement_text",
+                                   "cmd": emit("ACT-05", "ACT-11", "FRM-13", "MSG-04"), "count": 4},
+                 subject={"cmd": emit("ACT-05", "MSG-04")},
+                 exemptions=[{"member": "FRM-13", "reason": "SEC-04-style: a different question",
+                              "evidence": "docs/ledger.md", "review_by": "2026-10-15"}])
+    assert row["missing"] == ["ACT-11"] and row["exempted"] == 1
+    assert row["problems"] == ["1 of 4 never examined: ACT-11"]   # the derivation itself is not a problem

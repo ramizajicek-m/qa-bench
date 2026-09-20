@@ -88,6 +88,18 @@ PROVED it judged. Everything it could not resolve it leaves out, where this
 module names it as a gap — which is the honest denominator, and removes the
 reason to guess: a guard can no longer buy coverage with an attribution.
 
+THE POPULATION IS NOT ALWAYS CODE. An aggregate requirement — "no action fails
+while the screen looks as though it succeeded" — is satisfied when its PARTS
+are, and a parts list is a denominator like any other. GEN-03's was written by
+example and did not name ACT-11, which is the row the silent failure of the day
+actually was, so the aggregate could have gone green with the principle's own
+defect live. Any tracker that decomposes principles into rows has this shape.
+The population there is `requirement_text` and the exclusions are `exemptions`:
+each one read rather than filled in, because SEC-04 deliberately says less (a
+login error must not reveal whether the account exists) and that is a different
+question, not a gap. A sweep whose exclusion list was filled in quickly to get
+green would be the defect wearing the fix's clothes.
+
 A CLOSED DENOMINATOR IS ACHIEVABLE AT SCALE, and the obvious objection — that
 this only works on small corpora — has a counterexample in the tree. anat's
 MSG-04 guard does not report its unjudged share, it drives it to zero:
@@ -148,11 +160,27 @@ import yaml
 
 #: How a population may be derived: by asking what a thing IS. Every one of
 #: these reads a structure — a parse tree, the app's own route table, the
-#: schema, an explicit enumeration, the filesystem. What is NOT here is the
-#: whole point: a population chosen by what things are CALLED is the defect
-#: this module exists for, so `names`, `grep`, `regex` and `convention` are
-#: refused by name rather than by omission, with the reason printed.
-DERIVATIONS = ("ast", "route_table", "schema", "enumeration", "filesystem")
+#: schema, an explicit enumeration, the filesystem, or the REQUIREMENT PROSE
+#: the project already maintains. What is NOT here is the whole point: a
+#: population chosen by what things are CALLED is the defect this module exists
+#: for, so `names`, `grep`, `regex` and `convention` are refused by name rather
+#: than by omission, with the reason printed.
+#:
+#: `requirement_text` is a text sweep and is admitted anyway, which looks like
+#: an exception and is not. The refusal is on deriving a population from what
+#: the CODE happens to be called; the spec is the other side of the question,
+#: and a population read out of prose the project maintains GROWS BY ITSELF
+#: when a row is added — which a hand-written tuple cannot. GEN-03 is why it is
+#: here: "no action fails while the screen looks as though it succeeded" was an
+#: aggregate row whose parts were listed by hand, and ACT-11 — a bulk action
+#: that answered {"updated": 50} having written none — was not on the list. The
+#: aggregate could have gone green with the principle's own defect live, and
+#: its guard would have agreed, not by being wrong but because the row was not
+#: one of the things it was looking at. Swept from the requirement text instead
+#: ("every row whose wording talks about failing, erroring or succeeding is a
+#: part of GEN-03 or is answered with the reason it is a different question"),
+#: it names ACT-11 and FRM-13 by id.
+DERIVATIONS = ("ast", "route_table", "schema", "enumeration", "filesystem", "requirement_text")
 REFUSED = {
     "names": "ACT-11: the corpus was routes whose PATH contained batch|bulk; the property was routes that iterate a collection",
     "naming": "a naming heuristic is the defect, not a derivation",
