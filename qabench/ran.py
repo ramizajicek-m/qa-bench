@@ -52,7 +52,33 @@ THE RULE, in one sentence: a verdict comes from an ARTEFACT OF COMPLETION, and
   REFUSED  the command decided not to act and said so. Not a defect; not a pass
   INVALID  exit non-zero with nothing reported failed · no completion marker at
            all · a marker whose count is zero · a command that can act and
-           never said it did. Exit 3, and 3 is never read as 0
+           never said it did · a declared GATE that was not attempted and does
+           not say where it does run. Exit 3, and 3 is never read as 0
+
+A GATING CHECK THAT EXISTS ONLY IN CI IS INVISIBLE TO THE PERSON WHO CAN ACT ON
+IT. anat's catalogue ratchet judges ruff and semgrep. ruff runs in the per-change
+tier — a second, pinned, with a self-test that a synthetic undefined name still
+comes back F821. semgrep is a minute of CPU, so it runs only in the `lint` job,
+and locally its assertion SKIPS. The consequence is not that semgrep is
+unchecked; it is checked, in CI. The consequence is that the per-change tier has
+NEVER ONCE executed it, so there is a class of finding nobody can reproduce
+before landing: the first you learn of one is a red job, and GitHub withholds
+logs until the whole run completes, so for the window that matters you have a
+red gate you cannot read on a cause you cannot reproduce.
+
+The contract question was put to this kit directly: must every gating check be
+runnable locally, or must it merely SAY SO when it is not? The floor here is the
+second and the target is the first, because "runnable locally" is not always
+affordable — a minute of semgrep per change is how people stop running the tier
+at all — while "gates you silently and invisibly" is never acceptable. So a
+command declares its `gates:`, each with the evidence that it ran; a gate with
+no evidence in the output is named IN THE VERDICT, with where it does run and
+what would make it runnable here. A gate that cannot say where it runs is
+INVALID: that is the silent case, and it is the only one refused outright.
+
+A skipped check and a passed check are textually identical unless something
+insists on the difference — the same sentence as the artefact-of-completion rule
+above, one level out.
 
 A REFUSAL AND A SUCCESS MUST NOT BE THE SAME OBSERVATION, which is the live
 instance this grew from, hours after the module was written. `make land`
@@ -108,6 +134,12 @@ Manifest shape:
         e2e:
           completed: '(\\d+) (?:passed|deselected)'   # optional; the kit's pytest-shaped default is used
           failed: '^FAILED |(\\d+) failed|(\\d+) error'   # without it, the run is judged on completion alone
+        tier1:
+          gates:                            # checks that gate a change but may not run HERE
+            - name: semgrep
+              evidence: '^semgrep: \\d+ findings'   # what its having run looks like
+              elsewhere: "the `lint` job in qa-nightly.yml"
+              locally: "make venv-semgrep"           # optional, and the target to aim at
         land:
           completed: 'make: \\*\\*\\* |pushed |REFUSING'
           refused: '^REFUSING TO LAND'      # a decision, not a defect — and never a pass
@@ -228,6 +260,7 @@ def verdict(exit_code: int, output: str, spec: dict) -> tuple[str, str]:
     completed = spec.get("completed") or DONE
     failed = spec.get("failed") or FAILED_DEFAULT
     refused, decided = spec.get("refused"), spec.get("decided")
+    gates = spec.get("gates") or []
     hits = list(re.finditer(completed, output, re.M))
     counts = [int(g) for m in hits for g in m.groups() if g and g.isdigit()]
     failures = list(re.finditer(failed, output, re.M))
@@ -252,11 +285,23 @@ def verdict(exit_code: int, output: str, spec: dict) -> tuple[str, str]:
     if decided and not re.search(decided, output, re.M):
         return INVALID, (f"nothing in the output matches {decided!r} — the command never said it DID the thing, "
                          "and `it exited 0` is not evidence that anything happened. Assert the artefact")
+    unattempted = [g for g in gates if not re.search(g.get("evidence") or r"(?!x)x", output, re.M)]
+    silent = [g for g in unattempted if not g.get("elsewhere")]
+    if silent:
+        return INVALID, ("gating check(s) " + ", ".join(str(g.get("name", "?")) for g in silent)
+                         + " were not attempted here and do not say where they DO run — a check that gates you "
+                           "silently and invisibly is the one case this refuses outright")
     if exit_code != 0:
         return INVALID, (f"exited {exit_code} with nothing reported failed — the run finished but its exit code "
                          "disagrees with its own summary, and reading that as a pass closes a row on nothing")
+    note = ""
+    if unattempted:
+        note = " — NOT ATTEMPTED HERE: " + "; ".join(
+            f"{g.get('name', '?')} (runs in {g['elsewhere']}"
+            + (f"; `{g['locally']}` to run it here)" if g.get("locally") else ")")
+            for g in unattempted)
     return PASS, (f"exited 0, finished, {counts[0] if counts else 'n/a'} executed, nothing refused, nothing failed"
-                  + (f", and it said so ({decided!r})" if decided else ""))
+                  + (f", and it said so ({decided!r})" if decided else "") + note)
 
 
 def execute(argv: list[str], log: Path, *, cwd: Path, echo=print) -> int:
@@ -295,6 +340,12 @@ def run_one(root: Path, cfg: dict, name: str, argv: list[str], *, now=None, echo
         # pytest-shaped defaults, which are right for a pytest run and a guess
         # for anything else.
         "declared": bool(spec), "verdict": v, "why": why, "exit_code": code,
+        # Named in the artefact as well as in the sentence: the next session
+        # reads the JSON, and a gate nobody attempted is exactly what a green
+        # local run otherwise fails to mention.
+        "not_attempted": [g.get("name") for g in (spec.get("gates") or [])
+                          if not re.search(g.get("evidence") or r"(?!x)x",
+                                           log.read_text(encoding="utf-8", errors="replace"), re.M)],
         "log": str(log.relative_to(root)), "finished": dt.datetime.now(dt.timezone.utc).isoformat(),
     }
     if not spec:

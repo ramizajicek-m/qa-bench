@@ -223,3 +223,39 @@ def test_a_command_declaring_no_refusal_is_unaffected(repo):
     assert ran.verdict(0, PYTEST_GREEN, SPEC)[0] == ran.PASS
     root = repo()
     assert ran.run(["--repo", str(root), "--name", "suite", "--"] + say("4 passed"), echo=lambda *_: None) == 0
+
+
+GATE = {"completed": r"(\d+) passed",
+        "gates": [{"name": "semgrep", "evidence": r"^semgrep: \d+ findings",
+                   "elsewhere": "the `lint` job in qa-nightly.yml", "locally": "make venv-semgrep"}]}
+
+
+def test_a_gate_that_did_not_run_here_is_named_in_the_verdict():
+    """A green local run must mention that a gating check was never attempted.
+    The floor asked for by the reporting session: not that every gate be
+    runnable locally — a minute of semgrep per change is how people stop
+    running the tier — but that a skipped gate and a passed gate never read
+    the same."""
+    v, why = ran.verdict(0, PYTEST_GREEN, GATE)
+    assert v == ran.PASS
+    assert "NOT ATTEMPTED HERE" in why and "semgrep" in why
+    assert "the `lint` job" in why and "make venv-semgrep" in why
+
+
+def test_a_gate_that_did_run_is_not_mentioned():
+    v, why = ran.verdict(0, "semgrep: 0 findings\n" + PYTEST_GREEN, GATE)
+    assert v == ran.PASS and "NOT ATTEMPTED" not in why
+
+
+def test_a_gate_that_cannot_say_where_it_runs_is_invalid():
+    """The silent case, and the only one refused outright."""
+    spec = {"completed": GATE["completed"], "gates": [{"name": "semgrep", "evidence": r"^semgrep:"}]}
+    v, why = ran.verdict(0, PYTEST_GREEN, spec)
+    assert v == ran.INVALID and "silently and invisibly" in why
+
+
+def test_the_artefact_names_the_gates_nobody_attempted(repo):
+    root = repo(commands={"suite": GATE})
+    assert ran.run(["--repo", str(root), "--name", "suite", "--"] + say("4 passed"), echo=lambda *_: None) == 0
+    art = json.loads((root / "qa" / "runs" / "suite.json").read_text())
+    assert art["not_attempted"] == ["semgrep"] and art["verdict"] == ran.PASS
