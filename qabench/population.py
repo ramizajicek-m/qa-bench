@@ -270,6 +270,38 @@ call comes in", which does not merely word it wrongly, it asserts something
 false about their data. Same shape in both: the helper is correct, the
 population is the CALLERS of the helper, and the surface has lists outside it.
 
+A TELL IS A PRIORITISER, NEVER A FILTER — and this matters for anything that
+might one day rank which guards to suspect. The tell that works is vocabulary: a
+reason that cannot be stated without naming an implementation detail is
+describing something narrower than the requirement. Measured:
+
+    vocabulary-flagged rows, checked against the evidence:      0 of 7 moved
+    the same rows, checked against the SURFACE:                 2 of 7 moved
+    UNFLAGGED screen-facing rows, checked against the surface:  1 of 12 moved
+
+The third number is the one to keep. The tell does real work — roughly four
+times likelier to carry the gap — and it is NOT NECESSARY. LST-08's reason is
+plain language ("every .data-table keeps its heading row on screen while
+scrolling") and carries the identical defect: the population is a CSS CLASS, 146
+tables exist, 130 carry it, and ten of the sixteen outside build their rows from
+a collection and so can grow and scroll. A heuristic that EXCLUDED the unflagged
+rows would have missed it — and would itself be a corpus keyed on a naming
+heuristic, which is the thing this module refuses. So: it ranks, it does not
+exclude.
+
+(That is the third class-keyed population found in one day, after STA-02's
+`empty-state` and LST-05's `data-row-actions`. Three instances is the framework's
+own threshold for redesign rather than another row, which is why
+`class_attribute` and `conversion_marker` are refused by name above.)
+
+A WRONG DETECTOR AND A WRONG METHOD ARE NOT THE SAME COST, which is the argument
+for a browser tier in one line. A wrong detector is bounded by its own scope and
+the phantom is visible the moment you read the thing it named — seven of them in
+a day, every one caught by reading the code the detector described. A wrong
+METHOD is unbounded and invisible from inside, because every row it passed looks
+exactly like a row that was actually checked; the one that happened was caught
+by somebody else driving a browser, and by nothing else.
+
 A CORPUS DEFINED BY THE PROPERTY UNDER TEST, which is not the denominator
 problem and needs its own name, because the usual fix does not work on it.
 
