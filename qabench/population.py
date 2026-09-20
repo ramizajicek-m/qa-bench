@@ -128,6 +128,24 @@ every transform proving it did not shrink what it touched. Anchor to structure �
 a tag, an AST node — rather than cleaning text to make a pattern work. When a
 pattern needs the text cleaned to be correct, the pattern is wrong.
 
+A RATCHET GOES GREEN OVER NOTHING IN TWO WAYS — THE WORK SUCCEEDING, OR THE SCAN
+BREAKING — AND THEY NEED DIFFERENT DEFENCES. The work succeeding: a population
+keyed on the shape of the old code empties as the fix lands, and the defence is
+a bucket keyed on the PROPERTY, which moves the opposite way. The scan breaking:
+a corpus that empties by accident, and the defence is a corpus FLOOR.
+
+THE CASE THAT BITES IS NOT AN EMPTY CORPUS BUT A QUIETLY SHRUNKEN ONE. A real
+migration caught a scan that fell FROM 350 FILES TO 5, which would have passed
+any "at least one" floor and any non-vacuity check. That is why the pin in this
+module is EXACT in both directions rather than a minimum: a minimum answers the
+empty case and is blind to the case that actually happens.
+
+(Where that defence is deliberately given up, `population.observed_from:` says
+so — a population read out of an environment cannot pin its size, so a quiet
+shrink there is invisible and the discrimination has to come from the
+capability's constructed case instead. That is a trade, and it is the only place
+in this module where a shrinking corpus is not a finding.)
+
 A RATCHET HAS TWO POSSIBLE PURPOSES AND THEY HAVE OPPOSITE CORRECT ENDINGS, so
 `for:` is declared. A ratchet measuring a PROPERTY the fix must preserve must
 not be keyed on the shape of the old code, because it empties and goes green
