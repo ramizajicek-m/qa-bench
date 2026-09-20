@@ -307,12 +307,18 @@ Net: ONE real finding out of eight, and the real one was the single site that
 could be LOCATED. Three narrowings cost more than one instance read.
 
 FILE-LEVEL CREDIT FOR A MEMBER-LEVEL PROPERTY UNDER-REPORTS BY CONSTRUCTION, and
-that is the dangerous direction. A scan says 8 of 23 searchable surfaces lack a
-sort mechanism. The one surface somebody actually DROVE — 37 rows, 20 columns,
-zero sort controls of any kind — is NOT among the 8, because its file contains
-sort markup somewhere outside the main table and the scan credits the FILE. So 8
-is A FLOOR, NOT A COUNT, and the true figure is at least 9 with no way to know
-the rest from source.
+that is the dangerous direction. (THE INSTANCE FIRST RECORDED HERE FOR THIS WAS RETRACTED WITHIN HOURS AND IS
+KEPT AS THE RETRACTION, because the rule stands on structure and the instance
+did not. A scan said 8 of 23 surfaces lack a sort mechanism; a browser drive of
+a surface NOT among the 8 found 20 headers and none sortable, and the agreement
+was reported as proof the scan under-counted. Both were wrong. The drive queried
+`thead th` ACROSS THE WHOLE PAGE and judged 20 headers from THREE tables — the
+real list has 15 headers, 11 sortable, and THE ELEMENT UNDER TEST WAS NEVER
+LOCATED — while the scan could not see sort at all because it is applied AT
+RUNTIME by a shared helper rather than written into the template. So this rule
+has no verified instance in this estate; it is here because file-level credit
+under-reports BY CONSTRUCTION, which is an argument rather than a measurement,
+and it is labelled as one.)
 
 THE ASYMMETRY, which this kit had backwards all day: an OVER-reporting scan is
 SELF-CORRECTING — the first person to read an instance finds a false positive
