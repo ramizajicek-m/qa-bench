@@ -203,6 +203,39 @@ phrases in both lists. It could not see the difference it existed to measure.
 The population there is the union; the subject was the intersection, and this
 module prints the twenty-three names in the first and not the second.
 
+A GUARD'S UNIT MUST BE THE UNIT THE REQUIREMENT QUANTIFIES OVER. Whenever the
+guard's unit is COARSER than the requirement's, the difference is invisible by
+construction and looks exactly like coverage.
+
+A census for "a refusal takes the person to the offending field" checked whether
+each FILE containing a refusal also contained a focus call. Two of the sign-in
+screen's three focus calls were removed to watch it go red and IT STAYED GREEN,
+because the third still matched somewhere in the same file: one call vouching
+for three refusals. The same shape turned up twice the same day in another
+codebase, in a ratchet and in a date check. THE FILE CONTAINING THE RIGHT THING
+SOMEWHERE SAYS NOTHING ABOUT WHETHER THIS MEMBER GOT IT. Per site is the fix:
+for each refusal, require the pointer between the setter and its `return`, and
+report the count of silent sites rather than a verdict.
+
+This is one rule with three faces, and the other two are elsewhere in this file:
+a row about every refusal needs a check per refusal; a row about every dialog
+needs a check per dialog (ACT-07, 12 of 146 unreached); an exemption about one
+file needs a check that removing THAT entry bites. So `population.unit:` is
+declared and says what ONE MEMBER IS — a site, a dialog, a route, a template —
+and a reader can then challenge it against the requirement's own wording, which
+is the only place the mismatch is visible.
+
+THE SAME ROW FAILS IN CODEBASES THAT SHARE NO CODE, which is why the row rather
+than the implementation is the unit of failure. Three rows were found
+independently in two products on one day — FRM-05 (one meaning "first in the
+response body" with an e2e driving a single field; the other holding on one
+surface of ten), ACT-07 (12 of 146 dialogs bypassing the prompt there, 13 of 14
+here), and the class-keyed census shape. What they share is not a bug pattern
+but a TEST pattern: each row was closed by evidence exercising ONE MEMBER of a
+population the row quantifies over, and in each case the one member was the one
+where the property already held. The row's text invites a single worked example,
+and a single worked example is exactly what cannot see it.
+
 AN EXEMPTION MUST BE TESTED IN THE DIRECTION THAT PROVES IT IS LOAD-BEARING.
 Two entries were added to one exemption map in a single edit, reading
 identically — a sentence saying the page's state is view state and it writes
@@ -643,6 +676,7 @@ And the register:
       - id: act11-count-reporting-routes
         check: C6
         claims: "a route that iterates a collection and reports a count reports its failures too"
+        unit: "one route handler"          # what ONE member is
         claims_faculty: "what the route DOES at runtime"     # and the population is found by another
         undecided: "routes that report no count at all; anything reached from a background job"
         population:
@@ -981,6 +1015,12 @@ def judge(spec: dict, root: Path, today: dt.date, *, run=read_members, surfaces=
                 "its own source always agrees. LST-07's claim was restated honestly and verified against the "
                 "row's own five paging tables; a browser then found 15 unpaged per-client sub-lists, a category "
                 "outside the population entirely. Verify against the SURFACE a person touches")
+    if not spec.get("unit"):
+        row.problems.append(
+            "no `unit:` — what ONE MEMBER IS (a site, a dialog, a route, a template). A guard's unit must be "
+            "the unit the requirement quantifies over, and a coarser one is invisible by construction: a census "
+            "asking whether each FILE containing a refusal also contained a focus call stayed GREEN after two of "
+            "three focus calls were deleted, because the third still matched somewhere in the same file")
     if not spec.get("undecided"):
         row.problems.append(
             "no `undecided:` — one sentence for what this guard does NOT judge. ACT-05 swept 146 dialogs "

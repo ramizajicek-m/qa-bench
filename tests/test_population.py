@@ -73,6 +73,7 @@ def guard(**over) -> dict:
         "claims": "a route that iterates a collection and reports a count reports its failures too",
         "undecided": "routes that report no count at all",
         "claims_faculty": "what the route DOES at runtime",
+        "unit": "one route handler",
         "population": {"derived_from": "ast", "faculty": "static parse", "cmd": emit("a", "b", "c"), "count": 3},
         "subject": {"cmd": emit("a", "b", "c")},
     }
@@ -696,3 +697,13 @@ def test_the_two_dead_exemptions_are_different_findings(repo):
         {"member": "not-in-the-world", "reason": "x", "evidence": "docs/ledger.md", "review_by": "2026-10-15"}])
     assert any("'b' is stale: the guard now examines it" in p for p in row["problems"])
     assert any("'not-in-the-world' enforces NOTHING" in p for p in row["problems"])
+
+
+def test_a_guard_must_say_what_one_member_is(repo):
+    """A census asking whether each FILE containing a refusal also contained a
+    focus call stayed green after two of three focus calls were deleted: the
+    third still matched somewhere in the same file. One call vouched for three
+    refusals, and the guard's unit was coarser than the requirement's."""
+    row = judged(repo, unit=None)
+    assert any("no `unit:`" in p and "invisible by construction" in p for p in row["problems"])
+    assert any("still matched somewhere in the same file" in p for p in row["problems"])
