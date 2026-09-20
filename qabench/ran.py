@@ -44,11 +44,37 @@ THE RULE, in one sentence: a verdict comes from an ARTEFACT OF COMPLETION, and
 "the code is wrong" from "the host was busy" is not a check.
 
   PASS     the command exited 0, the output carries the declared completion
-           marker, the marker's count is greater than zero, nothing failed
+           marker, the marker's count is greater than zero, nothing refused,
+           nothing failed, and — where the command declares one — the artefact
+           saying it DID THE THING is present
   FAIL     something the runner calls a failure is in the output, whatever it
            exited — a runner that reports failures and exits 0 is a FAIL here
+  REFUSED  the command decided not to act and said so. Not a defect; not a pass
   INVALID  exit non-zero with nothing reported failed · no completion marker at
-           all · a marker whose count is zero. Exit 3, and 3 is never read as 0
+           all · a marker whose count is zero · a command that can act and
+           never said it did. Exit 3, and 3 is never read as 0
+
+A REFUSAL AND A SUCCESS MUST NOT BE THE SAME OBSERVATION, which is the live
+instance this grew from, hours after the module was written. `make land`
+printed "REFUSING TO LAND: tier1 is red on the merged tree" and `make: ***
+[land] Error 1`, and the wrapper invoking it reported exit 0 — the status came
+from the end of a pipeline rather than from the command. Nothing had landed and
+the tree was unchanged. The hurt is not to the author reading the tail: it is
+to the NEXT session in a serialised lane, which judges the landing by its status,
+concludes it pushed, and advances the queue past a refusal nobody saw. A session
+that believes it landed stops watching.
+
+The repo already had the rule — capture `$?` from the command, never from the
+pipeline; `set -o pipefail` on any block that pipes — written down twice, and
+the Makefile applies it to the targets it owns. It still happened, because THE
+PIPE WAS NOT IN THE CALLEE. A repo can harden every target it owns and still be
+invoked through a pipeline it does not control. That is why this module is the
+CALLER: argv with no shell is not a hardening anyone has to remember.
+
+So a command that can refuse declares `refused:`, and a command that acts
+declares `decided:` — the artefact it prints when it did the thing ("pushed
+<sha>"). A PASS then asserts the artefact rather than the absence of a
+complaint, and "it exited 0" is never the evidence that anything happened.
 
 Three mechanics carry it, each paid for by one of the incidents above:
 
@@ -82,6 +108,10 @@ Manifest shape:
         e2e:
           completed: '(\\d+) (?:passed|deselected)'   # optional; the kit's pytest-shaped default is used
           failed: '^FAILED |(\\d+) failed|(\\d+) error'   # without it, the run is judged on completion alone
+        land:
+          completed: 'make: \\*\\*\\* |pushed |REFUSING'
+          refused: '^REFUSING TO LAND'      # a decision, not a defect — and never a pass
+          decided: '^pushed [0-9a-f]{7,40}' # the artefact; a PASS asserts THIS, not exit 0
 """
 from __future__ import annotations
 
@@ -98,8 +128,8 @@ from pathlib import Path
 
 import yaml
 
-PASS, FAIL, INVALID = "PASS", "FAIL", "INVALID"
-EXIT = {PASS: 0, FAIL: 1, INVALID: 3}
+PASS, FAIL, REFUSED, INVALID = "PASS", "FAIL", "REFUSED", "INVALID"
+EXIT = {PASS: 0, FAIL: 1, REFUSED: 1, INVALID: 3}
 
 
 @dataclass
@@ -197,6 +227,7 @@ def verdict(exit_code: int, output: str, spec: dict) -> tuple[str, str]:
     """
     completed = spec.get("completed") or DONE
     failed = spec.get("failed") or FAILED_DEFAULT
+    refused, decided = spec.get("refused"), spec.get("decided")
     hits = list(re.finditer(completed, output, re.M))
     counts = [int(g) for m in hits for g in m.groups() if g and g.isdigit()]
     failures = list(re.finditer(failed, output, re.M))
@@ -209,15 +240,23 @@ def verdict(exit_code: int, output: str, spec: dict) -> tuple[str, str]:
     if counts and not any(counts):
         return INVALID, (f"the run reached the end and executed NOTHING ({completed!r} matched a count of 0) — "
                          "an empty run is not a clean one")
+    if refused and re.search(refused, output, re.M):
+        return REFUSED, (f"the command REFUSED and said so ({refused!r} matched), whatever it exited "
+                         f"({exit_code}) — a refusal and a success must never be the same observation, and "
+                         "the next session in the lane reads this one")
     if failures:
         return FAIL, (f"the runner reported failure{'' if len(failures) == 1 else 's'} "
                       f"({len(failures)} line(s) matched)"
                       + (f", and exited {exit_code}" if exit_code
                          else " and exited 0 — a runner that reports failures and exits 0 is still a failure"))
+    if decided and not re.search(decided, output, re.M):
+        return INVALID, (f"nothing in the output matches {decided!r} — the command never said it DID the thing, "
+                         "and `it exited 0` is not evidence that anything happened. Assert the artefact")
     if exit_code != 0:
         return INVALID, (f"exited {exit_code} with nothing reported failed — the run finished but its exit code "
                          "disagrees with its own summary, and reading that as a pass closes a row on nothing")
-    return PASS, f"exited 0, finished, {counts[0] if counts else 'n/a'} executed, nothing failed"
+    return PASS, (f"exited 0, finished, {counts[0] if counts else 'n/a'} executed, nothing refused, nothing failed"
+                  + (f", and it said so ({decided!r})" if decided else ""))
 
 
 def execute(argv: list[str], log: Path, *, cwd: Path, echo=print) -> int:

@@ -180,3 +180,46 @@ def test_our_own_ancestors_are_not_the_host(monkeypatch):
     monkeypatch.setattr(ran.subprocess, "run",
                         lambda *a, **k: sp.CompletedProcess(a[0] if a else [], 0, table, ""))
     assert ran.snapshot({"processes": ["test_stack.sh"]}).processes == {"test_stack.sh": 1}
+
+
+#: The live instance, 2026-09-20: `make land` refused, make exited 1, and the
+#: wrapper that invoked it through a pipeline reported 0. Nothing landed.
+LAND_REFUSED = ("REFUSING TO LAND: tier1 is red on the merged tree\n"
+                "make: *** [land] Error 1\n")
+LAND_PUSHED = "tier1 green on the merged tree\npushed 6939c4f\n"
+LAND = {"completed": r"make: \*\*\* |pushed |REFUSING",
+        "refused": r"^REFUSING TO LAND",
+        "decided": r"^pushed [0-9a-f]{7,40}"}
+
+
+def test_a_refusal_is_never_a_pass_whatever_the_exit_code():
+    """The exit code was laundered by a pipeline; the refusal was still printed.
+    The next session in a serialised lane reads this and advances the queue."""
+    for code in (0, 1, 2):
+        v, why = ran.verdict(code, LAND_REFUSED, LAND)
+        assert v == ran.REFUSED and "never be the same observation" in why
+    assert ran.EXIT[ran.REFUSED] != 0
+
+
+def test_a_pass_asserts_the_artefact_not_the_absence_of_a_complaint():
+    assert ran.verdict(0, LAND_PUSHED, LAND)[0] == ran.PASS
+    quiet = "tier1 green on the merged tree\nmake: *** [land] Error 1\n"
+    v, why = ran.verdict(0, quiet, LAND)
+    assert v == ran.INVALID and "never said it DID the thing" in why and "Assert the artefact" in why
+
+
+def test_a_refusal_and_a_success_are_different_observations():
+    """The whole rule, in the form the reporting session put it."""
+    assert ran.verdict(0, LAND_REFUSED, LAND)[0] != ran.verdict(0, LAND_PUSHED, LAND)[0]
+
+
+def test_the_refusal_is_read_before_the_failure_lines():
+    """`make: *** [land] Error 1` is a failure line. The accurate word for what
+    happened is REFUSED — the command decided, it did not break."""
+    assert ran.verdict(1, LAND_REFUSED, LAND)[0] == ran.REFUSED
+
+
+def test_a_command_declaring_no_refusal_is_unaffected(repo):
+    assert ran.verdict(0, PYTEST_GREEN, SPEC)[0] == ran.PASS
+    root = repo()
+    assert ran.run(["--repo", str(root), "--name", "suite", "--"] + say("4 passed"), echo=lambda *_: None) == 0
