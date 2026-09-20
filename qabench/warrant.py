@@ -18,6 +18,39 @@ One copy, because a contract with four copies is four contracts. The estate
 learned this with `test_qa_conformance.py`, which was a template copied into six
 repos and drifted into six meanings of `implemented`.
 
+A JUSTIFICATION MAY NOT CONTAIN A POINTER THAT CAN MOVE INDEPENDENTLY OF THE
+CLAIM. This replaces "reasons go stale", which is both weaker and unactionable —
+it tells you to re-read everything, which nobody does. Three instances from one
+pass, none careless, all true when written:
+
+    PRF-06 cited STA-01 as absent, and STA-01 was implemented days later by the
+           same programme. A ROW ID is a pin.
+    SEC-02 claimed "nothing to test against" for hidden-versus-disabled, while
+           two guards test it and one states the policy in its own docstring.
+           A CLAIM ABOUT ANOTHER FILE'S CONTENTS is a pin.
+    Eleven SCN rows cited `clients/detail.html:12514` for a getUserMedia call.
+           It now sits at 12847 — the code did not move, THE FILE GREW ABOVE IT.
+           A LINE NUMBER is a pin.
+
+Each drifted silently, because nobody re-reads a justification. The fix is
+actionable at the moment of writing rather than at some later audit: A CITATION
+SHOULD BE SOMETHING A SEARCH CAN FIND AGAIN, NOT A COORDINATE. "the voice test
+in clients/detail.html" survives the file growing; "clients/detail.html:12514"
+does not. A function name over a line, a route path over a router index, a
+test's name over its position.
+
+This is the same family as keying a ratchet on function names rather than
+path:LINE, which this estate learned after four failures in one morning where a
+guard fired because something was ADDED ABOVE it. That lesson was learned for
+guards and never carried to prose — and the prose is worse, because a drifted
+ratchet goes red and gets looked at, while a drifted justification stays green
+and gets believed.
+
+So `evidence:` is refused when it is a line coordinate. A row id can be checked
+(the table holds the target: see `judge_claims`), a claim about a file's
+contents can sometimes be checked, and a line number cannot be checked at all —
+but it can be AVOIDED, which is cheaper.
+
 THERE IS NO STALENESS RULE HERE, AND THE MEASUREMENT IS WHY. On 2026-09-20 a
 tracker row (SEC-02) was found asserting a gap that was already half closed: its
 reason said the admin templates mix hidden and disabled "with NOTHING TO TEST
@@ -72,7 +105,13 @@ cross-reference scan is the one part of that re-read a machine can do.
 from __future__ import annotations
 
 import datetime as dt
+import re
 from pathlib import Path
+
+#: `path/to/file.ext:1234` — a coordinate. `path/to/file.py::test_name` is not
+#: one: `::` is the estate's convention for naming a member, which a search
+#: finds again after the file grows.
+_LINE_COORDINATE = re.compile(r"(?<!:):\d+(?::\d+)?\s*$")
 
 #: The four fields, in the order a reader needs them. `subject` is named by the
 #: caller, because a population exempts a member and `distinct` exempts a pair.
@@ -97,6 +136,13 @@ def judge(entry, root: Path, today: dt.date, *, subject: str = "member", label: 
         return f"{label} {who!r} lacks {', '.join(lacking)}"
 
     evidence = entry["evidence"] if isinstance(entry["evidence"], list) else [entry["evidence"]]
+    coordinates = [e for e in evidence if _LINE_COORDINATE.search(str(e))]
+    if coordinates:
+        return (f"{label} {who!r} cites a LINE COORDINATE: {', '.join(map(str, coordinates))}. A line number is a "
+                "pointer that moves independently of the claim — eleven rows citing "
+                "clients/detail.html:12514 drifted to 12847 because the file grew ABOVE the code, which did not "
+                "move. Cite something a search can find again: a function name over a line, a route path over a "
+                "router index, a test's name over its position")
     absent = [e for e in evidence if not (root / str(e).split("::")[0]).exists()]
     if absent:
         return (f"{label} {who!r}: evidence does not exist: {', '.join(absent)} — a reason citing a file that "

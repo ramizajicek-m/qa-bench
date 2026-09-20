@@ -104,3 +104,22 @@ def test_fewer_refusals_is_not_automatically_better():
 
 def test_a_malformed_claim_is_named_not_skipped():
     assert "lacks one of" in warrant.judge_claims([{"row": "X"}], STATUSES, unresolved=0, unresolved_pin=0)[0]
+
+
+def test_a_line_coordinate_in_a_citation_is_refused(root):
+    """Eleven rows cited clients/detail.html:12514 for a getUserMedia call. It
+    now sits at 12847 — the code did not move, the file grew above it. A line
+    number is a pointer that moves independently of the claim."""
+    problem = warrant.judge(w(evidence="docs/ledger.md:12514"), root, TODAY)
+    assert "LINE COORDINATE" in problem and "a search can find again" in problem
+
+
+def test_a_member_citation_is_not_a_coordinate(root):
+    """`::name` is the estate's convention for naming a member, which a search
+    finds again after the file grows."""
+    assert warrant.judge(w(evidence="docs/ledger.md::the voice test"), root, TODAY) == ""
+
+
+def test_a_coordinate_anywhere_in_a_list_is_refused(root):
+    assert "LINE COORDINATE" in warrant.judge(
+        w(evidence=["docs/ledger.md", "docs/ledger.md:40"]), root, TODAY)

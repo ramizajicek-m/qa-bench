@@ -39,6 +39,15 @@ than from a session's taste — and an unpinned table is told what to pin. A pin
 at or below the measured overlap is refused with both numbers printed, because
 a threshold that the table already exceeds cannot fire before the table does.
 
+SHARED TEXT IS NOT ALWAYS A LEAK, AND THE HONEST CASE NEEDS ITS OWN HANDLING.
+Eleven rows of one tracker shared a single claim about a getUserMedia call. The
+right treatment is to check that claim ONCE, thoroughly, and mark the eleven as
+SHARING it — because eleven casual confirmations of one sentence are eleven
+chances to be wrong in the same direction, and in a table they read as eleven
+INDEPENDENT confirmations. Anything else manufactures corroboration. So an
+exemption here is not only a way to excuse an overlap; it is the record that the
+rows share a claim and that the claim was checked once. Its `reason` says so.
+
 WHAT IT CANNOT SEE, stated: a corruption that is SHORT. Two rows whose reasons
 differ only in a sentence are invisible here and always will be — the sliding
 window is what makes the check certain, and certainty costs sensitivity. This
