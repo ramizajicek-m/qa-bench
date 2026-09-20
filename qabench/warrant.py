@@ -111,43 +111,41 @@ def judge(entry, root: Path, today: dt.date, *, subject: str = "member", label: 
     return ""
 
 
-#: THE MEASURED CASE FOR REFUSING RATHER THAN ATTRIBUTING, which this kit has
-#: asserted all day without a number until now. Over the same 109 rows:
+#: THE MEASURED CASE FOR REFUSING RATHER THAN ATTRIBUTING, which this kit
+#: asserted all day on anecdote before anyone put a number under it. ONE corpus
+#: — 109 tracker rows, 8 mentions of another row carrying a status word —
+#: measured BOTH WAYS, which is stronger than comparing two passes:
 #:
-#:     mentions of another row carrying a status word (hand scan):  8
-#:     what a strict extractor RESOLVES:                            3
-#:     what it REFUSES:                                             5
-#:     inside the resolved 3:   1 genuinely wrong · 1 correctly passed · 1 PHANTOM
+#:     STRICT (the status word attaches to the id as its SUBJECT, present tense)
+#:         resolved 1 · refused 7 · wrong 1 · phantoms 0
+#:     LOOSE (proximity only, a status word within 45 characters of an id)
+#:         resolved 8 · refused 0 · wrong 2
 #:
-#: Refusing five of eight cost ZERO findings: the one genuine defect (PRF-06
-#: citing STA-01 as absent, when STA-01 is implemented) was inside the 3. That is
-#: the answer to the standing objection that a confident-only parser
-#: under-detects, and it is the half of this measurement that holds.
+#:     attributions the strict parser DECLINED TO INVENT:            7
+#:     of those, extra "findings" the loose parser reports:          1
+#:     of that one, how many were real:                              0
 #:
-#: The half that does NOT hold was retracted within the hour by the person who
-#: took it. The first reading reported two defects; the second was a phantom the
-#: extractor's own author had written the prose for that morning. "The one thing
-#: that was missing is now supplied by the PRT-03 work in this same pass"
-#: asserts nothing about PRT-03's status — a capability was missing, past tense,
-#: and PRT-03's work supplied it — but a status word within 45 characters of an
-#: id looked like a claim. ONE IN THREE OF THE RESOLVED CLAIMS WAS FALSE, which
-#: is not shippable, and the check is not landing until it is narrowed and
-#: re-measured. The defect is TENSE AND GRAMMATICAL ROLE, not window size: "was
-#: missing" is not "is missing", and a status word must attach to the id as its
-#: SUBJECT rather than sit near it. If narrowing to that also loses the one real
-#: finding, the honest conclusion is that this class is not mechanisable either,
-#: and that is what gets reported — a guard that cries wolf is switched off, and
-#: then nothing guards the real case.
+#: So: seven attributions declined, of which the loose parser would have
+#: reported exactly one as a defect, and that one was a phantom — a sentence
+#: reading "the one thing that was missing is now supplied by the PRT-03 work",
+#: which asserts nothing about PRT-03's status and which the extractor's own
+#: author had written that morning. Refusal cost nothing and bought the removal
+#: of a false finding. Precision 1.0 strict against 0.5 loose.
 #:
-#: So `judge_claims` below is correct and is NOT evidence that anything should
-#: be wired to it yet. The four lines that compare were never the risk.
+#: NOT OVERSOLD, in the words of the person who took the measurement: the loose
+#: parser's other six attributions were all CORRECT passes. The strict parser is
+#: not better because those six were dangerous. It is better because the loose
+#: one cannot tell which of the eight it is competent to judge, and the one it
+#: got wrong is the one that cost.
 #:
-#: The refusals are refused for stateable reasons — a sentence carrying both an
-#: open-word and a done-word near the id, or naming two different rows — which is
-#: genuine ambiguity rather than parser weakness, and is why the answer is to
-#: COUNT them rather than guess. The count is pinned, so the share of the table
-#: nothing examines cannot quietly grow, and disabling the confidence filter
-#: collapses it and fires the ratchet: the refusal is load-bearing, not decoration.
+#: THE FOUR NUMBERS TRAVEL TOGETHER — 8 claims · 1 resolved · 1 wrong · 7
+#: refused — and so does the sentence that goes with them: IT FOUND A GENUINE
+#: DEFECT NOTHING ELSE WOULD HAVE FOUND, AT ZERO FALSE-POSITIVE COST, AND IT
+#: CANNOT SEE SEVEN OF EIGHT CLAIMS. Precision known and perfect; recall unknown
+#: and probably poor. Without that sentence the first reader of "0 phantoms"
+#: believes the tracker's prose has been validated when seven eighths of it has
+#: never been looked at — which is this whole week's lesson pointed at our own
+#: fix.
 CLAIM_KEYS = ("row", "cites", "asserts")
 
 

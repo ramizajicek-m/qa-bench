@@ -92,18 +92,21 @@ number. A resolver that guessed each toast's button from the nearest enclosing
 named function produced three confident phantoms in one hour, and a phantom
 costs more than a miss: it costs somebody the time to disbelieve the guard, and
 then the real findings it makes afterwards. Measured on a second corpus the same
-day, and RETRACTED IN PART within the hour, which is the honest version: of 8
-cross-references in a tracker's reasons, a strict extractor RESOLVED 3 and
-REFUSED 5, and the one genuine defect was inside the 3. So refusing five of
-eight cost zero findings, and the objection that a confident-only parser
-under-detects did not survive contact with the data. What did NOT survive is the
-first reading of the same run, which reported two defects: the second was a
-phantom the extractor's own author had produced and passed on before reading the
-sentence back — "the one thing that was missing is now supplied by the PRT-03
-work" asserts nothing about PRT-03's status, and a window of 45 characters
-cannot tell "was missing" from "is missing". One in three of the RESOLVED claims
-was false. Refusal is vindicated; the resolved remainder is not, and the rule
-that follows is below. A subject command therefore prints only the members the guard
+day, both ways, after two retractions: over 8 cross-references in a tracker's
+reasons, a strict parser (the status word must attach to the id as its SUBJECT,
+present tense) resolves 1 and refuses 7, finding the one genuine defect with no
+phantoms; a loose parser (a status word within 45 characters of an id) resolves
+all 8 and reports two defects, of which one is false. Seven attributions
+declined, one extra "finding" bought by attributing, and that one wrong.
+Precision 1.0 against 0.5.
+
+Not oversold: the loose parser's other six attributions were correct passes. The
+strict parser is not better because those six were dangerous — it is better
+because the loose one cannot tell which of the eight it is competent to judge,
+and the one it got wrong is the one that cost. The numbers travel with their
+sentence: it found a genuine defect nothing else would have found, at zero
+false-positive cost, AND IT CANNOT SEE SEVEN OF EIGHT CLAIMS. Precision known
+and perfect; recall unknown and probably poor. A subject command therefore prints only the members the guard
 PROVED it judged. Everything it could not resolve it leaves out, where this
 module names it as a gap — which is the honest denominator, and removes the
 reason to guess: a guard can no longer buy coverage with an attribution.
