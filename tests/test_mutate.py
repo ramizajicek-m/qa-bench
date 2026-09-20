@@ -77,3 +77,23 @@ def test_a_missing_file_and_a_bad_expression_touch_nothing(tmp_path):
     assert main([str(tmp_path / "nope.py"), 's', "--", "true"]) == 2
     assert main([str(f), 's.this_is_not_valid(', "--", "true"]) == 2
     assert f.read_text() == "value = 2\n"
+
+
+def test_a_dirty_target_is_warned_about_not_refused(tmp_path, capsys):
+    """Mid-edit is the case this tool exists for, so it runs. The warning is
+    aimed at the `git checkout --` that comes afterwards out of habit — two
+    people lost work to exactly that on 2026-09-20, hours apart."""
+    f = _repo(tmp_path)
+    f.write_text("value = 3  # an uncommitted fix\n")
+
+    rc = main([str(f), 's.replace("3", "99")', "--", sys.executable, "-c", "raise SystemExit(1)"])
+    err = capsys.readouterr().err
+    assert rc == 1                                        # the command's own code: the guard caught it
+    assert "UNCOMMITTED" in err and "git checkout --" in err
+    assert f.read_text() == "value = 3  # an uncommitted fix\n"
+
+
+def test_a_clean_target_is_not_warned_about(tmp_path, capsys):
+    f = _repo(tmp_path)
+    main([str(f), 's.replace("2", "4")', "--", sys.executable, "-c", "pass"])
+    assert "UNCOMMITTED" not in capsys.readouterr().err

@@ -15,6 +15,17 @@ meets the same trap. It happened five times on 2026-09-13 in a single session, b
 someone who had written the rule down and used the tool correctly four times
 first. Care is not the control; the control is that the restore cannot read HEAD.
 
+IT DOES NOT REFUSE A DIRTY TREE, and that was proposed and rejected on
+2026-09-20. Working mid-edit is the case this tool exists for; a committed file
+was never in danger. What it does instead is SAY SO when the target has
+uncommitted changes, because the trap is not this command — it is the
+`git checkout --` somebody types after it, out of habit. Two people did exactly
+that the same day, in two sessions, each within the hour of writing or reading
+the rule: one lost a fix, one lost an edit to a module whose own docstring says
+this. The rule that works is the one already written down — commit the
+checkpoint BEFORE mutating, never after — and a warning at the moment of the
+mutation is where it can still be read.
+
     python -m qabench mutate <file> '<python expr over s>' -- <command...>
 
 The expression returns the mutated text, e.g. 's.replace("== 2", "== 1", 1)'.
@@ -56,6 +67,18 @@ def _purge_bytecode(target: pathlib.Path) -> None:
                 pass
 
 
+def _uncommitted(target: pathlib.Path) -> bool:
+    """True when git says this file differs from the index or HEAD. A repo git
+    cannot read is NOT reported as clean — the warning is cheap and the silence
+    is what costs."""
+    try:
+        p = subprocess.run(["git", "status", "--porcelain", "--", str(target)],
+                           cwd=target.parent, capture_output=True, text=True, timeout=20)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return p.returncode != 0 or bool(p.stdout.strip())
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if len(argv) < 3:
@@ -76,6 +99,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"mutate: no such file: {path}", file=sys.stderr)
         return 2
 
+    dirty = _uncommitted(target)
     original = target.read_bytes()
     text = original.decode("utf-8")
     try:
@@ -93,6 +117,10 @@ def main(argv: list[str] | None = None) -> int:
               "failed to fire", file=sys.stderr)
         return 2
 
+    if dirty:
+        print(f"mutate: {path} has UNCOMMITTED changes. They are safe — the restore below is a byte copy "
+              "taken just now, not HEAD. Do NOT run `git checkout -- " + path + "` afterwards: that restores "
+              "HEAD and discards them, which is the exact mistake this tool was written for.", file=sys.stderr)
     backup = pathlib.Path(tempfile.mkstemp(prefix="qabench-mutate-")[1])
     backup.write_bytes(original)
     try:
