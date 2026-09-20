@@ -62,7 +62,13 @@ IS NOT VARYING IT.
 
 Two refusals, both earned:
 
-  * an expression that changes nothing exits 2. A mutation that is a no-op
+  * an expression that changes nothing exits 2. AN UNANCHORED MUTATION IS A
+    NO-OP REPORTING SUCCESS: a hand-rolled script printed "mutated", changed
+    nothing, left the guard green, and was caught only because the RESULT looked
+    suspicious — while testing a guard about self-deceiving checks. That is why
+    this refusal is in the tool rather than in each script, and it is the
+    argument for routing every mutation through it. An expression that changes
+    nothing exits 2. A mutation that is a no-op
     proves nothing, and it reads exactly like a guard that failed to fire —
     eliad's battery reported ten dead guards that way, when the truth was that
     ten anchors had drifted and nothing had been mutated at all.

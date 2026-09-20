@@ -474,6 +474,23 @@ login error must not reveal whether the account exists) and that is a different
 question, not a gap. A sweep whose exclusion list was filled in quickly to get
 green would be the defect wearing the fix's clothes.
 
+A PARSER'S BY-DESIGN LIMIT BECOMES THE GUARD'S POPULATION BOUNDARY SILENTLY, and
+a mutation is what says so. An empty-state guard was widened to resolve blocks
+with a real parser — 47 blocks judged, 19 bare, 2 files refused with their own
+asserted ceiling, all honest. Then its OWN STATED MUTATION DID NOT GO RED:
+HTMLParser does not parse markup inside `<script>`, BY DESIGN, so an empty state
+built in a JS string is invisible to it. 47 judged in markup against 119
+empty-ish texts inside `<script>` — INCLUDING THREE OF THE FIVE THE SESSION HAD
+FIXED THAT NIGHT. And the gap between that guard and the helper-call guard — a
+hand-rolled empty state inside a JS string — is watched by NEITHER, which is the
+union-of-proper-subsets problem arriving BETWEEN TWO GUARDS rather than between
+two detectors of one.
+
+THE MUTATION IS WHAT FOUND IT, twice in one night: a mutation does not only
+prove a guard DISCRIMINATES, it proves the guard REACHES. A stated mutation that
+fails to go red is the cheapest possible report that a guard is lying about its
+reach, and nothing in reading the guard says it.
+
 A PARAPHRASE CHECKED AGAINST ITS OWN SOURCE ALWAYS AGREES. There is a good test
 doing the rounds — a reason that cannot be stated without naming an
 implementation detail is probably describing something narrower than the
@@ -1003,7 +1020,11 @@ REFUSED = {
                          "things already fixed and 75 → 38 → 0 measured the conversion, not the surface",
     "class_attribute": "a class is applied to the cases somebody has already handled; derive what CAN exhibit "
                        "the property instead",
-    "marker": "a marker is carried by the compliant cases; the population is the cases that OUGHT to carry it",
+    "marker": "A MARKER IS NOT ONLY A CLASS, IT IS ANY SHAPE THE FIX PRODUCES — a wrapper element, a helper "
+              "call, an attribute, a sibling text node. A text-node reader flagged a state it had FIXED AN HOUR "
+              "EARLIER, because the fix puts the title in a <strong> and the why in the sibling text: it flagged "
+              "correctly-fixed states BY THE SHAPE OF THE FIX. The population is the cases that OUGHT to carry "
+              "it, however the fix happens to look",
 }
 #: The marker family: refused outright, UNLESS the guard declares the structural
 #: superset its marked set is a subset OF, and lets the difference be reported.
