@@ -1,9 +1,9 @@
 """`qabench.warrant` — the one contract for a justification that has to earn its keep.
 
-The staleness half is opt-in and has NO default, on purpose: the window is a
-number, this kit's rule is that a threshold is measured rather than chosen, and
-the measurement (how many of a real tracker's partial/absent reasons are stale)
-was still being taken when this was written.
+It holds no staleness rule. One was written, opt-in and unpinned, pending the
+measurement; the measurement arrived and refuted it (the oldest justification in
+the tracker is three days, and both confirmed defects are in the youngest band),
+so it was deleted rather than left switched off.
 """
 from __future__ import annotations
 
@@ -53,23 +53,12 @@ def test_the_subject_field_is_the_callers(root):
     assert "lacks pair" in warrant.judge(w(), root, TODAY, subject="pair")
 
 
-def test_staleness_is_off_unless_a_window_is_declared(root):
-    """No default. A caller that wants the rule declares the number."""
-    assert warrant.judge(w(), root, TODAY) == ""
+def test_there_is_no_staleness_argument(root):
+    """The measurement refuted it and it was deleted rather than left switched
+    off. Every partial/absent reason in the tracker it was written for is
+    0-7 days old; both confirmed defects are in the youngest band; an age-keyed
+    window would have flagged neither at any threshold. Age is not the
+    mechanism — these reasons were overtaken, not decayed."""
+    import inspect
+    assert "stale_after_days" not in inspect.signature(warrant.judge).parameters
     assert warrant.judge(w(verified="2020-01-01"), root, TODAY) == ""
-
-
-def test_a_declared_window_makes_an_undated_reason_red(root):
-    problem = warrant.judge(w(), root, TODAY, stale_after_days=30)
-    assert "carries no `verified:` date" in problem and "an undated re-read is not a re-read" in problem
-
-
-def test_a_reason_older_than_the_window_is_prose_pretending_to_be_evidence(root):
-    """SEC-02: a row asserting a gap that was already half closed, with a target
-    date anyone planning work would have planned against."""
-    problem = warrant.judge(w(verified="2026-07-01"), root, TODAY, stale_after_days=30)
-    assert "81 days ago" in problem and "prose pretending to be evidence" in problem
-
-
-def test_a_reason_inside_the_window_stands(root):
-    assert warrant.judge(w(verified="2026-09-10"), root, TODAY, stale_after_days=30) == ""
