@@ -203,6 +203,38 @@ phrases in both lists. It could not see the difference it existed to measure.
 The population there is the union; the subject was the intersection, and this
 module prints the twenty-three names in the first and not the second.
 
+AN EXEMPTION MUST BE TESTED IN THE DIRECTION THAT PROVES IT IS LOAD-BEARING.
+Two entries were added to one exemption map in a single edit, reading
+identically — a sentence saying the page's state is view state and it writes
+nothing a person typed. One was real: delete it and the test goes red, because
+the file genuinely is a candidate and the entry is the only thing keeping it out
+of the failure list. THE OTHER ENFORCED NOTHING — its only call was already on
+the reads list, so the file never entered the candidate set, and deleting it
+left every test green. It had the shape of a considered decision and the force
+of a blank line. Neither reading the entry nor reviewing the diff distinguishes
+them; deleting each one and watching does.
+
+So an exempted member that the guard never had in its population is a finding of
+its own here, separate from one the guard has since started examining: the first
+means the honest record belongs upstream, the second means the case is fixed.
+Every project in the estate carries lists of this kind — exclusion maps, skip
+budgets, ratchet baselines — and nothing was checking any of them this way.
+
+THE THREE REQUIREMENTS ARE ONE REQUIREMENT: a guard must be shown able to fail,
+a near-miss must be a real near-miss, and an exemption must be shown able to
+bite. SHOW THE THING CAPABLE OF THE OUTCOME IT CLAIMS. The exemption is the one
+where the failure is invisible by construction, because an exemption's whole job
+is to make something not happen.
+
+AND WHEN A REQUIREMENT ENUMERATES OPTIONS, THE TEST POPULATION IS THE
+ENUMERATION, NOT ONE MEMBER OF IT. ACT-07 asks for three choices on leaving a
+dirty screen — save, leave without saving, cancel. A browser file that clicked
+cancel and nothing else sat over a save path broken twice over: the handler
+answered from a stale closure so it never released the navigation, and the
+writer swallowed every error so success and refusal resolved identically. Both
+shipped-ready, both invisible, because the case that exercises them did not
+exist.
+
 REFUSE, DO NOT ATTRIBUTE — the failure in the other direction, and it now has a
 number. A resolver that guessed each toast's button from the nearest enclosing
 named function produced three confident phantoms in one hour, and a phantom
@@ -1124,7 +1156,10 @@ def judge(spec: dict, root: Path, today: dt.date, *, run=read_members, surfaces=
                     + " — each corpus here is honestly reported and the UNION is still a proper subset of the "
                       "requirement. A guard defined as 'anything not the approved way' grows a hole the day "
                       "somebody approves another way")
-    stale = sorted(excused - set(missing))
+    # AN EXEMPTION MUST BE SHOWN ABLE TO BITE, and the two ways it cannot are
+    # different findings with different repairs.
+    stale_examined = sorted(m for m in excused if m in set(pop.members) and m not in set(missing))
+    never_a_candidate = sorted(m for m in excused if m not in set(pop.members))
 
     if not sub.members:
         row.problems.append(f"the guard examined NOTHING against a population of {row.population} — a detector "
@@ -1136,8 +1171,14 @@ def judge(spec: dict, root: Path, today: dt.date, *, run=read_members, surfaces=
         shown = ", ".join(row.stray[:8]) + (f" … +{len(row.stray) - 8}" if len(row.stray) > 8 else "")
         row.problems.append(f"{len(row.stray)} examined but outside the declared population — the population "
                             f"expression is narrower than the guard: {shown}")
-    for m in stale:
+    for m in stale_examined:
         row.problems.append(f"exemption {m!r} is stale: the guard now examines it — delete the entry")
+    for m in never_a_candidate:
+        row.problems.append(
+            f"exemption {m!r} enforces NOTHING: it is not in the population at all, so the guard would never "
+            "have judged it. Delete it and the guard does not change — an entry with the shape of a considered "
+            "decision and the force of a blank line. Either it is already excluded upstream, where the honest "
+            "record belongs, or it covers a case that no longer exists")
     observed = pop_spec.get("observed_from")
     if observed:
         row.note = ((row.note + " · ") if row.note else "") + (

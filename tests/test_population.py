@@ -671,3 +671,28 @@ def test_a_surface_claimed_covered_must_appear_in_the_population(repo):
     assert any("'contractor portal' is declared covered by 'templates/portal/'" in p
                and "NO member under it" in p for p in row["problems"])
     assert any("they disagree" in p for p in row["problems"])
+
+
+def test_an_exemption_for_a_member_outside_the_population_enforces_nothing(repo):
+    """Two entries added in one edit, reading identically. One is real: delete
+    it and the test goes red. The other's file never enters the candidate set,
+    so deleting it leaves every test green — the shape of a considered decision
+    and the force of a blank line."""
+    row = judged(repo, subject={"cmd": emit("a")}, exemptions=[
+        {"member": "b", "reason": "view state only", "evidence": "docs/ledger.md", "review_by": "2026-10-15"},
+        {"member": "pages/WarehouseBoard.tsx", "reason": "view state only",
+         "evidence": "docs/ledger.md", "review_by": "2026-10-15"}])
+    assert row["missing"] == ["c"]        # b is genuinely excused
+    assert any("'pages/WarehouseBoard.tsx' enforces NOTHING" in p and "force of a blank line" in p
+               for p in row["problems"])
+    assert not any("WarehouseBoard" in p and "now examines it" in p for p in row["problems"])
+
+
+def test_the_two_dead_exemptions_are_different_findings(repo):
+    """One means the honest record belongs upstream; the other means the case is
+    fixed. Same symptom, different repair."""
+    row = judged(repo, exemptions=[
+        {"member": "b", "reason": "x", "evidence": "docs/ledger.md", "review_by": "2026-10-15"},
+        {"member": "not-in-the-world", "reason": "x", "evidence": "docs/ledger.md", "review_by": "2026-10-15"}])
+    assert any("'b' is stale: the guard now examines it" in p for p in row["problems"])
+    assert any("'not-in-the-world' enforces NOTHING" in p for p in row["problems"])
