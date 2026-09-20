@@ -1025,7 +1025,7 @@ def judge_transform(t, root: Path, run) -> str:
 NEAR_MISS_KEYS = ("cmd", "from", "was")
 
 
-def judge_capability(cap: dict, root: Path, *, metric: str = "") -> list[str]:
+def judge_capability(cap: dict, root: Path, *, metric: str = "", stimulus: str = "") -> list[str]:
     """A capability proves the detector DISCRIMINATES, or it proves nothing.
 
     `fires:` is the positive. `silent:` is one or more REAL near-misses — a
@@ -1036,6 +1036,15 @@ def judge_capability(cap: dict, root: Path, *, metric: str = "") -> list[str]:
     """
     out: list[str] = []
     fires = cap.get("fires")
+    if stimulus and isinstance(fires, list) and not any(
+            isinstance(f, dict) and f.get("produced") for f in fires):
+        out.append(
+            f"this guard drives a stimulus ({stimulus}) and no known-positive names `produced:` — the effect "
+            "the harness was shown to MAKE HAPPEN in the same run. A TEST THAT CANNOT MAKE THE MECHANISM FIRE "
+            "CANNOT REPORT THAT IT DID NOT FIRE. A check for a loading indicator during a slow request ran two "
+            "orderings, saw nothing twice and was nearly filed — and neither experiment could have produced an "
+            "indicator, because the wrapper captured `window.fetch` at parse time and both available orderings "
+            "put the delay on the wrong side of it. The null result was a property of the instrument")
     if metric and isinstance(fires, list) and not any(
             isinstance(f, dict) and f.get("by_mutating") and f.get("moved") for f in fires):
         out.append(
@@ -1262,7 +1271,8 @@ def judge(spec: dict, root: Path, today: dt.date, *, run=read_members, surfaces=
         return row
 
     if cap_spec:
-        problems = judge_capability(cap_spec, root, metric=str(spec.get("metric") or ""))
+        problems = judge_capability(cap_spec, root, metric=str(spec.get("metric") or ""),
+                                    stimulus=str(spec.get("stimulus") or ""))
         if problems:
             row.problems.extend(problems)
             return row

@@ -831,3 +831,21 @@ def test_a_helper_contract_paired_with_a_property_guard_is_not_enough(repo):
                  guard(id="another-sweep")])
     rows = population.run_population(root, {"register": "qa/guards.yml"}, today=TODAY)["rows"]
     assert any("names no `paired_with:` REACH guard" in p for p in rows[0]["problems"])
+
+
+def test_a_stimulus_must_be_shown_able_to_produce_the_effect(repo):
+    """Two orderings, no indicator twice, nearly filed — and neither experiment
+    could have produced one, because the wrapper captured window.fetch at parse
+    time. The null result was a property of the instrument."""
+    row = judged(repo, stimulus="a delayed response, to provoke the loading indicator", capability=cap())
+    assert any("CANNOT REPORT THAT IT DID NOT FIRE" in p and "property of the instrument" in p
+               for p in row["problems"])
+
+
+def test_a_stimulus_with_a_positive_control_is_accepted(repo):
+    row = judged(repo, stimulus="a delayed response, to provoke the loading indicator",
+                 capability=cap(fires=[{"cmd": emit("caught it"), "from": "docs/ledger.md",
+                                        "was": "the reports list, 2.1s cold",
+                                        "produced": "indicator visible 1.4s, via route interception below the "
+                                                    "page's own wrapper"}]))
+    assert row["problems"] == []
