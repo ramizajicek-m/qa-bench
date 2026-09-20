@@ -870,3 +870,24 @@ def test_a_holding_ratchet_needs_no_pair_but_must_say_when_it_ends(repo):
                                complement=[{"name": "w", "cmd": emit("b", "c", "d"),
                                             "proven_by": "tests/x.py::t"}]))
     assert ok["problems"] == []
+
+
+def test_a_subject_that_cannot_resolve_the_unit_reports_a_floor(repo):
+    """A scan crediting a FILE for a property held by an ELEMENT under-reports
+    by construction: the one surface actually driven — 37 rows, 20 columns, zero
+    sort controls — was not among the 8, because its file contains sort markup
+    somewhere outside the main table."""
+    row = judged(repo, subject={"cmd": emit("a"), "reports": "floor"})
+    assert row["reports"] == "floor" and row["problems"][0].startswith("2 of 3 never examined")
+
+
+def test_a_bad_reports_value_is_named(repo):
+    assert any("it is `count` or `floor`" in p
+               for p in judged(repo, subject={"cmd": emit("a"), "reports": "estimate"})["problems"])
+
+
+def test_a_floor_is_printed_beside_the_numbers(repo, capsys):
+    root = repo([guard(subject={"cmd": emit("a"), "reports": "floor"})])
+    population.run(["--repo", str(root)], today=TODAY)
+    out = capsys.readouterr().out
+    assert "FLOOR, NOT A COUNT" in out and "one route handler" in out

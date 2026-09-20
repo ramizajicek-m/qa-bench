@@ -279,6 +279,29 @@ phrases in both lists. It could not see the difference it existed to measure.
 The population there is the union; the subject was the intersection, and this
 module prints the twenty-three names in the first and not the second.
 
+FILE-LEVEL CREDIT FOR A MEMBER-LEVEL PROPERTY UNDER-REPORTS BY CONSTRUCTION, and
+that is the dangerous direction. A scan says 8 of 23 searchable surfaces lack a
+sort mechanism. The one surface somebody actually DROVE — 37 rows, 20 columns,
+zero sort controls of any kind — is NOT among the 8, because its file contains
+sort markup somewhere outside the main table and the scan credits the FILE. So 8
+is A FLOOR, NOT A COUNT, and the true figure is at least 9 with no way to know
+the rest from source.
+
+THE ASYMMETRY, which this kit had backwards all day: an OVER-reporting scan is
+SELF-CORRECTING — the first person to read an instance finds a false positive
+and re-narrows, which is what happened five times in one night (119 empty states
+that were 59, 250 unreachable cells that were 0, 29 lists that were 9, 35
+marker-keyed guards that were 3, 14 floorless ratchets that were 0). An
+UNDER-reporting scan is INVISIBLE: nothing in its output points at what it
+missed, and it is found only by driving a case it did not flag. The same defect
+has a bounded cost in one direction and an unbounded one in the other, and
+"read an instance before quoting the number" only catches the cheap direction.
+
+So where a scan cannot resolve the member, THE HONEST OUTPUT IS A FLOOR WITH THE
+RESOLUTION LIMIT STATED, NOT A COUNT — `subject.reports: floor` says so and the
+verdict prints it beside the numbers, so the limitation travels with the figure
+instead of being lost the first time somebody quotes it.
+
 A GUARD'S UNIT MUST BE THE UNIT THE REQUIREMENT QUANTIFIES OVER. Whenever the
 guard's unit is COARSER than the requirement's, the difference is invisible by
 construction and looks exactly like coverage.
@@ -980,6 +1003,7 @@ class Row:
     #: derivation, not just its result.
     derived_from: str = ""
     undecided: str = ""                                   # what this guard does NOT judge
+    unit: str = ""                                        # what ONE member is
     population: int = 0
     subject: int = 0
     missing: list[str] = field(default_factory=list)      # in the population, never examined
@@ -992,6 +1016,7 @@ class Row:
     outside: list = field(default_factory=list)           # in the structural superset, outside the marked set
     covered_by: dict = field(default_factory=dict)        # reach guards: layer -> how much of the bypass it covers
     note: str = ""                                        # reported, not judged
+    reports: str = "count"                                # `floor` when the subject cannot resolve the unit
 
 
 def read_members(root: Path, cmd: str, *, timeout: float = 120.0) -> Set_:
@@ -1151,7 +1176,7 @@ def judge(spec: dict, root: Path, today: dt.date, *, run=read_members, surfaces=
     row = Row(id=str(spec.get("id") or "?"), check=str(spec.get("check") or ""),
               claims=str(spec.get("claims") or ""),
               derived_from=str((spec.get("population") or {}).get("derived_from") or "?"),
-              undecided=str(spec.get("undecided") or ""))
+              undecided=str(spec.get("undecided") or ""), unit=str(spec.get("unit") or ""))
     if not spec.get("id"):
         row.problems.append("a guard with no `id:` — a finding nobody can look up")
     if not row.check:
@@ -1363,6 +1388,9 @@ def judge(spec: dict, root: Path, today: dt.date, *, run=read_members, surfaces=
         return row
 
     row.population, row.subject = len(pop.members), len(sub.members)
+    row.reports = str(sub_spec.get("reports") or "count")
+    if row.reports not in ("count", "floor"):
+        row.problems.append(f"subject.reports is {row.reports!r}; it is `count` or `floor`")
     row.detectors = {n: len(m) for n, m in by_detector.items()}
     exemptions = spec.get("exemptions") or []
     for ex in exemptions:
@@ -1547,6 +1575,9 @@ def run(argv: list[str], *, today: dt.date | None = None) -> int:
                   + f"  [{r['derived_from']}]"
                   + ("  [capability proven]" if r["capability"] else "")
                   + (f"   ({r['exempted']} exempted)" if r["exempted"] else ""))
+            if r["reports"] == "floor":
+                print(f"       these are a FLOOR, NOT A COUNT — the subject cannot resolve to one {r['unit']}, "
+                      "so what it missed is invisible in its own output")
             if r["undecided"]:
                 print(f"       does not judge: {r['undecided']}")
             if r["note"]:
