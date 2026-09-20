@@ -77,6 +77,34 @@ FOUR RULES, each paid for by one of the rows above:
      evidence and a date. A corpus that quietly returns to a naming heuristic
      fails here.
 
+REACH IS A DENOMINATOR, AND A DENOMINATOR NEEDS ITS OWN COVERAGE MEASUREMENT.
+For every blessed helper, how many call sites go through it? Mechanical,
+countable, and nobody was asking. On anat: AnatFlash.toast 987 against one stray
+alert(, AnatDate 136 against zero, AnatDialog.open 159 against 8, close 133
+against 12, AnatEmpty 50 against 38, and apiFetch 198 against 783 raw fetches —
+20 %.
+
+That 20 % would have started a rewrite, and it is wrong. BYPASSING A HELPER IS
+NOT THE SAME AS BEING UNCOVERED: anat has three other global fetch wrappers
+which between them give every raw call the loading indicator, session activity,
+the CSRF header and the 401 bounce; 538 check status themselves; 297 report a
+failure to a person; 109 do NEITHER. One hundred and nine is the actionable
+number and it is a much smaller, correct piece of work.
+
+So a guard may declare `kind: reach`, and then `complement:` is MANDATORY — the
+layers that cover what bypasses the helper, applied in order, with the residue
+named as the finding. A reach guard without it is refused the way a population
+derived from naming is refused, because a denominator with no
+coverage-by-other-means measurement is a verdict without a population, which is
+this module's own subject arriving in its own instrument.
+
+Two results from that table worth keeping. Four helpers at 100 % answer "20 % is
+inevitable at this scale" — it is not, in the same codebase, at five times the
+call volume. And AnatEmpty's 57 % was found COLD by the source audit, hours
+after the same gap was found from a browser report on STA-02, with no knowledge
+of the first: two independent routes to one finding is the closest thing to
+validation this method gets, and it is worth more than any number in the table.
+
 ONE REQUIREMENT MAY HAVE SEVERAL DETECTORS, and then the population is the
 REQUIREMENT'S rather than any one detector's. STA-02 — "an empty screen explains
 why it is empty and offers the next action" — was guarded by three tests: the
@@ -342,6 +370,7 @@ class Row:
     unrunnable: bool = False                              # a command exited non-zero: did not run
     capability: bool = False                              # a self-test proved the detector still detects
     detectors: dict = field(default_factory=dict)         # name -> members, when a requirement has several
+    covered_by: dict = field(default_factory=dict)        # reach guards: layer -> how much of the bypass it covers
     note: str = ""                                        # reported, not judged
 
 
@@ -443,6 +472,19 @@ def judge(spec: dict, root: Path, today: dt.date, *, run=read_members) -> Row:
     if not row.claims:
         row.problems.append("no `claims:` — the one sentence the population is the population OF")
 
+    kind = str(spec.get("kind") or "sweep")
+    if kind not in ("sweep", "reach"):
+        row.problems.append(f"kind must be `sweep` or `reach`, not {kind!r}")
+    complement = spec.get("complement")
+    if kind == "reach" and not complement:
+        row.problems.append(
+            "a `reach` guard MUST declare `complement:` — REFUSED by name, like a population derived from "
+            "naming. A reach number is a DENOMINATOR, and a denominator with no coverage-by-other-means "
+            "measurement is a verdict without a population, which is the thing this module exists for. "
+            "Measured on anat: apiFetch reaches 198 call sites and 783 bypass it, which reads as 20% and would "
+            "have started a rewrite — but three other global fetch wrappers give every raw call the loading "
+            "indicator, session activity, the CSRF header and the 401 bounce, 538 of them check status "
+            "themselves and 297 report a failure to a person. The actionable number is 109, not 783")
     cap_spec = spec.get("capability") or {}
     pop_spec = spec.get("population") or {}
     sub_spec = spec.get("subject") or {}
@@ -526,6 +568,35 @@ def judge(spec: dict, root: Path, today: dt.date, *, run=read_members) -> Row:
     row.exempted = len([m for m in missing if m in excused])
     row.missing = [m for m in missing if m not in excused]
     row.stray = [m for m in sub.members if m not in set(pop.members)]
+    if kind == "reach" and complement and row.missing:
+        # BYPASSING A HELPER IS NOT THE SAME AS BEING UNCOVERED. The complement
+        # is partitioned by what else covers it, and only the residue is a
+        # finding. Reporting the bypass count alone is how a mostly-fine
+        # codebase acquires a rewrite ticket.
+        residue, layers = list(row.missing), {}
+        for layer in complement:
+            if not isinstance(layer, dict) or not layer.get("cmd") or not layer.get("name"):
+                row.problems.append(f"every `complement:` layer names a `name` and a `cmd`: {layer!r}")
+                return row
+            got = run(root, layer["cmd"])
+            if got.error:
+                row.unrunnable = True
+                row.problems.append(got.error)
+                return row
+            covered = set(got.members)
+            layers[layer["name"]] = len([m for m in residue if m in covered])
+            residue = [m for m in residue if m not in covered]
+        row.covered_by = layers
+        row.missing = residue
+        row.note = (f"reach {row.subject}/{row.population}; of the {row.population - row.subject} that bypass it, "
+                    + ", ".join(f"{n} covers {c}" for n, c in layers.items())
+                    + f" — leaving {len(residue)} covered by NOTHING, which is the actionable number")
+        if not residue:
+            row.problems = [p for p in row.problems if "never examined" not in p]
+            return row
+        row.problems = [p for p in row.problems if "never examined" not in p]
+        row.problems.append(f"{len(residue)} of {row.population} are covered by neither the helper nor any "
+                            f"declared layer: " + ", ".join(residue[:8]))
     if by_detector and row.missing:
         row.note = ("no detector covers: " + ", ".join(row.missing[:8])
                     + " — each corpus here is honestly reported and the UNION is still a proper subset of the "

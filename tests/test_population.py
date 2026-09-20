@@ -359,3 +359,57 @@ def test_a_reachability_population_is_a_derivation(repo):
                  subject={"cmd": emit("customers", "vehicle")})
     assert row["missing"] == ["add-modal"]
     assert not any("refused" in p or "must be one of" in p for p in row["problems"])
+
+
+def reachy(**over):
+    """A reach guard: the population is every call site, the subject is those
+    that go through the blessed helper."""
+    g = {"kind": "reach",
+         "population": {"derived_from": "ast", "cmd": emit("a", "b", "c", "d"), "count": 4},
+         "subject": {"cmd": emit("a")}}
+    g.update(over)
+    return g
+
+
+def test_a_reach_guard_without_a_complement_is_refused(repo):
+    """20% reach would have started a rewrite. A reach number is a denominator,
+    and a denominator with no coverage-by-other-means measurement is a verdict
+    without a population."""
+    row = judged(repo, **reachy())
+    assert any("MUST declare `complement:`" in p and "The actionable number is 109, not 783" in p
+               for p in row["problems"])
+
+
+def test_the_complement_is_partitioned_and_only_the_residue_is_a_finding(repo):
+    """Bypassing a helper is not the same as being uncovered."""
+    row = judged(repo, **reachy(complement=[{"name": "global wrappers", "cmd": emit("b")},
+                                            {"name": "checks status itself", "cmd": emit("c")}]))
+    assert row["covered_by"] == {"global wrappers": 1, "checks status itself": 1}
+    assert row["missing"] == ["d"]
+    assert "leaving 1 covered by NOTHING, which is the actionable number" in row["note"]
+    assert any("covered by neither the helper nor any declared layer: d" in p for p in row["problems"])
+
+
+def test_a_fully_covered_complement_is_clean(repo):
+    row = judged(repo, **reachy(complement=[{"name": "global wrappers", "cmd": emit("b", "c", "d")}]))
+    assert row["problems"] == [] and row["missing"] == []
+    assert "leaving 0 covered by NOTHING" in row["note"]
+
+
+def test_a_layer_is_counted_once_in_the_order_declared(repo):
+    """Overlapping layers must not double-count the same bypassing site."""
+    row = judged(repo, **reachy(complement=[{"name": "first", "cmd": emit("b", "c")},
+                                            {"name": "second", "cmd": emit("b", "c", "d")}]))
+    assert row["covered_by"] == {"first": 2, "second": 1}
+
+
+def test_a_sweep_guard_is_unaffected_by_the_reach_rules(repo):
+    row = judged(repo, subject={"cmd": emit("a")})
+    assert row["missing"] == ["b", "c"] and row["covered_by"] == {}
+
+
+def test_a_complement_layer_that_cannot_run_is_did_not_run(repo):
+    """A layer that failed to run would otherwise cover nothing and silently
+    inflate the residue — a finding invented by a broken command."""
+    row = judged(repo, **reachy(complement=[{"name": "wrappers", "cmd": "/bin/sh -c exit2"}]))
+    assert row["unrunnable"] and row["missing"] != ["d"]
