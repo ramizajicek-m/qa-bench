@@ -29,6 +29,16 @@ though it were the whole:
           is no word boundary between word characters. It reported ZERO gated
           fields, which reads exactly like a clean tree. The real number was
           ten, one of them a live defect.
+  STA-02  "an empty screen explains why it is empty and offers the next
+          action", swept over `class="empty-state"` plus every AnatEmpty call —
+          and the class is what the CONVERSION added. A ratchet drove 75
+          hand-rolled empty states to 38 to 0 by moving them onto the helper,
+          each conversion adding the class, so the population is exactly THE SET
+          OF THINGS ALREADY FIXED. The screen the coordinator found renders
+          `<td colspan="7" style="text-align:center">` through the LIST helper,
+          which has no action parameter at all, and was never in the ratchet to
+          survive it. 75 → 38 → 0 is true and counts the conversion, not the
+          surface.
   and the harness class: a guard that watched ONE global name (AnatList) while
           seven harnesses failed on another (AnatDate).
 
@@ -57,10 +67,37 @@ FOUR RULES, each paid for by one of the rows above:
      over a NON-empty corpus is FRM-10 itself.
   3. THE GAP IS NAMED MEMBER BY MEMBER, so "credited to every template alike"
      is impossible to write (FRM-01).
-  4. THE POPULATION COUNT IS PINNED AND THE PIN IS EXACT. It may rise in the
+  4. A RATCHET'S FALL PROVES NOTHING ABOUT A POPULATION THE RATCHET DEFINES.
+     When the marker a population is keyed on is the one each fix adds, the
+     count falls to zero by construction and says nothing about what was never
+     in it. The question is always what CAN exhibit the property, never what
+     carries the sign of having been handled.
+  5. THE POPULATION COUNT IS PINNED AND THE PIN IS EXACT. It may rise in the
      commit that raises it; it may fall only behind `shrunk:` with a reason,
      evidence and a date. A corpus that quietly returns to a naming heuristic
      fails here.
+
+ONE REQUIREMENT MAY HAVE SEVERAL DETECTORS, and then the population is the
+REQUIREMENT'S rather than any one detector's. STA-02 — "an empty screen explains
+why it is empty and offers the next action" — was guarded by three tests: the
+helper renders what/why/next-step (executed in isolation, correct, and proves
+nothing about who calls it); every AnatEmpty call passes a `why` (corpus:
+AnatEmpty calls); hand-rolled empty states only fall, ceiling zero (corpus:
+markup carrying the empty-state class). A list dropping a sentence into a plain
+table cell is NEITHER — sanctioned, so not hand-rolled; not AnatEmpty, so never
+checked for why and action. Both detectors are individually sound and neither is
+blind in a way you could see from its own output, because each population was a
+proper subset of the claim and THE UNION OF THE TWO SUBSETS IS STILL A PROPER
+SUBSET. So `subject.detectors` takes several commands, the union is compared to
+the requirement's population, and a member no detector covers is named.
+
+The detail that generalises beyond that repo: the hand-rolled detector's design
+is "anything not going through the blessed helper is suspect", which is a good
+design carrying an implicit assumption — that there is ONE blessed helper. The
+moment a second sanctioned helper exists with a narrower contract, everything on
+the second path is exempt from the first detector by construction and covered by
+nothing. A guard defined as "not the approved way" silently grows a hole every
+time somebody approves another way.
 
 A MEMBER MAY BE A PAIR, and that is how the catalogue cases are written. ACT-05
 swept 146 dialogs and made every save answer 500 — one arm of the client. A
@@ -234,6 +271,19 @@ REFUSED = {
     "grep": "a regex also matches the docstring that explains the rename — derive by structure",
     "regex": "FRM-10: `\\bcan_\\b` cannot match can_edit_field, and matched nothing, and read as clean",
     "convention": "a convention is what the example happened to follow",
+    # The subtlest one, and the only one that is not obviously a naming
+    # heuristic: a population keyed on the marker the FIX adds. It is not the
+    # example's name and not a marker the compliant cases happen to share — it
+    # is what each case was GIVEN during the conversion, so the population is
+    # the set of things already fixed and the ratchet's fall to zero counts the
+    # conversion rather than the surface. Ask instead what can EXHIBIT the
+    # property: every list render path that branches on a zero-length result,
+    # not every element carrying `class="empty-state"`.
+    "conversion_marker": "STA-02: the class was added BY the conversion, so the population was the set of "
+                         "things already fixed and 75 → 38 → 0 measured the conversion, not the surface",
+    "class_attribute": "a class is applied to the cases somebody has already handled; derive what CAN exhibit "
+                       "the property instead",
+    "marker": "a marker is carried by the compliant cases; the population is the cases that OUGHT to carry it",
 }
 EXEMPTION_KEYS = ("member", "reason", "evidence", "review_by")
 SHRUNK_KEYS = ("reason", "evidence", "date")
@@ -259,6 +309,7 @@ class Row:
     problems: list[str] = field(default_factory=list)     # why the row is red
     unrunnable: bool = False                              # a command exited non-zero: did not run
     capability: bool = False                              # a self-test proved the detector still detects
+    detectors: dict = field(default_factory=dict)         # name -> members, when a requirement has several
     note: str = ""                                        # reported, not judged
 
 
@@ -368,8 +419,13 @@ def judge(spec: dict, root: Path, today: dt.date, *, run=read_members) -> Row:
         row.problems.append(f"population.derived_from: {derived!r} is refused — {REFUSED[derived]}")
     elif derived not in DERIVATIONS:
         row.problems.append(f"population.derived_from must be one of {', '.join(DERIVATIONS)}, not {derived!r}")
-    if not pop_spec.get("cmd") or not sub_spec.get("cmd"):
-        row.problems.append("a guard names both a population.cmd and a subject.cmd, or it is a claim about itself")
+    detectors = sub_spec.get("detectors")
+    if detectors and sub_spec.get("cmd"):
+        row.problems.append("a subject names `cmd` OR `detectors`, not both")
+        return row
+    if not pop_spec.get("cmd") or not (sub_spec.get("cmd") or detectors):
+        row.problems.append("a guard names both a population.cmd and a subject.cmd (or subject.detectors), or it "
+                            "is a claim about itself")
         return row
 
     if cap_spec:
@@ -386,13 +442,32 @@ def judge(spec: dict, root: Path, today: dt.date, *, run=read_members) -> Row:
                 return row
         row.capability = True
 
-    pop, sub = run(root, pop_spec["cmd"]), run(root, sub_spec["cmd"])
+    pop = run(root, pop_spec["cmd"])
+    # ONE REQUIREMENT, SEVERAL DETECTORS: the population is the REQUIREMENT'S,
+    # and what has to be asserted is that the detectors' corpora COVER it. Two
+    # corpora that are each honestly reported can leave a hole neither reports,
+    # and nothing in either one's output hints at it — STA-02 was guarded by a
+    # sweep of AnatEmpty calls and a ratchet on hand-rolled markup, both sound,
+    # and a list dropping a sentence into a plain table cell was neither.
+    if detectors:
+        named = [(str(d.get("name") or f"#{i}"), d.get("cmd")) for i, d in enumerate(detectors)]
+        if any(not c for _, c in named):
+            row.problems.append("every detector names a `cmd`")
+            return row
+        results = {n: run(root, c) for n, c in named}
+        first_error = next((r.error for r in results.values() if r.error), "")
+        by_detector = {n: set(r.members) for n, r in results.items()}
+        sub = Set_(sorted(set().union(*by_detector.values())) if by_detector else [], first_error)
+    else:
+        by_detector = {}
+        sub = run(root, sub_spec["cmd"])
     if pop.error or sub.error:
         row.unrunnable = True
         row.problems.append(pop.error or sub.error)
         return row
 
     row.population, row.subject = len(pop.members), len(sub.members)
+    row.detectors = {n: len(m) for n, m in by_detector.items()}
     exemptions = spec.get("exemptions") or []
     for ex in exemptions:
         problem = judge_exemption(ex, root, today)
@@ -419,6 +494,11 @@ def judge(spec: dict, root: Path, today: dt.date, *, run=read_members) -> Row:
     row.exempted = len([m for m in missing if m in excused])
     row.missing = [m for m in missing if m not in excused]
     row.stray = [m for m in sub.members if m not in set(pop.members)]
+    if by_detector and row.missing:
+        row.note = ("no detector covers: " + ", ".join(row.missing[:8])
+                    + " — each corpus here is honestly reported and the UNION is still a proper subset of the "
+                      "requirement. A guard defined as 'anything not the approved way' grows a hole the day "
+                      "somebody approves another way")
     stale = sorted(excused - set(missing))
 
     if not sub.members:

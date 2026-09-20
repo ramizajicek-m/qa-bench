@@ -300,3 +300,49 @@ def test_a_detector_whose_self_test_fails_is_red_whatever_its_scan_says(repo):
 def test_a_proven_detector_over_a_full_corpus_still_compares(repo):
     row = judged(repo, capability=cap(), subject={"cmd": emit("a")})
     assert row["capability"] is True and row["missing"] == ["b", "c"]
+
+
+def test_a_population_keyed_on_the_marker_the_fix_adds_is_refused(repo):
+    """STA-02: `class="empty-state"` is what each conversion ADDED, so the
+    population was the set of things already fixed and the ratchet's 75 → 38 → 0
+    measured the conversion, not the surface. The screen that was never in the
+    ratchet did not survive it — it was never in it."""
+    row = judged(repo, population={"derived_from": "conversion_marker"})
+    assert any("refused" in p and "measured the conversion, not the surface" in p for p in row["problems"])
+
+
+def test_the_other_marker_derivations_are_refused_too(repo):
+    for how in ("class_attribute", "marker"):
+        row = judged(repo, population={"derived_from": how})
+        assert any("refused" in p for p in row["problems"]), how
+
+
+def test_the_union_of_two_honest_corpora_can_still_miss_the_requirement(repo):
+    """STA-02: an AnatEmpty-call sweep and a hand-rolled-markup ratchet, both
+    sound, and a list dropping a sentence into a plain table cell is neither —
+    sanctioned so not hand-rolled, not AnatEmpty so never checked for why and
+    action. Each corpus is a proper subset of the claim and so is their union."""
+    row = judged(repo, population={"cmd": emit("a", "b", "c"), "count": 3},
+                 subject={"cmd": None, "detectors": [{"name": "anat-empty-calls", "cmd": emit("a")},
+                                                    {"name": "hand-rolled-markup", "cmd": emit("b")}]})
+    assert row["detectors"] == {"anat-empty-calls": 1, "hand-rolled-markup": 1}
+    assert row["missing"] == ["c"]
+    assert "no detector covers: c" in row["note"]
+    assert "approves another way" in row["note"]
+
+
+def test_detectors_that_together_cover_the_requirement_are_clean(repo):
+    row = judged(repo, subject={"cmd": None, "detectors": [{"name": "one", "cmd": emit("a", "b")},
+                                                          {"name": "two", "cmd": emit("c")}]})
+    assert row["problems"] == [] and row["subject"] == 3
+
+
+def test_a_subject_names_cmd_or_detectors_not_both(repo):
+    row = judged(repo, subject={"cmd": emit("a"), "detectors": [{"name": "one", "cmd": emit("a")}]})
+    assert row["problems"] == ["a subject names `cmd` OR `detectors`, not both"]
+
+
+def test_a_detector_that_cannot_run_is_did_not_run(repo):
+    row = judged(repo, subject={"cmd": None, "detectors": [{"name": "one", "cmd": emit("a")},
+                                                          {"name": "two", "cmd": "/bin/sh -c exit2"}]})
+    assert row["unrunnable"]
