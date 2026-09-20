@@ -891,3 +891,23 @@ def test_a_floor_is_printed_beside_the_numbers(repo, capsys):
     population.run(["--repo", str(root)], today=TODAY)
     out = capsys.readouterr().out
     assert "FLOOR, NOT A COUNT" in out and "one route handler" in out
+
+
+def test_an_absence_claim_must_name_where_it_expected_the_thing(repo):
+    """8 files flagged for lacking a filtered-empty message; each page has
+    several lists, so the receiving session could not tell which list was
+    flagged. You cannot point at what is not there."""
+    row = judged(repo, claims_shape="absence")
+    assert any("AN ABSENCE HAS NO LINE NUMBER" in p and "path::anchor" in p for p in row["problems"])
+
+
+def test_an_absence_claim_with_anchored_members_is_judged_normally(repo):
+    row = judged(repo, claims_shape="absence",
+                 population={"cmd": emit("clients.html::#client-table", "leads.html::#lead-table"), "count": 2},
+                 subject={"cmd": emit("clients.html::#client-table")})
+    assert row["missing"] == ["leads.html::#lead-table"]
+    assert not any("ABSENCE HAS NO LINE NUMBER" in p for p in row["problems"])
+
+
+def test_a_presence_claim_is_unaffected(repo):
+    assert judged(repo)["problems"] == []

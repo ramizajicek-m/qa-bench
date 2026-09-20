@@ -279,6 +279,33 @@ phrases in both lists. It could not see the difference it existed to measure.
 The population there is the union; the subject was the intersection, and this
 module prints the twenty-three names in the first and not the second.
 
+AN ABSENCE HAS NO LINE NUMBER, so an absence-shaped finding needs a different
+contract from a presence-shaped one. A scan flagged 8 files for lacking a
+filtered-empty message — "this FILE contains 'no X yet' AND does NOT contain a
+filtered-empty message" — and the session handed the list found every file
+apparently correct but could not tell WHICH LIST on each page had been flagged,
+because each page has several. You cannot point at what is not there. It asked
+for line numbers rather than fixing or dismissing, and its reasoning is the
+rule: declaring them false positives would be the same error as fixing them
+blindly, a claim about a population it had not matched to the finding.
+
+So a guard declaring `claims_shape: absence` must report members that NAME THE
+ELEMENT the thing was expected near — `path::anchor`, the estate's convention —
+because a file-level absence is unactionable on any file containing more than
+one instance of the thing. A LOCATED FINDING IS WORTH MORE THAN A COUNTED ONE,
+and where a scan hands work to somebody else a handover of counts is a handover
+of a claim the receiver cannot verify. The only safe response to one is refusal.
+
+AND NARROWING A WRONG POPULATION MAKES IT SMALLER, NOT TRUER. That scan was
+narrowed twice — 29 → 9 → 8 — and its author felt the narrowing had earned the
+number. When the eight were finally opened it was wrong IN BOTH DIRECTIONS AT
+ONCE: over-reporting sub-panels and a FIELD PLACEHOLDER ("No date yet") as
+filtered list states, and under-reporting six real implementations because the
+pattern required "match this FILTER" while the product says "match this TAB AND
+THESE FILTERS" — one of them under a comment naming the requirement id itself.
+Net: ONE real finding out of eight, and the real one was the single site that
+could be LOCATED. Three narrowings cost more than one instance read.
+
 FILE-LEVEL CREDIT FOR A MEMBER-LEVEL PROPERTY UNDER-REPORTS BY CONSTRUCTION, and
 that is the dangerous direction. A scan says 8 of 23 searchable surfaces lack a
 sort mechanism. The one surface somebody actually DROVE — 37 rows, 20 columns,
@@ -1439,6 +1466,17 @@ def judge(spec: dict, root: Path, today: dt.date, *, run=read_members, surfaces=
             row.problems.append(
                 f"surface {name!r} is declared covered by {prefix!r} and the population contains NO member under "
                 "it — the declaration is a sentence and the command is the evidence; they disagree")
+
+    if str(spec.get("claims_shape") or "presence") == "absence":
+        unlocatable = [m for m in pop.members if "::" not in m][:8]
+        if unlocatable:
+            row.problems.append(
+                "this guard claims an ABSENCE and its members name no anchor: " + ", ".join(unlocatable)
+                + ". AN ABSENCE HAS NO LINE NUMBER — a file-level absence is unactionable on any file holding "
+                "more than one instance of the thing, and the session handed such a list could neither fix it "
+                "nor dismiss it, because declaring them false positives would be the same error as fixing them "
+                "blindly. Report `path::anchor`, naming the element the thing was expected near")
+            return row
 
     missing = [m for m in pop.members if m not in set(sub.members)]
     row.exempted = len([m for m in missing if m in excused])
