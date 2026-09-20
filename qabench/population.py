@@ -239,6 +239,47 @@ login error must not reveal whether the account exists) and that is a different
 question, not a gap. A sweep whose exclusion list was filled in quickly to get
 green would be the defect wearing the fix's clothes.
 
+A CORPUS DEFINED BY THE PROPERTY UNDER TEST, which is not the denominator
+problem and needs its own name, because the usual fix does not work on it.
+
+ACC-04 — "every action is performable with the keyboard alone, with a visible
+focus indicator" — tabs 30 stops on 40+ pages and compares each focused
+element's computed style against an unfocused clone. A good check, honestly
+built, and it has caught real regressions. But IT REACHES ITS CORPUS BY TABBING,
+so its population is "the controls already in the tab order" and a control
+absent from that order cannot appear in it. The row claims every action is
+keyboard-performable; the check can only inspect actions that already are. Four
+KPI cards were `<div class="kpi-card" style="cursor:pointer">` with no role, no
+tabindex and no key handler — controls to a mouse, nothing at all to a keyboard
+— and the check tabbed past them because there was nothing to tab to.
+
+Widening does not help, which is what makes it a different shape: ANY
+ENUMERATION PERFORMED BY THE MECHANISM UNDER TEST INHERITS ITS BLIND SPOT.
+Tabbing to find things in order to check whether they are tabbable is circular.
+
+THE TEST FOR THE SHAPE: ask whether the corpus COULD CONTAIN A FAILING MEMBER.
+If members are found by the same faculty the property is about, it cannot, and
+the check is decorative however carefully it is written:
+
+    tab to find controls              -> cannot find an unfocusable control
+    query rendered pages for empties  -> cannot find a page that never rendered
+    enumerate registered routes       -> cannot find the unregistered one
+    read the rows a query returns     -> cannot check the query returns the right rows
+
+Each reads as thorough and each is closed under its own defect. So a guard names
+the FACULTY its population is found by and the faculty its claim is ABOUT, and
+they may not be the same: the finding is then the DIFFERENCE between two
+enumerations by different faculties — for ACC-04, "clickable" minus "focusable",
+in that direction, since focusable-minus-clickable is a different and much less
+interesting set.
+
+The sibling caveat for `subject.detectors`: two detectors whose corpora come
+from the same faculty can cover each other perfectly and both be blind, so a
+complete union is necessary and not sufficient. What matters is whether ANY
+derivation could have found a failing member, which is a property of the
+derivation rather than of the coverage — so no detector may share the claim's
+faculty either.
+
 THE TWO WAYS A POPULATION GOES UNSTATED, and the worked example is a pair of
 rows that are both HONEST, both well written, and both unbounded — which is why
 it is the better example: the others could be dismissed as sloppiness.
@@ -363,9 +404,11 @@ And the register:
       - id: act11-count-reporting-routes
         check: C6
         claims: "a route that iterates a collection and reports a count reports its failures too"
+        claims_faculty: "what the route DOES at runtime"     # and the population is found by another
         undecided: "routes that report no count at all; anything reached from a background job"
         population:
           derived_from: ast
+          faculty: "static parse of the route table"         # never the claim's own faculty
           cmd: "python3 scripts/qa/pop_count_routes.py"
           count: 11                      # exact; raise it in the commit that raises it
         subject:
@@ -631,6 +674,26 @@ def judge(spec: dict, root: Path, today: dt.date, *, run=read_members) -> Row:
         row.problems.append("no `check:` — every guard serves one of C1–C12, or it is runtime with no owner")
     if not row.claims:
         row.problems.append("no `claims:` — the one sentence the population is the population OF")
+    claims_faculty = str(spec.get("claims_faculty") or "")
+    pop_faculty = str((spec.get("population") or {}).get("faculty") or "")
+    if not claims_faculty or not pop_faculty:
+        row.problems.append(
+            "a guard names `claims_faculty:` (the faculty the claim is ABOUT) and `population.faculty:` (the "
+            "faculty its members are FOUND BY). Without both, the circular case is undetectable")
+    elif claims_faculty == pop_faculty:
+        row.problems.append(
+            f"the population is found by the same faculty the claim is about ({pop_faculty!r}) — the corpus "
+            "CANNOT CONTAIN A FAILING MEMBER, so the check is decorative however carefully it is written. "
+            "ACC-04 tabbed to find controls and could not find an unfocusable one; the same shape is querying "
+            "rendered pages for empty states, enumerating registered routes to check routes are registered, or "
+            "reading the rows a query returns to check the query returns the right rows. Derive the population "
+            "through a DIFFERENT faculty and make the finding the difference")
+    for d in ((spec.get("subject") or {}).get("detectors") or []):
+        if isinstance(d, dict) and claims_faculty and str(d.get("faculty") or "") == claims_faculty:
+            row.problems.append(
+                f"detector {d.get('name')!r} is found by the claim's own faculty ({claims_faculty!r}) — two "
+                "detectors sharing a faculty can cover each other perfectly and both be blind, so a complete "
+                "union is necessary and not sufficient")
     if not spec.get("undecided"):
         row.problems.append(
             "no `undecided:` — one sentence for what this guard does NOT judge. ACT-05 swept 146 dialogs "

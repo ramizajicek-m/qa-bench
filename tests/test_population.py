@@ -72,7 +72,8 @@ def guard(**over) -> dict:
         "check": "C6",
         "claims": "a route that iterates a collection and reports a count reports its failures too",
         "undecided": "routes that report no count at all",
-        "population": {"derived_from": "ast", "cmd": emit("a", "b", "c"), "count": 3},
+        "claims_faculty": "what the route DOES at runtime",
+        "population": {"derived_from": "ast", "faculty": "static parse", "cmd": emit("a", "b", "c"), "count": 3},
         "subject": {"cmd": emit("a", "b", "c")},
     }
     for k, v in over.items():
@@ -490,3 +491,36 @@ def test_a_guard_must_say_what_it_does_not_judge(repo):
 def test_what_is_not_judged_travels_with_the_verdict(repo):
     row = judged(repo, undecided="page-level saves are not judged")
     assert row["undecided"] == "page-level saves are not judged" and row["problems"] == []
+
+
+def test_a_corpus_found_by_the_claims_own_faculty_is_refused(repo):
+    """ACC-04 tabs to find controls and compares each focused element's style.
+    Its population is the controls already in the tab order, so a div with
+    cursor:pointer and no tabindex cannot appear in it — the check cannot fail
+    for the reason it exists. Widening does not help: any enumeration performed
+    by the mechanism under test inherits its blind spot."""
+    row = judged(repo, claims_faculty="tab order", population={"faculty": "tab order"})
+    assert any("CANNOT CONTAIN A FAILING MEMBER" in p and "decorative" in p for p in row["problems"])
+    assert any("Derive the population through a DIFFERENT faculty" in p for p in row["problems"])
+
+
+def test_two_different_faculties_are_fine(repo):
+    row = judged(repo, claims_faculty="tab order", population={"faculty": "responds to a click"})
+    assert row["problems"] == []
+
+
+def test_both_faculties_must_be_named(repo):
+    assert any("the circular case is undetectable" in p
+               for p in judged(repo, claims_faculty=None)["problems"])
+    assert any("the circular case is undetectable" in p
+               for p in judged(repo, population={"faculty": None})["problems"])
+
+
+def test_a_detector_sharing_the_claims_faculty_is_refused(repo):
+    """A complete union is necessary and not sufficient: two detectors from one
+    faculty can cover each other perfectly and both be blind."""
+    row = judged(repo, claims_faculty="tab order", population={"faculty": "responds to a click"},
+                 subject={"cmd": None, "detectors": [{"name": "tabbing", "faculty": "tab order",
+                                                      "cmd": emit("a", "b", "c")}]})
+    assert any("found by the claim's own faculty" in p and "necessary and not sufficient" in p
+               for p in row["problems"])
