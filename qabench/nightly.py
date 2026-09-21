@@ -77,6 +77,47 @@ def verdict(results: list[dict], floor: int) -> tuple[bool, str]:
     return ok, "\n".join(lines)
 
 
+def _failure_ids(results) -> dict[str, set[str]]:
+    """{stage: {failure label}} for every stage that COMPLETED — a stage that did not run has no failures to
+    compare, and counting its absence as "fixed" is how a tier that stopped running reads as a tier that got better."""
+    out = {}
+    for r in results:
+        if r.get("completed"):
+            out[r["name"]] = {str(f[0] if isinstance(f, (list, tuple)) and f else f) for f in r.get("failed") or []}
+    return out
+
+
+def _delta(cfg: Bench, results) -> dict:
+    """What is NEW since the last nightly of this origin.
+
+    ana-log's browser tier had been red for days when one change added thirty-three failures; the run was
+    already `failure`, so they changed nothing anyone could see. A constant is not a signal — the delta is.
+    The baseline is kept outside the run's shot dir (QABENCH_DELTA_DIR, default ~/.qabench/delta), which
+    persists on a self-hosted runner; a runner with no memory prints "no baseline" and nothing else.
+    """
+    import re as _re
+    store = Path(os.environ.get("QABENCH_DELTA_DIR") or Path.home() / ".qabench" / "delta")
+    key = _re.sub(r"[^A-Za-z0-9._-]+", "_", cfg.origin or "origin")
+    now = _failure_ids(results)
+    path = store / f"{key}.json"
+    try:
+        before = {k: set(v) for k, v in json.loads(path.read_text()).items()}
+    except (OSError, ValueError, AttributeError):
+        before = None
+    try:
+        store.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({k: sorted(v) for k, v in now.items()}, indent=1))
+    except OSError as ex:
+        return {"line": f"delta: baseline not stored ({ex}) — tomorrow's run will not know what is new", "new": [], "vanished": []}
+    if before is None:
+        return {"line": "delta: no baseline yet — stored this run; tomorrow's report names what is NEW", "new": [], "vanished": []}
+    new = sorted(f"{s}::{f}" for s, fs in now.items() for f in fs - before.get(s, set()))
+    vanished = sorted(f"{s}::{f}" for s, fs in before.items() if s in now for f in fs - now[s])
+    lines = [f"delta since last night: {len(new)} NEW failure(s), {len(vanished)} gone"]
+    lines += [f"  NEW   {n}" for n in new[:50]] + [f"  gone  {v}" for v in vanished[:50]]
+    return {"line": "\n".join(lines), "new": new, "vanished": vanished}
+
+
 def run(cfg: Bench, argv: list[str]) -> int:
     plan: list[tuple[str, list[str] | None]] = [(n, None) for n in SHARED] + [(n, a) for n, a in cfg.stages_extra]
     # A stage with nothing to measure is EXCLUDED BY DECLARATION, never run to
@@ -114,8 +155,11 @@ def run(cfg: Bench, argv: list[str]) -> int:
     ok, table = verdict(results, cfg.floor)
     smoke = _read_ledger(cfg.shots, "smoke") or {}
     swept_sha = smoke.get("swept_sha", "")
+    delta = _delta(cfg, results)
+    table += "\n" + delta["line"]
     print(table, flush=True)
-    out = {"ok": ok, "qabench": __version__, "origin": cfg.origin, "swept_sha": swept_sha, "results": results}
+    out = {"ok": ok, "qabench": __version__, "origin": cfg.origin, "swept_sha": swept_sha, "results": results,
+           "delta": delta}
     (cfg.shots / "nightly.json").write_text(json.dumps(out, indent=1))
     summary = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary:

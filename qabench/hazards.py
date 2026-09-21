@@ -1,6 +1,6 @@
 """hazards — shell lines that make an observer report something it did not observe.
 
-    python -m qabench hazards [--repo DIR] [--json]
+    python -m qabench hazards [--repo DIR] [--json] [--advisory]
 
 Reads Makefiles, shell scripts and workflow files (or `hazards: {paths: [...]}`)
 for two shapes, each of which reported a false outcome in this estate on
@@ -116,4 +116,4 @@ def run(argv: list[str], *, echo=print) -> int:
             echo(f"  RED  {r}")
         for r in out["excused"]:
             echo(f"  ok   {r}")
-    return 1 if out["red"] else 0
+    return 1 if out["red"] and "--advisory" not in argv else 0

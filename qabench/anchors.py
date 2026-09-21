@@ -1,6 +1,6 @@
 """anchors — a reason citing code must still point at what it says it points at.
 
-    python -m qabench anchors [--repo DIR] [--show] [--json]
+    python -m qabench anchors [--repo DIR] [--show] [--json] [--advisory]
 
 WHY. Prose drifts while every test around it stays green, because prose is not
 asserted against. Three instances in one day, three repos:
@@ -191,4 +191,5 @@ def run(argv: list[str], *, echo=print) -> int:
         if "--show" in argv:
             for c in out["citations"]:
                 echo(f"  {c['at']}  {c['cited']}  now: {c['now']!r}")
-    return 1 if out["red"] else 0
+    # --advisory is the adoption step: print everything, exit 0, until the day-one drift is cleared.
+    return 1 if out["red"] and "--advisory" not in argv else 0

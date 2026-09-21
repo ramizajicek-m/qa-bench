@@ -67,3 +67,9 @@ def server_factory(monkeypatch):
     yield _start
     for s in started:
         s.stop()
+
+
+@pytest.fixture(autouse=True)
+def _delta_store_in_tmp(tmp_path, monkeypatch):
+    """nightly keeps its delta baseline outside the run; a test must never write it to the real home."""
+    monkeypatch.setenv("QABENCH_DELTA_DIR", str(tmp_path / "delta-store"))
