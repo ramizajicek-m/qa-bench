@@ -688,6 +688,15 @@ class HeavyLock:
     def __enter__(self):
         import fcntl
         import time
+        # RE-ENTRANT ACROSS THE PROCESS TREE. A heavy run whose command itself calls `ran --heavy` (a land.py
+        # check wrapping `./dev test unit`, which one day wraps another) would block forever on a lock its own
+        # ancestor holds — the one way a kernel lock deadlocks a single job (ana-qa). The holder exports
+        # QABENCH_HEAVY_HELD with the lock's path; a descendant that sees it proceeds and says so.
+        if os.environ.get("QABENCH_HEAVY_HELD") == str(self.path):
+            self.echo("ran: heavy-run lock already held by this run's own ancestor — proceeding inside it")
+            self.fh, self.nested = None, True
+            return self
+        self.nested = False
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.fh = open(self.path, "a+")
         t0 = time.monotonic()
@@ -704,10 +713,18 @@ class HeavyLock:
         self.fh.write(f"{self.name} pid {os.getpid()} in {os.getcwd()} since "
                       f"{dt.datetime.now(dt.timezone.utc).isoformat(timespec='seconds')}")
         self.fh.flush()
+        self._prev = os.environ.get("QABENCH_HEAVY_HELD")
+        os.environ["QABENCH_HEAVY_HELD"] = str(self.path)      # inherited by the command this lock wraps
         return self
 
     def __exit__(self, *exc):
         import fcntl
+        if self.nested:
+            return False
+        if self._prev is None:
+            os.environ.pop("QABENCH_HEAVY_HELD", None)
+        else:
+            os.environ["QABENCH_HEAVY_HELD"] = self._prev
         try:
             self.fh.seek(0)
             self.fh.truncate()
