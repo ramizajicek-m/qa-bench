@@ -1122,6 +1122,43 @@ left over. That is the reference implementation, and the ambition this module
 reports against: a guard states its denominator and drives the unjudged share
 to zero, or names what is in it.
 
+WHAT THIS MODULE CANNOT SEE, AND IT IS HALF THE PROBLEM. Everything enforced
+here answers ONE question — DID THE CHECK MEASURE ANYTHING? — and there is a
+second, orthogonal to it: DID IT MEASURE THE RIGHT THING?
+
+    VACUITY           the check measured NOTHING. Corpus floors, known
+                      positives, real near-misses, exact pins, mutation replay,
+                      plausible ranges: this file is built for it.
+    CRITERION MISMATCH the check measured the WRONG THING, CORRECTLY. Nothing
+                      here touches it.
+
+AND A CONTROL MAKES A WRONG MEASUREMENT MORE CREDIBLE, WHICH IS THE PART THAT
+HURTS. The text-zoom row below has a control, and a good one — a corpus floor
+asserting forty-plus pages were opened. It works perfectly. IT PROVES THE SWEEP
+RAN, AND THE SWEEP WAS MEASURING THE WRONG CRITERION THE WHOLE TIME. A reviewer
+who checks for a control finds one and moves on, which is what happened to that
+row for months.
+
+That was established by a session proposing exactly the shortcut this file
+invites — "the rows that hold are the ones whose author wrote a control" — AND
+VALIDATING IT BEFORE OFFERING IT, against nine rows labelled by reading: 8 of 9
+have a control, INCLUDING BOTH FAILURES, and the one without a control is sound.
+As a filter it puts both known-bad rows in the pile you skip.
+
+THREE MECHANICAL SHORTCUTS WERE TRIED IN ONE NIGHT AND ALL THREE FAILED, EACH IN
+THE DIRECTION THAT LOOKS LIKE SUCCESS: a quoted-phrase check flagged 8 of 9
+reasons and 7 were correctly fine, because quotes in requirements are
+illustrations rather than contract terms; a name-match over derived columns was
+wrong on 3 of 17, caught by reading four lines; and the control heuristic above.
+THE ONLY METHOD THAT HAS WORKED EVERY TIME IS READING WHAT A TEST ASSERTS NEXT
+TO WHAT THE ROW SAYS, and its slowness is not incidental to it — IT IS THE
+METHOD. A HEURISTIC THAT HAS NOT MET A LABELLED SET IS A HYPOTHESIS.
+
+So nothing in this file should be read as covering the criterion question, and
+the decision not to add a `criterion:` field is now supported rather than merely
+prudent: a guard able to state its own criterion correctly would not have had
+the problem, and a declaration would become one more thing a reviewer ticks.
+
 WHAT IT CANNOT SEE, stated: that the guard's ORACLE is right. A guard may sweep
 the whole population and still assert the wrong thing about each member — FRM-04
 swept its eleven types and asked the implementation what the answer was, FRM-05
