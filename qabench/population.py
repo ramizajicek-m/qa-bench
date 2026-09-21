@@ -945,6 +945,26 @@ already asks for has not been measured yet — adding a tenth while that is open
 would be the kind of thing this file refuses elsewhere. The question is here to
 be asked, not checked.)
 
+THE INERT FIX is the extreme of the same measurement and the mirror image of the
+marker-keyed class. A CSS token was defined with a comment naming its
+requirement and documenting 5.0:1, AND USED IN ZERO RULES, while fourteen
+selectors still set the inaccessible token and five of those sit at 2.86:1.
+Somebody found the defect, computed the numbers, wrote the accessible token and
+never wired it to anything — and nothing since noticed, because EVERY GUARD IN
+REACH ASKED WHETHER THE REMEDY EXISTS, NOT WHETHER ANYTHING CONSUMES IT.
+
+The discriminator: A GUARD THAT ASSERTS AN ARTEFACT EXISTS IS SATISFIED BY THE
+ARTEFACT'S DEFINITION. A guard that asserts a DEFECT IS ABSENT must be keyed on
+the defect's population — selectors setting a colour, not tokens declaring one.
+Marker-keyed populations are blind to the non-compliant cases; THIS ONE COUNTS
+THE FIX ITSELF AS A COMPLIANT CASE.
+
+So the instrument is CONSUMER COUNT, and it applies to any NAMED REMEDY — a
+token, a helper, a wrapper, a constant: how many sites use it, and is that
+number asserted anywhere? `kind: reach` with `proves_helper:` is that
+measurement; the inert fix is simply its zero, and a reach guard whose subject
+is empty says so in those words rather than the vacuity ones.
+
 A HELPER IMPLEMENTS THE CONTRACT CORRECTLY AND MOST OF THE PRODUCT DOES NOT
 CALL IT — three instances in one codebase, each found separately, by a different
 route, on a different row: apiFetch reports every failure by default and 198 of
@@ -1829,6 +1849,17 @@ def judge(spec: dict, root: Path, today: dt.date, *, run=read_members, surfaces=
     row.exempted = len([m for m in missing if m in excused])
     row.missing = [m for m in missing if m not in excused]
     row.stray = [m for m in sub.members if m not in set(pop.members)]
+    if kind == "reach" and not sub.members and pop.members:
+        # Checked BEFORE the complement partition, which returns early when the
+        # residue is empty — and a remedy nothing uses has an empty residue by
+        # construction, so the inert case would have been swallowed there.
+        row.problems.append(
+            f"THE REMEDY IS INERT: zero of {row.population} sites use it. A token was defined with a comment "
+            "naming its requirement and documenting 5.0:1, and used in ZERO rules, while fourteen selectors "
+            "still set the inaccessible one — somebody found the defect, computed the numbers, wrote the fix "
+            "and never wired it, and nothing noticed because every guard in reach asked whether the remedy "
+            "EXISTS rather than whether anything CONSUMES it")
+        return row
     if kind == "reach" and complement and row.missing:
         # BYPASSING A HELPER IS NOT THE SAME AS BEING UNCOVERED. The complement
         # is partitioned by what else covers it, and only the residue is a

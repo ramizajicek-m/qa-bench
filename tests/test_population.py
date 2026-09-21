@@ -962,3 +962,14 @@ def test_a_metric_declares_the_range_a_working_system_produces(repo):
                  measured_in="staging, light theme, 1440x900",
                  capability=cap(plausible=None))
     assert any("declares no `plausible:` range" in p and "INSTRUMENT FAULT" in p for p in row["problems"])
+
+
+def test_a_reach_guard_with_no_consumers_names_the_inert_fix(repo):
+    """A token defined with a comment naming its requirement and documenting
+    5.0:1, used in ZERO rules, while fourteen selectors still set the
+    inaccessible one. Every guard in reach asked whether the remedy EXISTS."""
+    row = judged(repo, **reachy(subject={"cmd": nothing()},
+                                complement=[{"name": "w", "cmd": emit("a", "b", "c", "d"),
+                                             "proven_by": "tests/x.py::t"}]))
+    assert any("THE REMEDY IS INERT: zero of 4 sites use it" in p for p in row["problems"])
+    assert not any("indistinguishable from a clean tree" in p for p in row["problems"])
