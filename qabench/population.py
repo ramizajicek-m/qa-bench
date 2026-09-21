@@ -1985,7 +1985,7 @@ def judge(spec: dict, root: Path, today: dt.date, *, run=read_members, surfaces=
     if detectors and sub_spec.get("cmd"):
         row.problems.append("a subject names `cmd` OR `detectors`, not both")
         return row
-    if not pop_spec.get("cmd") or not (sub_spec.get("cmd") or detectors):
+    if not (pop_spec.get("cmd") or pop_spec.get("cmd_from")) or not (sub_spec.get("cmd") or detectors):
         row.problems.append("a guard names both a population.cmd and a subject.cmd (or subject.detectors), or it "
                             "is a claim about itself")
         return row
@@ -2013,6 +2013,21 @@ def judge(spec: dict, root: Path, today: dt.date, *, run=read_members, surfaces=
             row.unrunnable = "could not run" in problem or "did not print" in problem
             return row
 
+    # A command READ from the manifest rather than carried as a copy. A guard
+    # holding its own copy of the manifest's string passes today and drifts the
+    # next time the manifest line changes — D4 one file over, where the copy
+    # runs, passes, and is no longer the command anybody consumes.
+    if pop_spec.get("cmd_from"):
+        mdoc = (yaml.safe_load((root / "qa" / "manifest.yml").read_text(encoding="utf-8"))
+                if (root / "qa" / "manifest.yml").exists() else {}) or {}
+        node = mdoc
+        for part in str(pop_spec["cmd_from"]).split("."):
+            node = node.get(part) if isinstance(node, dict) else None
+        if not isinstance(node, str) or not node.strip():
+            row.unrunnable = True
+            row.problems.append(f"population.cmd_from: {pop_spec['cmd_from']!r} names no command in the manifest")
+            return row
+        pop_spec = {**pop_spec, "cmd": node}
     pop = run(root, pop_spec["cmd"])
     # ONE REQUIREMENT, SEVERAL DETECTORS: the population is the REQUIREMENT'S,
     # and what has to be asserted is that the detectors' corpora COVER it. Two

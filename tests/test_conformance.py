@@ -228,3 +228,32 @@ def test_the_enumeration_findings_are_advisory_first(tmp_path):
     from qabench import conformance
     found = [f for f in conformance.judge(_enum_manifest(tmp_path), root=tmp_path) if f["kind"] == "enumeration_unrun"]
     assert found and not found[0]["fatal"]
+
+
+def test_a_pasted_copy_of_the_enumeration_is_named(tmp_path):
+    """String equality would accept a guard holding its own copy of the
+    manifest's command — which passes today and drifts the next time the
+    manifest line changes. D4 one file over."""
+    from qabench import conformance
+    m = _enum_manifest(tmp_path, guards=[{"id": "routes", "population": {
+        "cmd": "python3 scripts/routes.py", "witness": [{"member": "/order", "why": "customer"}]}}])
+    kinds = {f["kind"] for f in conformance.judge(m, root=tmp_path)}
+    assert "enumeration_copied" in kinds
+
+
+def test_a_guard_that_reads_the_command_from_the_manifest_is_clean(tmp_path):
+    from qabench import conformance
+    m = _enum_manifest(tmp_path, guards=[{"id": "routes", "population": {
+        "cmd_from": "enumerate_routes", "witness": [{"member": "/order", "why": "customer"}]}}])
+    kinds = {f["kind"] for f in conformance.judge(m, root=tmp_path)}
+    assert not kinds & {"enumeration_unrun", "enumeration_copied", "enumeration_unwitnessed"}
+
+
+def test_the_production_dispatch_is_never_on_the_run_list():
+    """full_remote dispatches the night lane, which on tharros promotes to
+    production on green. A widening that read it as a cheap one-line field would
+    turn a conformance run into a production deploy."""
+    from qabench import conformance
+    assert "full_remote" in conformance.NEVER_RUN
+    assert "production" in conformance.NEVER_RUN["full_remote"]
+    assert not set(conformance.RUN_TO_VERIFY) & set(conformance.NEVER_RUN)

@@ -1039,3 +1039,20 @@ def test_a_witness_can_be_a_kind_rather_than_a_member(repo):
 def test_a_witness_pattern_that_does_not_compile_is_named(repo):
     row = judged(repo, population={"witness": [{"matching": "([", "why": "x"}]})
     assert any("does not compile" in p for p in row["problems"])
+
+
+def test_a_population_can_read_its_command_from_the_manifest(repo, tmp_path):
+    """A guard carrying its own copy of the manifest's command drifts when the
+    manifest changes. cmd_from resolves it at judge time instead."""
+    import yaml as _y
+    root = repo([guard(population={"cmd": None, "cmd_from": "enumerate_routes", "count": 3})])
+    doc = _y.safe_load((root / "qa" / "manifest.yml").read_text())
+    doc["enumerate_routes"] = emit("a", "b", "c")
+    (root / "qa" / "manifest.yml").write_text(_y.safe_dump(doc), encoding="utf-8")
+    row = population.run_population(root, {"register": "qa/guards.yml"}, today=TODAY)["rows"][0]
+    assert row["population"] == 3 and row["problems"] == []
+
+
+def test_a_cmd_from_naming_nothing_is_did_not_run(repo):
+    row = judged(repo, population={"cmd": None, "cmd_from": "no_such_field"})
+    assert row["unrunnable"] and "names no command in the manifest" in row["problems"][0]
