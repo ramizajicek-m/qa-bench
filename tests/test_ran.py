@@ -348,9 +348,17 @@ def test_a_heavy_run_nested_inside_a_heavy_run_does_not_deadlock(tmp_path, monke
     from qabench import ran
     monkeypatch.delenv("QABENCH_HEAVY_HELD", raising=False)
     lock, said = str(tmp_path / "heavy.lock"), []
+    import threading
+    done = []
     with ran.HeavyLock("outer", path=lock, echo=said.append):
         assert os.environ["QABENCH_HEAVY_HELD"] == lock
-        with ran.HeavyLock("inner", path=lock, echo=said.append) as inner:
-            assert inner.nested
+
+        def inner():
+            with ran.HeavyLock("inner", path=lock, echo=said.append) as i:
+                done.append(i.nested)
+        th = threading.Thread(target=inner, daemon=True)   # a deadlock must FAIL this test, never hang it
+        th.start()
+        th.join(timeout=3)
+        assert done == [True], "the nested heavy run blocked on its own ancestor's lock"
     assert "QABENCH_HEAVY_HELD" not in os.environ
     assert any("ancestor" in s for s in said)
