@@ -57,6 +57,13 @@ for two shapes, each of which reported a false outcome in this estate on
   filename is the part you can. A character tail of a command's output in a
   Python script (`.stdout[-N:]`, `.stderr[-N:]`) is refused: keep whole lines
   (`splitlines()[-N:]`), and elide the middle of a key, never its head.
+  SCRIPTS, NOT TESTS, DELIBERATELY — do not "complete" this by extending it to
+  tests/. A character tail in an assertion message (`assert rc == 0,
+  p.stderr[-800:]`) loses the head of a traceback, but pytest still names the
+  test and file; a tail in a script's REPORT loses the only identifier in the
+  line. anat has 96 loose-shape sites across scripts/ and tests/ and 10 in
+  scripts; the rule is "where the sliced output IS the finding, cut on line
+  boundaries", and a check that flagged all 96 would be switched off in a week.
 
 A line can be excused with a trailing `# hazard-ok: <reason>`; the reason is
 printed every run. What this does NOT read, stated: two steps joined by a
