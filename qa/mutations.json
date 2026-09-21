@@ -943,25 +943,6 @@
    "recorded": "2026-09-21"
   },
   {
-   "file": "qabench/fixpop.py",
-   "expr": "s.replace('    lines = [ln for ln in msg.splitlines() if not ln.startswith(\"#\")]', '    lines = msg.splitlines()', 1)",
-   "command": [
-    "env",
-    "PYTHONPATH=.",
-    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
-    "-m",
-    "pytest",
-    "tests/test_fixpop.py",
-    "-q",
-    "-p",
-    "no:randomly",
-    "-x"
-   ],
-   "verdict": "caught",
-   "exit": 1,
-   "recorded": "2026-09-21"
-  },
-  {
    "file": "qabench/hazards.py",
    "expr": "s.replace('            if t and r and r.start() < t.start() and \"tee\" not in code[:t.start()] and not pipefail:', '            if False:', 1)",
    "command": [
@@ -2236,44 +2217,6 @@
   },
   {
    "file": "qabench/runners.py",
-   "expr": "s.replace('    if failed:\\n        return f\"a check that gates the deploy FAILED', '    if False:\\n        return f\"a check that gates the deploy FAILED', 1)",
-   "command": [
-    "env",
-    "PYTHONPATH=.",
-    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
-    "-m",
-    "pytest",
-    "tests/test_runners.py",
-    "-q",
-    "-p",
-    "no:randomly",
-    "-x"
-   ],
-   "verdict": "caught",
-   "exit": 1,
-   "recorded": "2026-09-21"
-  },
-  {
-   "file": "qabench/runners.py",
-   "expr": "s.replace('    if pending:\\n        return \"the platform\\'s own status is PENDING', '    if False:\\n        return \"the platform\\'s own status is PENDING', 1)",
-   "command": [
-    "env",
-    "PYTHONPATH=.",
-    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
-    "-m",
-    "pytest",
-    "tests/test_runners.py",
-    "-q",
-    "-p",
-    "no:randomly",
-    "-x"
-   ],
-   "verdict": "caught",
-   "exit": 1,
-   "recorded": "2026-09-21"
-  },
-  {
-   "file": "qabench/runners.py",
    "expr": "s.replace('        if t1 - t0 > dt.timedelta(hours=2):', '        if False:', 1)",
    "command": [
     "env",
@@ -2662,6 +2605,82 @@
     "-m",
     "pytest",
     "tests/test_ran.py",
+    "-q",
+    "-p",
+    "no:randomly",
+    "-x"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-21"
+  },
+  {
+   "file": "qabench/runners.py",
+   "expr": "s.replace('    if not readable:\\n        return 3', '    if False:\\n        return 3', 1)",
+   "command": [
+    "env",
+    "PYTHONPATH=.",
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_runners.py",
+    "-q",
+    "-p",
+    "no:randomly",
+    "-x"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-21"
+  },
+  {
+   "file": "qabench/runners.py",
+   "expr": "s.replace('    if failed:\\n        why.append(', '    if False:\\n        why.append(', 1)",
+   "command": [
+    "env",
+    "PYTHONPATH=.",
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_runners.py",
+    "-q",
+    "-p",
+    "no:randomly",
+    "-x"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-21"
+  },
+  {
+   "file": "qabench/runners.py",
+   "expr": "s.replace('    if pending:\\n        why.append(', '    if False:\\n        why.append(', 1)",
+   "command": [
+    "env",
+    "PYTHONPATH=.",
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_runners.py",
+    "-q",
+    "-p",
+    "no:randomly",
+    "-x"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-21"
+  },
+  {
+   "file": "qabench/population.py",
+   "expr": "s.replace('        if \"product\" not in cs:\\n            out.append(', '        if False:\\n            out.append(', 1)",
+   "command": [
+    "env",
+    "PYTHONPATH=.",
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_population.py",
     "-q",
     "-p",
     "no:randomly",
