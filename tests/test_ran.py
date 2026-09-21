@@ -362,3 +362,12 @@ def test_a_heavy_run_nested_inside_a_heavy_run_does_not_deadlock(tmp_path, monke
         assert done == [True], "the nested heavy run blocked on its own ancestor's lock"
     assert "QABENCH_HEAVY_HELD" not in os.environ
     assert any("ancestor" in s for s in said)
+
+
+def test_the_top_consumers_are_ranked_not_matched_by_name():
+    """A CI Chromium and Spotlight's mdworker matched none of pytest|land.py|make and read as an idle machine."""
+    from qabench import ran
+    ps = lambda: ("%CPU ELAPSED COMMAND\n  0.1 01:00 python -m pytest\n 98.0 38:00 chrome-headless-shell --headless\n"
+                  "102.8 26:00 /System/Library/Frameworks/CoreServices.framework/mdworker\n")
+    top = ran.top_consumers(2, ps=ps)
+    assert "mdworker" in top[0] and "chrome-headless-shell" in top[1]

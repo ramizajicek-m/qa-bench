@@ -669,6 +669,29 @@ def execute(argv: list[str], log: Path, *, cwd: Path, echo=print) -> int:
 LOADED = 1.5
 
 
+def top_consumers(n: int = 6, *, ps=None) -> list[str]:
+    """The top CPU consumers by RANK, never by name.
+
+    A check that filters for `pytest|land.py|make` can only find the tools somebody thought of: on
+    2026-09-21 a slot was released as "machine free" while a CI job's headless Chromium ran at 98 % (its
+    processes are `node` and `chrome-headless-shell`) and Spotlight's mdworker indexed five sessions' trees
+    at 140 % of a core — neither matched any name. Enumerate and rank; the owner is usually legible from
+    the path."""
+    try:
+        out = ps() if ps else subprocess.run(["ps", "-Ao", "pcpu,etime,command"], capture_output=True,
+                                             text=True, timeout=20).stdout
+    except (OSError, subprocess.SubprocessError):
+        return []
+    rows = []
+    for line in out.splitlines()[1:]:
+        parts = line.split(None, 2)
+        try:
+            rows.append((float(parts[0]), line.strip()[:160]))
+        except (ValueError, IndexError):
+            continue
+    return [r for _, r in sorted(rows, key=lambda x: -x[0])[:n]]
+
+
 def _load(getloadavg=os.getloadavg) -> float | None:
     try:
         return round(getloadavg()[0], 1)
@@ -770,7 +793,8 @@ def run_one(root: Path, cfg: dict, name: str, argv: list[str], *, now=None, echo
                           if not re.search(g.get("evidence") or r"(?!x)x",
                                            log.read_text(encoding="utf-8", errors="replace"), re.M)],
         "log": str(log.relative_to(root)), "finished": dt.datetime.now(dt.timezone.utc).isoformat(),
-        "load": {"start": load_start, "end": load_end, "cores": cores, "under_load": under_load},
+        "load": {"start": load_start, "end": load_end, "cores": cores, "under_load": under_load,
+                 "top": top_consumers() if under_load else []},
     }
     if not spec:
         record["why"] += (f" — judged on the kit's default markers; `ran.commands.{name}` declares none, so this "
