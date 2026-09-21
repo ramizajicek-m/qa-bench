@@ -26,6 +26,13 @@ And one asks whether a table's CONTENTS are still its own: `distinct` compares e
 
 Two commands read the record rather than a deployment: `escapes` (defect escape rate and ODC trigger histogram from the project's ledger, red on a finder it cannot classify) and `gap` (did anything ship untested). The method behind all of it — what finds the defects people find, the catalogues adopted, the tools weighed and rejected — is `docs/methodology.md`; the defects it was measured on, with their fix commits, are `benchmarks/escaped.yml`.
 
+Four commands built from the escapes of 2026-09-21, each for a class that recurred across repos (0.1.55):
+
+- `delta --store DIR --name TIER --after junit.xml` — which failures are NEW since the last run of that tier, and which VANISHED (failing before, absent now: usually stopped running, not fixed). ana-log's browser tier was red for days, so thirty-three new failures from one change arrived unseen; a constant is not a signal. Run it after every tier that writes JUnit.
+- `fixpop --msg FILE` (commit-msg hook) / `--range A..B` (CI) — a fix commit carries `Population: <the other sites with this shape>` or `Population: none (searched: <how>)`. anat fixed a hand-picked tier being overwritten and left the fee field beside it with the identical defect for two months. Start with `--advisory`.
+- `anchors` — prose that names code must still point at it: `path#"literal"` must resolve, and a `path:LINE` citation must exist, and the code quoted right after it must still be within three lines; line citations are pinned and may only fall. The first estate run found stale citations in anat (37), ana-log (9) and tharros (1).
+- `hazards` — a `pgrep -f`/`ps | grep` liveness check that matches its own command line (Makefile recipes and `sh -c`), and a test or landing run piped into `tail`/`head` without `tee` or `pipefail`.
+
 Exit codes everywhere: `0` proven · `1` failed · `3` nothing failed but something did not run — and 3 is never reported as 0.
 
 ## Install

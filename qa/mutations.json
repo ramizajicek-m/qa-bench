@@ -962,139 +962,6 @@
    "recorded": "2026-09-21"
   },
   {
-   "file": "qabench/anchors.py",
-   "expr": "s.replace('                ok = bool(rel) and literal in \"\\\\n\".join(_read(root, rel))', '                ok = bool(rel)', 1)",
-   "command": [
-    "env",
-    "PYTHONPATH=.",
-    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
-    "-m",
-    "pytest",
-    "tests/test_anchors.py",
-    "-q",
-    "-p",
-    "no:randomly",
-    "-x"
-   ],
-   "verdict": "caught",
-   "exit": 1,
-   "recorded": "2026-09-21"
-  },
-  {
-   "file": "qabench/anchors.py",
-   "expr": "s.replace('                    if q not in window:', '                    if False:', 1)",
-   "command": [
-    "env",
-    "PYTHONPATH=.",
-    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
-    "-m",
-    "pytest",
-    "tests/test_anchors.py",
-    "-q",
-    "-p",
-    "no:randomly",
-    "-x"
-   ],
-   "verdict": "caught",
-   "exit": 1,
-   "recorded": "2026-09-21"
-  },
-  {
-   "file": "qabench/anchors.py",
-   "expr": "s.replace('                if i < 1 or i > len(lines):', '                if False:', 1)",
-   "command": [
-    "env",
-    "PYTHONPATH=.",
-    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
-    "-m",
-    "pytest",
-    "tests/test_anchors.py",
-    "-q",
-    "-p",
-    "no:randomly",
-    "-x"
-   ],
-   "verdict": "caught",
-   "exit": 1,
-   "recorded": "2026-09-21"
-  },
-  {
-   "file": "qabench/anchors.py",
-   "expr": "s.replace('    elif n > pin:', '    elif n > pin + 1:', 1)",
-   "command": [
-    "env",
-    "PYTHONPATH=.",
-    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
-    "-m",
-    "pytest",
-    "tests/test_anchors.py",
-    "-q",
-    "-p",
-    "no:randomly",
-    "-x"
-   ],
-   "verdict": "caught",
-   "exit": 1,
-   "recorded": "2026-09-21"
-  },
-  {
-   "file": "qabench/anchors.py",
-   "expr": "s.replace('    if not isinstance(pin, int):', '    if False:', 1)",
-   "command": [
-    "env",
-    "PYTHONPATH=.",
-    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
-    "-m",
-    "pytest",
-    "tests/test_anchors.py",
-    "-q",
-    "-p",
-    "no:randomly",
-    "-x"
-   ],
-   "verdict": "caught",
-   "exit": 1,
-   "recorded": "2026-09-21"
-  },
-  {
-   "file": "qabench/anchors.py",
-   "expr": "s.replace('                    if why == \"no such file\":', '                    if False:', 1)",
-   "command": [
-    "env",
-    "PYTHONPATH=.",
-    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
-    "-m",
-    "pytest",
-    "tests/test_anchors.py",
-    "-q",
-    "-p",
-    "no:randomly",
-    "-x"
-   ],
-   "verdict": "caught",
-   "exit": 1,
-   "recorded": "2026-09-21"
-  },
-  {
-   "file": "qabench/anchors.py",
-   "expr": "s.replace('    if not out[\"files\"]:', '    if False:', 1)",
-   "command": [
-    "env",
-    "PYTHONPATH=.",
-    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
-    "-m",
-    "pytest",
-    "tests/test_anchors.py",
-    "-q",
-    "-p",
-    "no:randomly",
-    "-x"
-   ],
-   "verdict": "caught",
-   "exit": 1,
-   "recorded": "2026-09-21"
-  },
-  {
    "file": "qabench/hazards.py",
    "expr": "s.replace('                if \"[\" in pat or re.search(r\"grep\\\\s+-v\\\\s+grep\", code):', '                if True:', 1)",
    "command": [
@@ -1313,6 +1180,196 @@
     "-m",
     "pytest",
     "tests/test_hazards.py",
+    "-q",
+    "-p",
+    "no:randomly",
+    "-x"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-21"
+  },
+  {
+   "file": "qabench/anchors.py",
+   "expr": "s.replace('                ok = bool(rel) and literal in \"\\\\n\".join(_read(root, rel))', '                ok = bool(rel)', 1)",
+   "command": [
+    "env",
+    "PYTHONPATH=.",
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_anchors.py",
+    "-q",
+    "-p",
+    "no:randomly",
+    "-x"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-21"
+  },
+  {
+   "file": "qabench/anchors.py",
+   "expr": "s.replace('                    if q not in window:', '                    if False:', 1)",
+   "command": [
+    "env",
+    "PYTHONPATH=.",
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_anchors.py",
+    "-q",
+    "-p",
+    "no:randomly",
+    "-x"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-21"
+  },
+  {
+   "file": "qabench/anchors.py",
+   "expr": "s.replace('                if i < 1 or i > len(lines):', '                if False:', 1)",
+   "command": [
+    "env",
+    "PYTHONPATH=.",
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_anchors.py",
+    "-q",
+    "-p",
+    "no:randomly",
+    "-x"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-21"
+  },
+  {
+   "file": "qabench/anchors.py",
+   "expr": "s.replace('    elif n > pin:', '    elif n > pin + 1:', 1)",
+   "command": [
+    "env",
+    "PYTHONPATH=.",
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_anchors.py",
+    "-q",
+    "-p",
+    "no:randomly",
+    "-x"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-21"
+  },
+  {
+   "file": "qabench/anchors.py",
+   "expr": "s.replace('    if not isinstance(pin, int):', '    if False:', 1)",
+   "command": [
+    "env",
+    "PYTHONPATH=.",
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_anchors.py",
+    "-q",
+    "-p",
+    "no:randomly",
+    "-x"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-21"
+  },
+  {
+   "file": "qabench/anchors.py",
+   "expr": "s.replace('                    if why == \"no such file\" and \"/\" in path.lstrip(\"./\") and (root / top).is_dir():', '                    if why == \"no such file\":', 1)",
+   "command": [
+    "env",
+    "PYTHONPATH=.",
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_anchors.py",
+    "-q",
+    "-p",
+    "no:randomly",
+    "-x"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-21"
+  },
+  {
+   "file": "qabench/anchors.py",
+   "expr": "s.replace('                    if why == \"no such file\" and', '                    if False and', 1)",
+   "command": [
+    "env",
+    "PYTHONPATH=.",
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_anchors.py",
+    "-q",
+    "-p",
+    "no:randomly",
+    "-x"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-21"
+  },
+  {
+   "file": "qabench/anchors.py",
+   "expr": "s.replace('    if not out[\"files\"]:', '    if False:', 1)",
+   "command": [
+    "env",
+    "PYTHONPATH=.",
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_anchors.py",
+    "-q",
+    "-p",
+    "no:randomly",
+    "-x"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-21"
+  },
+  {
+   "file": "qabench/anchors.py",
+   "expr": "s.replace('                if text[:m.start()].count(\"`\") % 2:', '                if False:', 1)",
+   "command": [
+    "env",
+    "PYTHONPATH=.",
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_anchors.py",
+    "-q",
+    "-p",
+    "no:randomly",
+    "-x"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-21"
+  },
+  {
+   "file": "qabench/anchors.py",
+   "expr": "s.replace('} - excluded)', '})', 1)",
+   "command": [
+    "env",
+    "PYTHONPATH=.",
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_anchors.py",
     "-q",
     "-p",
     "no:randomly",
