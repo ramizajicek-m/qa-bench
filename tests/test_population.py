@@ -1002,3 +1002,23 @@ def test_a_declined_candidate_needs_its_reason(repo):
     ok = judged(repo, subject={"cmd": emit("a", "b", "c"), "reports": "candidates", "read": 3, "declined": 1,
                                "declined_why": "one person's own routine, never sent, correct in any zone"})
     assert ok["problems"] == [] and ok["declined"] == 1
+
+
+def test_a_witness_absent_from_the_population_is_named(repo):
+    """7,426 minus the four chips the sweep was built for is 7,422, which passes
+    a floor of 6,000 comfortably. A size ratchet is blind in the direction that
+    looks like success; a named witness has no direction."""
+    row = judged(repo, population={"witness": [
+        {"member": "span.archetype-chip.a-hardship", "why": "read by a person at 2.86:1; it is why this exists"}]})
+    assert any("WITNESS ABSENT" in p and "2.86:1" in p for p in row["problems"])
+    assert any("A NAMED WITNESS HAS NO DIRECTION" in p for p in row["problems"])
+
+
+def test_a_present_witness_is_counted(repo):
+    row = judged(repo, population={"witness": [{"member": "b", "why": "the row a person complained about"}]})
+    assert row["witnesses"] == 1 and row["problems"] == []
+
+
+def test_a_witness_needs_the_why_that_makes_it_one(repo):
+    row = judged(repo, population={"witness": [{"member": "b"}]})
+    assert any("names a `member` and the `why`" in p for p in row["problems"])

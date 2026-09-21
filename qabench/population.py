@@ -322,6 +322,50 @@ the two apart. This file has reasoned from convention itself — "the same page
 carries ten correctly bound pairs, so the codebase knows how" — which is the
 same inference and was luckier.
 
+ASSERT THE WITNESS, NOT THE SIZE — two rules that look alike, are not
+interchangeable, and the weaker one is the likelier to get written.
+
+    a corpus WIDENED because a proxy missed something
+        -> ASSERT THE SIZE, WITH THE NUMBER. Catches a later tidy narrowing it
+           back.
+    a corpus that must contain a SPECIFIC element
+        -> ASSERT THE WITNESS, BY NAME. Catches that, AND survives a legitimate
+           narrowing.
+
+The size assertion cannot express "the population still contains the thing this
+guard exists for". A composited-contrast sweep judges 7,426 elements against a
+floor of 6,000, and the element it was BUILT for — one chip read by a person at
+2.86:1 — IS FOUR NODES. 7,426 minus four chips is 7,422, WHICH PASSES THE FLOOR
+COMFORTABLY. Anyone tidying the seed that produces them re-blinds the sweep for
+its own subject and every number stays green.
+
+AND A SIZE RATCHET IS DIRECTIONAL, THEREFORE BLIND IN THE DIRECTION THAT LOOKS
+LIKE SUCCESS; A NAMED WITNESS HAS NO DIRECTION. The same sweep NARROWED, 7,500
+to 7,426, when a bug in it was fixed — 78 undrawn `font-size: 0` spans correctly
+left the population. CORRECTNESS WENT UP WHILE THE COUNT WENT DOWN, and a size
+assertion cannot tell that from a regression. (The session that first read it
+pattern-matched "the number moved after a fix" onto the widening class WITHOUT
+CHECKING THE DIRECTION — the same proxy failure both projects spent the night
+documenting, inside the tool built to document it.)
+
+THE WITNESS RULE HAD ALREADY PAID HOURS BEFORE ANYBODY HAD WORDS FOR IT. A
+calendar-day guard names five specific sites and asserts each still matches —
+written to stop prose describing moved sites, so the right structure for the
+wrong reason. When an `accept="image/*"` opened a CSS comment that swallowed
+1,163 lines, the count fell TEN TO EIGHT: DOWN, IN A SHRINK-ONLY RATCHET, WHERE
+DOWN READS AS PROGRESS AND NOTHING QUESTIONS IT. The two named sites that stopped
+matching are the only reason a silent catastrophe was legible as a defect.
+
+So `population.witness:` names members that MUST appear in the population's own
+output, each with the `why:` that makes it the witness — the element that
+motivated the guard, the route that broke, the row a person complained about.
+Its mutation is whatever makes that member disappear, and the test must go red
+NAMING IT while the guard's other assertions stay green; otherwise you have
+proved the guard notices something, not that it notices THIS. Note this is a
+different claim from `capability.fires`, which proves the DETECTOR still
+detects: a detector can be perfectly capable while the corpus no longer contains
+the member it exists for.
+
 A DERIVATION FROM A REAL SOURCE READS AS PRINCIPLED, WHICH IS WHY NOBODY COUNTS
 IT. Two browser sweeps walk FOUR dialogs while twenty-three files render one.
 The corpus is derived and FAITHFUL — a component registry crossed with the
@@ -1519,7 +1563,8 @@ class Row:
     note: str = ""                                        # reported, not judged
     reports: str = "count"                                # `floor` or `candidates` when the subject is weaker
     unread: int = 0                                       # candidates nobody opened
-    declined: int = 0                                     # real matches deliberately not changed                                # `floor` when the subject cannot resolve the unit
+    declined: int = 0                                     # real matches deliberately not changed
+    witnesses: int = 0                                    # named members confirmed present in the population                                # `floor` when the subject cannot resolve the unit
 
 
 def read_members(root: Path, cmd: str, *, timeout: float = 120.0) -> Set_:
@@ -2021,6 +2066,20 @@ def judge(spec: dict, root: Path, today: dt.date, *, run=read_members, surfaces=
                 f"{len(seam)} of {len(whole.members)} {jointly['describes']} fall in the SEAM between this "
                 f"guard and {abuts}: " + ", ".join(seam[:8])
                 + ". Each guard is correct in its own scope and the pair does not meet")
+
+    for w in (pop_spec.get("witness") or []):
+        if not isinstance(w, dict) or not w.get("member") or not w.get("why"):
+            row.problems.append(f"witness {w!r} names a `member` and the `why` that makes it the witness")
+            continue
+        if not any(str(w["member"]) in m for m in pop.members):
+            row.problems.append(
+                f"WITNESS ABSENT: {w['member']!r} is not in the population, and it is why this guard exists "
+                f"({w['why']}). A size floor cannot express this — a sweep judging 7,426 elements against a "
+                "floor of 6,000 loses the four nodes it was built for and still passes comfortably. A size "
+                "ratchet is directional and therefore blind in the direction that looks like success; A NAMED "
+                "WITNESS HAS NO DIRECTION")
+        else:
+            row.witnesses += 1
 
     missing = [m for m in pop.members if m not in set(sub.members)]
     row.exempted = len([m for m in missing if m in excused])
