@@ -232,6 +232,24 @@ after the same gap was found from a browser report on STA-02, with no knowledge
 of the first: two independent routes to one finding is the closest thing to
 validation this method gets, and it is worth more than any number in the table.
 
+WHEN TO SPEND ON A BROWSER, which is the piece that turns the tier argument into
+a decision. A source-read claim and a browser-driven claim COST ABOUT THE SAME
+TO MAKE and differ by roughly an order of magnitude IN WHAT THEY COST TO REFUTE,
+because the browser hands you the artefact that settles it. One night's tally:
+ELEVEN source-read false positives, none cheaply killable, each costing an
+inspection to dismiss — three of them `querySelector` strings INSIDE COMMENTS.
+Against ONE browser-driven false positive, killed in a single step because the
+probe printed the `outerHTML` showing the "unnamed required control" was a
+framework's aria-hidden shadow input behind a properly labelled combobox.
+
+SO THE RULE IS NOT "DRIVE A BROWSER WHEN THE PROPERTY IS VISUAL". IT IS: DRIVE A
+BROWSER WHEN YOU EXPECT TO BE WRONG OFTEN, BECAUSE CHEAP REFUTATION IS WHAT YOU
+ARE BUYING. And it carries its own limit, which is what stops it becoming a
+mandate nobody can afford: source reading is fine where the base rate of false
+positives is low — a grep for an import that either exists or does not. THE
+EXPENSIVE CASE IS A WINDOW AROUND A PATTERN, because the window is a guess about
+layout and layout is what varies.
+
 DRIVING IS NOT STRICTER THAN DERIVING — measured on one file. Required controls
 in one large template: a markup scan of the FILE says 20, the tree-wide guard
 18, the DOM on a loaded page 16. Overlap about 10; MARKUP-ONLY 10; DOM-ONLY 3.
@@ -303,6 +321,39 @@ the mechanism that propagates one, and only a guard over the convention tells
 the two apart. This file has reasoned from convention itself — "the same page
 carries ten correctly bound pairs, so the codebase knows how" — which is the
 same inference and was luckier.
+
+A DERIVATION FROM A REAL SOURCE READS AS PRINCIPLED, WHICH IS WHY NOBODY COUNTS
+IT. Two browser sweeps walk FOUR dialogs while twenty-three files render one.
+The corpus is derived and FAITHFUL — a component registry crossed with the
+actions the descriptors declare, every registered dialog reached, none missed.
+THERE IS NO PROXY AND NO FILTER TO INTERROGATE. It is simply narrower than the
+property it is taken to cover, and every internal check it has agrees with it.
+Worse, its own control asserted `len(CONTROLS) >= 4` — A FLOOR THE CORPUS MET
+EXACTLY — so a clean result from a short list was indistinguishable from a clean
+tree. A CONTROL CALIBRATED TO THE CORPUS IT IS CHECKING CANNOT DETECT THAT THE
+CORPUS IS THE WRONG CORPUS.
+
+So the two defences are complementary and neither is complete alone. ONE ASKS
+WHAT THE FILTER EXCLUDED — assert every widening, with the number, wherever a
+corpus was widened because a proxy missed something. THE OTHER ASKS HOW MANY
+THERE ARE — take the instrument's population count and compare it against a
+count DERIVED SOME OTHER WAY. Two counts, two derivations, one comparison. That
+second one is what `population.superset:` is, and the rule it carries applies
+generally: A FLOOR MUST NOT BE DERIVED FROM THE CORPUS IT BOUNDS.
+
+THREE CRAFT POINTS FROM THE GUARD THAT CLOSED IT, which generalise better than
+the finding. RE-DERIVE THE CORPUS QUERY RATHER THAN IMPORTING IT from the sweep
+under test, because AN ORACLE THAT QUOTES THE CODE IT GRADES AGREES WITH IT BY
+CONSTRUCTION — and note the tension with this file's other advice, which is to
+IMPORT the rule rather than restate it: import the RULE, RE-DERIVE THE CORPUS.
+Restating a rule invents false positives; importing a corpus inherits its blind
+spot. NAME THE UNREACHED RATHER THAN COUNT THEM, so a dialog added tomorrow
+joins the unmeasured set loudly and a diff says which one moved. And the
+mutation worth copying wholesale: registering a dialog NO descriptor declares
+correctly does NOT move the count, while registering one the descriptors DO
+declare moves it and reddens. A GUARD THAT REDDENS ON ANY PERTURBATION IS MERELY
+REACTIVE; distinguishing a genuinely unreachable entry from a hole is what shows
+it is measuring the property rather than noticing that something changed.
 
 A SEAM BETWEEN TWO HONEST GUARDS IS NOT ANY OF THE POPULATION CLASSES ABOVE,
 because every one of those is about ONE guard's corpus being wrong. A unit sweep
@@ -1033,6 +1084,17 @@ a surface would be a tenth required declaration, and the cost of the nine it
 already asks for has not been measured yet — adding a tenth while that is open
 would be the kind of thing this file refuses elsewhere. The question is here to
 be asked, not checked.)
+
+CLOSE THE CLASS AT THE PROCESS LEVEL WHERE YOU CAN, rather than sweeping site by
+site. One codebase has ten UTC-date sites with one live defect; another has ZERO
+— not because the idiom is absent but because `app/clock.py` PINS THE PROCESS
+ZONE AND THE DATABASE SESSION ZONE TOGETHER AND REFUSES TO START if the offset is
+not the right one. Same for accessible names: 170 required controls, zero
+unnamed, because the generic components build labels from the descriptors. Both
+classes were REMOVED STRUCTURALLY, and for ten sites that is likely cheaper than
+ten conversions — and it FAILS LOUDLY RATHER THAN SILENTLY, which is the half
+that matters, since a swept site regresses quietly and a refusing process does
+not.
 
 THE INERT FIX is the extreme of the same measurement and the mirror image of the
 marker-keyed class. A CSS token was defined with a comment naming its
