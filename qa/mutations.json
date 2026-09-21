@@ -2689,6 +2689,63 @@
    "verdict": "caught",
    "exit": 1,
    "recorded": "2026-09-21"
+  },
+  {
+   "file": "qabench/elements.py",
+   "expr": "s.replace('    src = neutralise_jinja(text)', '    src = text', 1)",
+   "command": [
+    "env",
+    "PYTHONPATH=.",
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_elements.py",
+    "-q",
+    "-p",
+    "no:randomly",
+    "-x"
+   ],
+   "verdict": "survived",
+   "exit": 0,
+   "recorded": "2026-09-21"
+  },
+  {
+   "file": "qabench/elements.py",
+   "expr": "s.replace('    elements = len(_tag_pattern(cls).findall(src))', '    elements = len(re.findall(re.escape(cls), src))', 1)",
+   "command": [
+    "env",
+    "PYTHONPATH=.",
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_elements.py",
+    "-q",
+    "-p",
+    "no:randomly",
+    "-x"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-21"
+  },
+  {
+   "file": "qabench/elements.py",
+   "expr": "s.replace('            + (f\" \u2014 a grep would have said {tm}\" if tm != te else \"\"))', '            )', 1)",
+   "command": [
+    "env",
+    "PYTHONPATH=.",
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_elements.py",
+    "-q",
+    "-p",
+    "no:randomly",
+    "-x"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-21"
   }
  ]
 }

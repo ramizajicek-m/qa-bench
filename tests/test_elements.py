@@ -33,3 +33,8 @@ def test_markup_built_in_a_js_string_is_an_element():
     """anat my_day.html builds its sticky-head tables in script; a parser skipping <script> counted none."""
     src = "<script>el.innerHTML = '<table class=\"settings-table sticky-head\"><thead>';</script>"
     assert elements.count(src, "sticky-head") == (1, 1)
+
+
+def test_jinja_quotes_inside_the_attribute_do_not_end_it():
+    """`class="{{ "wide" if w }} sticky-head"` — the inner quotes would end the attribute unless Jinja is neutralised."""
+    assert elements.count('<div class="{{ "wide" if w else "" }} sticky-head">', "sticky-head")[0] == 1
