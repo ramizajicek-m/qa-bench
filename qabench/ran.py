@@ -155,10 +155,24 @@ ACTION EVERYBODY TREATS AS SAFE, and every rule about incident response says
 record it immediately and before it resolves — advice that is right, and that
 here would have burned the evidence.
 
-The mitigation is cheap once the question is asked: write the record, HOLD it,
-land it after the thing resolves, AND SAY IN THE RECORD THAT YOU HELD IT AND
-WHY — otherwise the next person wonders about the gap between the timestamp in
-the prose and the timestamp on the commit. AND THE SECOND-ORDER VERSION FOLLOWS
+DO NOT TURN THIS INTO A POLICY ABOUT WHEN TO COMMIT. The session that found it
+HELD the write-up while the deployment that would explain the failure was
+pending, and RELEASED it — two further landings — as soon as that deployment
+resolved. BOTH WERE CORRECT, and no rule of the form "hold incident records
+until X" or "land them immediately" gets both right, because they are OPPOSITE
+ACTIONS JUSTIFIED BY THE SAME FACT: the experiment had finished.
+
+So it is a QUESTION ASKED AT THE MOMENT OF RECORDING, not a practice followed:
+DOES MY RECORDING MECHANISM TOUCH THE SYSTEM UNDER INVESTIGATION, AND IS
+ANYTHING STILL PENDING THAT IT WOULD DISTURB? If yes, hold, and say in the
+record that you held and why — otherwise the next person wonders about the gap
+between the timestamp in the prose and the timestamp on the commit. If nothing
+is pending, LAND IT NOW: holding a record for its own sake is just a record that
+does not exist yet.
+
+THAT SHAPE GENERALISES PAST THIS HAZARD AND IS THE MORE USEFUL HALF. THE HAZARDS
+HERE ARE SITUATIONAL, SO A POLICY ENCODES ONE SITUATION AND MISFIRES IN THE
+NEXT. A QUESTION TRAVELS. AND THE SECOND-ORDER VERSION FOLLOWS
 IMMEDIATELY: the same hazard applies to the FIX. Retrying a failed deploy to see
 whether it fails again ALSO supersedes the pending one. "Reproduce it" and
 "observe it" can both be the destructive act, not only the write-up.
