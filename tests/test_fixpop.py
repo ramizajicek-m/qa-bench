@@ -56,3 +56,38 @@ def test_msg_mode(tmp_path):
     m.write_text("fix: x\n\nPopulation: none (searched: rg foo app/)\n")
     assert fixpop.run(["--msg", str(m)], echo=lambda *_: None) == 0
     assert fixpop.run(["--msg", str(tmp_path / "missing")], echo=lambda *_: None) == 3
+
+
+RULE = {"paths": ["tests/*"], "trailer": "Answers"}
+
+
+def test_a_change_to_a_test_must_say_which_row_it_answers():
+    """anat: a branch added a guard credited to no row, the day four such rows were found."""
+    assert fixpop.judge_answers("feat: guard the window\n", ["tests/unit/test_x.py"], RULE)
+    assert fixpop.judge_answers("feat: guard\n\nAnswers: UI-MOB-01\n", ["tests/unit/test_x.py"], RULE) == ""
+
+
+def test_answers_none_is_cheap_and_accepted():
+    assert fixpop.judge_answers("chore: rename a fixture\n\nAnswers: none\n", ["tests/conftest.py"], RULE) == ""
+
+
+def test_a_change_touching_no_test_is_not_asked():
+    assert fixpop.judge_answers("feat: page\n", ["app/main.py"], RULE) == ""
+    assert fixpop.judge_answers("feat: page\n", ["tests/x.py"], None) == ""
+
+
+def test_range_mode_reads_each_commits_files(tmp_path):
+    import yaml
+    def git(*a):
+        subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", *a], cwd=tmp_path, check=True, capture_output=True)
+    git("init", "-q")
+    (tmp_path / "qa").mkdir()
+    (tmp_path / "qa" / "manifest.yml").write_text(yaml.safe_dump({"fixpop": {"answers": RULE}}))
+    git("add", "-A"); git("commit", "-q", "-m", "base")
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "test_a.py").write_text("def test_a(): pass\n")
+    git("add", "-A"); git("commit", "-q", "-m", "feat: a guard")
+    assert fixpop.run(["--repo", str(tmp_path), "--range", "HEAD~1..HEAD"], echo=lambda *_: None) == 1
+    (tmp_path / "tests" / "test_b.py").write_text("def test_b(): pass\n")
+    git("add", "-A"); git("commit", "-q", "-m", "feat: b guard\n\nAnswers: none")
+    assert fixpop.run(["--repo", str(tmp_path), "--range", "HEAD~1..HEAD"], echo=lambda *_: None) == 0

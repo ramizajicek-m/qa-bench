@@ -32,10 +32,27 @@ subject does not say so escapes. A project that wants no escape sets
 Exit: 0 every fix names its population · 1 one does not · 3 no message or
 unreadable git.
 
-Manifest (optional): fixpop: {fix_subject: "<regex>", require_all: false}
+AND A CHANGE TO A TEST SAYS WHICH ROW IT ANSWERS. anat found four tracker rows
+claiming LESS coverage than they had (MOB-01 listed no evidence while two files
+asserted its 44 px floor) and, the same day, created a fifth: a branch that fixed
+four defects and added a guard credited to no row, by the session fixing the
+other four. The class is produced at the rate it is found, so a sweep is always
+one landing behind; the only place that can hold it is the landing itself, while
+the author still knows the answer. With `answers:` configured, a commit touching
+a matching path carries `Answers: <row ids>` or `Answers: none` — and `none` is
+accepted bare, because most changes answer no row and a check that makes the
+honest case expensive gets routed around.
+
+Manifest (optional):
+
+    fixpop:
+      fix_subject: "<regex>"
+      require_all: false
+      answers: {paths: ["tests/*"], trailer: Answers}
 """
 from __future__ import annotations
 
+import fnmatch
 import re
 import subprocess
 import sys
@@ -73,6 +90,36 @@ def judge_message(msg: str, *, fix_subject: str = DEFAULT_FIX, require_all: bool
             return (f"`Population: {text}` says none without the search. Write `none (searched: <how>)` — "
                     "the search is what makes none a finding rather than an assumption")
     return ""
+
+
+def judge_answers(msg: str, files: list[str], rule: dict | None) -> str:
+    """"" when the commit touches no path the rule covers, or names the rows it answers (or none)."""
+    if not rule or not rule.get("paths"):
+        return ""
+    touched = [f for f in files if any(fnmatch.fnmatch(f, g) for g in rule["paths"])]
+    if not touched:
+        return ""
+    lines = [ln for ln in msg.splitlines() if not ln.startswith("#")]
+    subject = next((ln for ln in lines if ln.strip()), "")
+    if subject.startswith("Merge ") or subject.startswith("Revert "):
+        return ""
+    name = str(rule.get("trailer") or "Answers")
+    found = re.findall(rf"^{re.escape(name)}:[ \t]*(\S.*)$", "\n".join(lines), re.I | re.M)
+    if found:
+        return ""
+    return (f"{subject[:60]!r} changes {', '.join(touched[:3])}{' …' if len(touched) > 3 else ''} and does not say "
+            f"which row it answers. Add `{name}: <row ids>` or `{name}: none` — anat's MOB-01 listed no evidence "
+            "while two tests asserted it, and the fifth such row was created the day the four were found")
+
+
+def _files(root: Path, sha: str | None) -> list[str]:
+    cmd = (["git", "show", "--name-only", "--format=", sha] if sha
+           else ["git", "diff", "--cached", "--name-only"])
+    try:
+        p = subprocess.run(cmd, cwd=root, capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.SubprocessError):
+        return []
+    return [ln for ln in p.stdout.splitlines() if ln.strip()] if p.returncode == 0 else []
 
 
 def _cfg(root: Path) -> dict:
@@ -113,11 +160,18 @@ def run(argv: list[str], *, echo=print) -> int:
         for rec in p.stdout.split("\x1e"):
             if "\x00" in rec:
                 sha, body = rec.strip("\n").split("\x00", 1)
-                msgs.append((sha[:9], body))
+                msgs.append((sha, body))
     else:
         print("usage: python -m qabench fixpop (--msg FILE | --range A..B) [--advisory]", file=sys.stderr)
         return 3
-    bad = [(ref, why) for ref, body in msgs if (why := judge_message(body, **kw))]
+    rule = cfg.get("answers")
+    bad = []
+    for ref, body in msgs:
+        why = judge_message(body, **kw)
+        if not why and rule:
+            why = judge_answers(body, _files(root, None if ref == "commit" else ref), rule)
+        if why:
+            bad.append((ref[:9], why))
     for ref, why in bad:
         echo(f"  {ref}  {why}")
     echo(f"fixpop: {len(msgs)} commit(s) read, {len(bad)} fix(es) without a population"
