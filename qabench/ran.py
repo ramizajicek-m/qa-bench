@@ -728,7 +728,9 @@ class HeavyLock:
         except BlockingIOError:
             self.fh.seek(0)
             holder = self.fh.read().strip() or "another heavy run"
-            self.echo(f"ran: waiting for the machine's heavy-run lock, held by: {holder}")
+            self.echo(f"ran: waiting for the machine's heavy-run lock, held by: {holder} — no timeout, because the "
+                      "holder is named; a landing can take 40 minutes, so do something that does not need the "
+                      "machine and let this wait")
             fcntl.flock(self.fh, fcntl.LOCK_EX)
         else:
             # REPORT WHAT IT SAW, not only a verdict: a lock that goes quiet when it is free is the same shape
