@@ -1171,3 +1171,23 @@ def test_a_derived_corpus_counts_and_the_report_says_how_many_rows_it_saw(repo):
     root = repo([{**guard(), "answers": "ACT-11", "_derived_corpus": ["product", "fixture"]}])
     out = population.run_population(root, {"register": "qa/guards.yml"}, today=TODAY)
     assert out["unmet"] == [] and out["rows_seen"] == 1
+
+
+def test_a_product_test_that_seeds_its_subject_first_is_seeded():
+    """anat UI-LST-08: two of four tables exist only after the e2e seeds rows; on a real org they are empty."""
+    src = "def test(logged_in_page, db):\n    seed_subcontractors(db)\n    logged_in_page.goto('/my-day')\n"
+    assert population.corpus_of(src) == {"product", "seeded"}
+    routed = "def test(page):\n    page.route('**/api/my-day', lambda r: r.fulfill(json=ROWS))\n    page.goto('/my-day')\n"
+    assert population.corpus_of(routed) == {"product", "seeded"}
+    setup = "def test(page):\n    page.add_init_script('x')\n    page.goto('/a')\n"
+    assert population.corpus_of(setup) == {"product"}
+    assert population.corpus_of("def test(page):\n    page.goto('/a')\n") == {"product"}
+
+
+def test_a_row_observed_only_on_manufactured_state_is_its_own_kind():
+    guards = [{"answers": "LST-08", "_derived_corpus": ["product", "seeded"]},
+              {"answers": "LST-09", "_derived_corpus": ["product", "seeded"]},
+              {"answers": "LST-09", "_derived_corpus": ["product"]}]
+    seams = {u["row"]: u for u in population.seams_of_corpus(guards)}
+    assert seams["LST-08"]["kind"] == "seeded-only"
+    assert "LST-09" not in seams

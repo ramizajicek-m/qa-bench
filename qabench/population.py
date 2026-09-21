@@ -2493,6 +2493,14 @@ CORPORA = ("product", "fixture", "source")
 _PRODUCT = re.compile(r"\.goto\(|\bclient\.(?:get|post|put|patch|delete)\(|\bhttpx\.(?:get|post)\(|"
                       r"\brequests\.(?:get|post)\(|\bTestClient\(")
 _FIXTURE = re.compile(r"\bset_content\(")
+# "OBSERVED" MEANS TWO THINGS: by a seeded test, and by someone opening the page. anat's UI-LST-08 counted
+# four tables asserted in a browser; two exist only after the e2e SEEDS subcontractor and gift rows — on a
+# real org they are empty states, and the page's own renderers throw. A product test that creates its
+# subject first is `seeded`: it proves the mechanism when the data exists, not that a person can reach it.
+# MEASURED, not guessed: anat's e2e "seeds" by INTERCEPTING the page's own API calls — `page.route(...)`
+# answering with `route.fulfill` / a `_route_json` helper — not by writing rows. The first pattern here
+# (create_/add_/insert) matched Playwright's own `add_init_script`/`add_script_tag` in most of its 24 hits.
+_SEEDS = re.compile(r"\.route\(|\.fulfill\(|\bseed(?:_\w+)?\(")
 _SOURCE = re.compile(r"\.read_text\(|\bopen\(")
 
 
@@ -2512,6 +2520,8 @@ def corpus_of(source: str) -> set[str]:
         out.add("product")
     if _FIXTURE.search(source):
         out.add("fixture")
+    if "product" in out and _SEEDS.search(source):
+        out.add("seeded")
     if not out and _SOURCE.search(source):
         out.add("source")
     return out
@@ -2532,6 +2542,7 @@ def seams_of_corpus(guards: list) -> list[dict]:
     fixture cannot contain the case its author did not imagine — which is the case that bites.
     """
     by_row: dict[str, list[str]] = {}
+    unseeded: dict[str, bool] = {}
     for g in guards:
         if not isinstance(g, dict):
             continue
@@ -2539,8 +2550,17 @@ def seams_of_corpus(guards: list) -> list[dict]:
         corpora = [str(g["corpus"])] if g.get("corpus") else sorted(g.get("_derived_corpus") or []) or [""]
         for rid in ([rows_] if isinstance(rows_, str) else rows_ or []):
             by_row.setdefault(str(rid), []).extend(corpora)
-    return [{"row": rid, "corpora": sorted(set(c or "undeclared" for c in cs))}
-            for rid, cs in sorted(by_row.items()) if "product" not in cs]
+            if "product" in corpora and "seeded" not in corpora:
+                unseeded[str(rid)] = True
+    out = []
+    for rid, cs in sorted(by_row.items()):
+        if "product" not in cs:
+            out.append({"row": rid, "corpora": sorted(set(c or "undeclared" for c in cs))})
+        elif not unseeded.get(rid):
+            # Measured on the product, but only in a state the test manufactured: reported as its own kind,
+            # because "still partial" should say WHICH blocker holds (page-load, method, or data).
+            out.append({"row": rid, "corpora": sorted(set(cs)), "kind": "seeded-only"})
+    return out
 
 
 def run_population(root: Path, cfg: dict, *, today: dt.date | None = None, run=read_members) -> dict:
@@ -2618,6 +2638,10 @@ def run(argv: list[str], *, today: dt.date | None = None) -> int:
             print(f"  seams: {len(out['unmet'])} of {out['rows_seen']} row(s) the register names — rows it does not "
                   "name are not in this count")
         for u in out["unmet"]:
+            if u.get("kind") == "seeded-only":
+                print(f"  SEEDED {u['row']}: observed on the product only in a state its tests CREATE — proves the "
+                      "mechanism when the data exists, not that a person can reach it")
+                continue
             print(f"  SEAM {u['row']}: every guard that answers it measures {', '.join(u['corpora'])} — none measures "
                   "the product (reported; a fixture cannot contain the case its author did not imagine)")
         for c in out["unregistered"]:
