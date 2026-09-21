@@ -130,3 +130,20 @@ def test_x(page, path):
     assert "Saved" in page.content()
 '''
     assert inherit.methods(src) == []
+
+
+def test_fixed_offset_and_text_search_windows_are_the_same_method():
+    """anat-qa: the first version was keyed on `ms[i + 1].start()` and saw 1 of 59+ in anat."""
+    fixed = 'def f(src, i):\n    call = src[i:i + 120]\n    assert "x" in call\n'
+    found = 'def f(src, a):\n    assert "x" in src[a:src.find("</form>", a)]\n'
+    assert [k for _, k, _ in inherit.methods(fixed)] == ["window"]
+    assert [k for _, k, _ in inherit.methods(found)] == ["window"]
+
+
+def test_invariant_is_opt_in_on_the_command_line(tmp_path):
+    f = tmp_path / "t.py"
+    f.write_text(INVARIANT_BEFORE)
+    assert inherit.run([str(f), "--property", "a dialog publishes name hosts completion onDone source HOSTS"],
+                       echo=lambda *_: None) == 0
+    assert inherit.run([str(f), "--property", "a dialog publishes name hosts completion onDone source HOSTS",
+                        "--invariant"], echo=lambda *_: None) == 1

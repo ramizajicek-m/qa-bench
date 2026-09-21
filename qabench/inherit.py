@@ -1,6 +1,16 @@
 """inherit — a guard built from an instance inherits the instance's parameters.
 
-    python -m qabench inherited FILE --property "<the property, in words>" [--declared LIT=why ...] [--json]
+    python -m qabench inherited FILE --property "<the property, in words>" [--declared LIT=why ...] [--invariant] [--json]
+
+MEASURED ACROSS THE ESTATE (2026-09-21, 3,014 test files), which is what the
+output is worth: the WINDOW method — a containment over a slice ending at a
+fixed offset, a find()/index(), or the next match — appears on 351 lines in
+about 129 files (anat 288, ana-log 28, iga 20, my8200 10, tharros 5). Many are
+harmless; a fixed width over a known-short literal is fine. It is reported as a
+POPULATION to shrink, not as defects. The INVARIANT shape is opt-in
+(`--invariant`): 27 estate candidates, 3 of 3 sampled deliberate, and the
+ordering proposed to separate them did not (17 of 21 follow a per-subject
+assertion already).
 
 WHY. Four guards on 2026-09-21, three codebases, each CORRECT and each a guard
 for the case rather than the class, because a constant of the case that
@@ -164,18 +174,30 @@ def _names(node) -> set[str]:
     return {n.id for n in ast.walk(node) if isinstance(n, ast.Name)}
 
 
-def _next_match_bound(expr, assigned: dict) -> bool:
-    """True when a slice bound is, or was assigned from, the NEXT match's start."""
+def _window_bound(expr, assigned: dict) -> str:
+    """Why a slice's upper bound is not the element's own extent, or "".
+
+    FIRST WRITTEN KEYED ON ONE SPELLING — `ms[i + 1].start()`, the file that
+    prompted it — and it found 1 line across 3,014 test files. anat-qa counted
+    the same METHOD in anat alone at 59+, spelled `src[i:i + 120]`, `FORM[idx:idx
+    + 800]` and a `find()` bound: the check for inherited parameters inherited a
+    parameter within the hour. It now asks what the bound IS, not how it is
+    spelled: the next match's start, a fixed offset, or a text search."""
     seen = [expr]
     if isinstance(expr, ast.Name) and expr.id in assigned:
         seen.append(assigned[expr.id])
     for e in seen:
+        if isinstance(e, ast.BinOp) and isinstance(e.op, ast.Add) and (
+                isinstance(e.right, ast.Constant) and isinstance(e.right.value, int)):
+            return f"a FIXED OFFSET (+{e.right.value})"
         for n in ast.walk(e):
-            if (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr in ("start", "end")
-                    and isinstance(n.func.value, ast.Subscript)
-                    and isinstance(n.func.value.slice, ast.BinOp) and isinstance(n.func.value.slice.op, ast.Add)):
-                return True
-    return False
+            if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute):
+                if (n.func.attr in ("start", "end") and isinstance(n.func.value, ast.Subscript)
+                        and isinstance(n.func.value.slice, ast.BinOp) and isinstance(n.func.value.slice.op, ast.Add)):
+                    return "the NEXT match's start"
+                if n.func.attr in ("find", "index", "rfind"):
+                    return "a TEXT SEARCH (find/index)"
+    return ""
 
 
 def methods(source: str) -> list[tuple[int, str, str]]:
@@ -191,11 +213,16 @@ def methods(source: str) -> list[tuple[int, str, str]]:
         for cmp in [n for n in ast.walk(fn) if isinstance(n, ast.Compare)]:
             if any(isinstance(op, (ast.In, ast.NotIn)) for op in cmp.ops):
                 for right in cmp.comparators:
+                    # a window assigned first (`block = FORM[idx:idx + 800]`) is the same window
+                    if isinstance(right, ast.Name) and isinstance(assigned.get(right.id), ast.Subscript):
+                        right = assigned[right.id]
                     if (isinstance(right, ast.Subscript) and isinstance(right.slice, ast.Slice)
-                            and right.slice.upper is not None and _next_match_bound(right.slice.upper, assigned)):
-                        out.append((cmp.lineno, "window",
-                                    "containment over a span that ends at the NEXT match's start — the span is not "
-                                    "the element; walk the element's own extent"))
+                            and right.slice.upper is not None):
+                        why = _window_bound(right.slice.upper, assigned)
+                        if why:
+                            out.append((cmp.lineno, "window",
+                                        f"containment over a span that ends at {why} — the span is not the "
+                                        "element; walk the element's own extent"))
         params = set()
         for d in fn.decorator_list:
             if (isinstance(d, ast.Call) and isinstance(d.func, ast.Attribute) and d.func.attr == "parametrize"
@@ -253,7 +280,11 @@ def run(argv: list[str], *, echo=print) -> int:
         print(f"inherited: cannot read {path}: {ex} (exit 3)", file=sys.stderr)
         return 3
     found = unexplained(src, prop, declared, python=path.suffix == ".py")
-    how = methods(src) if path.suffix == ".py" else []
+    # INVARIANT is opt-in: ordering did not separate it (17 of 21 estate candidates
+    # already follow a per-subject assertion) and 3 of 3 sampled were deliberate.
+    # A list with an unknown hit rate teaches its reader to skim the next one.
+    how = [m for m in (methods(src) if path.suffix == ".py" else [])
+           if m[1] != "invariant" or "--invariant" in argv]
     if "--json" in argv:
         echo(json.dumps({"words": [{"word": w, "from": lit} for w, lit in found],
                          "methods": [{"line": n, "kind": k, "why": t} for n, k, t in how]}, ensure_ascii=False, indent=1))
