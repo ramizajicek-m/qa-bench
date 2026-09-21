@@ -2955,6 +2955,44 @@
    "verdict": "caught",
    "exit": 1,
    "recorded": "2026-09-21"
+  },
+  {
+   "file": "qabench/ran.py",
+   "expr": "s.replace('    os.environ[\"PYTEST_XDIST_AUTO_NUM_WORKERS\"] = workers', '    pass', 1)",
+   "command": [
+    "env",
+    "PYTHONPATH=.",
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_ran.py",
+    "-q",
+    "-p",
+    "no:randomly",
+    "-x"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-22"
+  },
+  {
+   "file": "qabench/ran.py",
+   "expr": "s.replace('    with HeavyLock(f\"{name} (pytest -n auto capped at {workers} of {cores} cores)\", echo=echo) as lock:', '    with HeavyLock(name, echo=echo) as lock:', 1)",
+   "command": [
+    "env",
+    "PYTHONPATH=.",
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_ran.py",
+    "-q",
+    "-p",
+    "no:randomly",
+    "-x"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-22"
   }
  ]
 }
