@@ -34,6 +34,16 @@ def _tag_pattern(cls: str) -> re.Pattern:
                       + re.escape(cls) + r"(?![\w-])(?:(?!\1).)*\1", re.S)
 
 
+def greps(text: str, cls: str) -> tuple[int, int]:
+    """(raw substring hits — `grep -o`, matching lines — `grep -c`), the two numbers a person actually types.
+
+    THREE numbers answered one question on 2026-09-21: anat-qa measured 16 sticky-head "mentions", this
+    tool said 13, and `grep -c` gives neither. 16 counts the substring inside `sticky-heading.js` and
+    `client-sticky-header`; 13 counts the name as a whole token; lines count two on one line once. A
+    count carries its definition on the same line, so all of them are printed, each named."""
+    return text.count(cls), sum(1 for ln in text.splitlines() if cls in ln)
+
+
 def count(text: str, cls: str) -> tuple[int, int]:
     """(elements carrying the class, raw mentions of the name).
 
@@ -62,16 +72,21 @@ def run(argv: list[str], *, echo=print) -> int:
         return 3
     rows = []
     for f in sorted(files):
-        e, m = count(f.read_text(encoding="utf-8", errors="replace"), cls)
-        if e or m:
-            rows.append({"file": str(f.relative_to(root)), "elements": e, "mentions": m})
+        text = f.read_text(encoding="utf-8", errors="replace")
+        e, m = count(text, cls)
+        raw, lines = greps(text, cls)
+        if e or m or raw:
+            rows.append({"file": str(f.relative_to(root)), "elements": e, "mentions": m, "substring": raw, "lines": lines})
     te, tm = sum(r["elements"] for r in rows), sum(r["mentions"] for r in rows)
+    tr, tl = sum(r["substring"] for r in rows), sum(r["lines"] for r in rows)
     if "--json" in argv:
-        echo(json.dumps({"class": cls, "elements": te, "mentions": tm, "files": rows}, indent=1))
+        echo(json.dumps({"class": cls, "elements": te, "mentions": tm, "substring": tr, "lines": tl, "files": rows},
+                        indent=1))
     else:
-        echo(f"elements: .{cls} — {te} ELEMENT(S) carry it; the name is MENTIONED {tm} time(s) in {len(rows)} file(s)"
-             + (f" — a grep would have said {tm}" if tm != te else ""))
+        echo(f"elements: .{cls} under {pattern} — {te} ELEMENT(S) carry it (the population); the name as a whole "
+             f"token is MENTIONED {tm} time(s); `grep -o` would say {tr} (substring, e.g. inside longer names); "
+             f"`grep -c` would say {tl} (lines) — in {len(rows)} file(s)")
         for r in rows:
-            if r["elements"] != r["mentions"]:
-                echo(f"  {r['file']}: {r['elements']} element(s), {r['mentions']} mention(s)")
+            if len({r["elements"], r["mentions"], r["substring"]}) > 1:
+                echo(f"  {r['file']}: {r['elements']} element(s), {r['mentions']} whole-name, {r['substring']} substring")
     return 0

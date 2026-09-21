@@ -25,7 +25,7 @@ def test_the_cli_prints_both_numbers(tmp_path):
     (tmp_path / "fleet.html").write_text(FLEET)
     out = []
     assert elements.run(["tab-set", "--repo", str(tmp_path)], echo=out.append) == 0
-    assert "1 ELEMENT" in out[0] and "MENTIONED 3" in out[0] and "a grep would have said 3" in out[0]
+    assert "1 ELEMENT" in out[0] and "MENTIONED 3" in out[0] and "`grep -o` would say 3" in out[0]
     assert elements.run(["tab-set", "--repo", str(tmp_path), "--glob", "nothing/*.html"], echo=out.append) == 3
 
 
@@ -38,3 +38,11 @@ def test_markup_built_in_a_js_string_is_an_element():
 def test_jinja_quotes_inside_the_attribute_do_not_end_it():
     """`class="{{ "wide" if w }} sticky-head"` — the inner quotes would end the attribute unless Jinja is neutralised."""
     assert elements.count('<div class="{{ "wide" if w else "" }} sticky-head">', "sticky-head")[0] == 1
+
+
+def test_three_numbers_for_one_question_are_all_named():
+    """anat-qa: 16 substring hits, 13 whole-name mentions, 12 elements — and grep -c counts lines."""
+    src = '<script src="/static/js/sticky-head-ing.js"></script>\n<div class="client-sticky-header"></div>\n' \
+          '<table class="sticky-head"></table><style>.sticky-head{}</style>\n'
+    assert elements.count(src, "sticky-head") == (1, 2)
+    assert elements.greps(src, "sticky-head") == (4, 3)
