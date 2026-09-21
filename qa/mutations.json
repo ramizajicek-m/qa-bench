@@ -963,44 +963,6 @@
   },
   {
    "file": "qabench/hazards.py",
-   "expr": "s.replace('                if \"[\" in pat or re.search(r\"grep\\\\s+-v\\\\s+grep\", code):', '                if True:', 1)",
-   "command": [
-    "env",
-    "PYTHONPATH=.",
-    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
-    "-m",
-    "pytest",
-    "tests/test_hazards.py",
-    "-q",
-    "-p",
-    "no:randomly",
-    "-x"
-   ],
-   "verdict": "caught",
-   "exit": 1,
-   "recorded": "2026-09-21"
-  },
-  {
-   "file": "qabench/hazards.py",
-   "expr": "s.replace('                if \"[\" in pat or re.search', '                if re.search', 1)",
-   "command": [
-    "env",
-    "PYTHONPATH=.",
-    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
-    "-m",
-    "pytest",
-    "tests/test_hazards.py",
-    "-q",
-    "-p",
-    "no:randomly",
-    "-x"
-   ],
-   "verdict": "caught",
-   "exit": 1,
-   "recorded": "2026-09-21"
-  },
-  {
-   "file": "qabench/hazards.py",
    "expr": "s.replace('            if t and r and r.start() < t.start() and \"tee\" not in code[:t.start()] and not pipefail:', '            if False:', 1)",
    "command": [
     "env",
@@ -1059,25 +1021,6 @@
   {
    "file": "qabench/hazards.py",
    "expr": "s.replace('                (out[\"excused\"] if ok else out[\"red\"]).append(', '                out[\"red\"].append(', 1)",
-   "command": [
-    "env",
-    "PYTHONPATH=.",
-    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
-    "-m",
-    "pytest",
-    "tests/test_hazards.py",
-    "-q",
-    "-p",
-    "no:randomly",
-    "-x"
-   ],
-   "verdict": "caught",
-   "exit": 1,
-   "recorded": "2026-09-21"
-  },
-  {
-   "file": "qabench/hazards.py",
-   "expr": "s.replace('            code = line.split(\" #\", 1)[0] if not line.lstrip().startswith(\"#\") else \"\"', '            code = line', 1)",
    "command": [
     "env",
     "PYTHONPATH=.",

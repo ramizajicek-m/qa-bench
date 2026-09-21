@@ -58,7 +58,8 @@ def test_an_excused_line_is_printed_not_failed(tmp_path):
 
 
 def test_a_commented_line_is_not_code(tmp_path):
-    assert scan(tmp_path, '# pgrep -f "land.py" was the bug\n')[0] == 0
+    assert scan(tmp_path, '\t# pgrep -f "land.py" was the bug\n', name="Makefile")[0] == 0
+    assert scan(tmp_path / "b", '\tpytest -q > run.log # not | tail -3\n', name="Makefile")[0] == 0
 
 
 def test_nothing_to_read_is_did_not_run(tmp_path):
