@@ -824,10 +824,20 @@ UNDER TEST: a corpus defined by the property, one level up — not the populatio
 that cannot contain a failing member, but THE ENVIRONMENT that cannot. An
 explicit exemption with a reason can be shown able to bite; a harness identity
 that happens to be on an allow-list is an exemption with no entry, no reason and
-no review, and it covered the whole middleware. The population that finds it:
-every same-origin href on a page reachable on the management host, rendered
-under that host's real base URL and resolved through the middleware WITHOUT
-following redirects — anything that 307s cross-host is a dead end.
+no review, and it covered the whole middleware.
+
+AND THE POPULATION IS NOT "LINKS" — IT IS ANY BEHAVIOUR THAT DEPENDS ON WHICH
+HOST ANSWERED. That product routes on the Host header: the management/public
+bounce, the landing gate, the host-only session cookie, and template content
+driven by which host it is. Every test uses one host, so THE WHOLE SUITE RUNS
+INSIDE ONE HOST UNIVERSE THAT PRODUCTION NEVER SERVES. The instrument is
+FAITHFUL and its universe is narrower than the property — the same shape as a
+derivation from a real source reading as principled, arriving at the level of
+the harness. The instrument gap is that NOTHING EXERCISES MORE THAN ONE HOST,
+and the mechanical form runs each surface's key journeys under every real host
+(and with the landing gate on and off), without following redirects, asserting
+that no staff journey crosses to a host where its cookie is absent. Links were
+the instance that bit a person; they are not the population.
 
 THE FOUR REQUIREMENTS ARE ONE REQUIREMENT — SHOW THE THING CAPABLE OF THE
 OUTCOME IT CLAIMS: a guard must be shown able to fail, a near-miss must be a
