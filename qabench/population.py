@@ -2487,6 +2487,36 @@ def _inherited_prompt(row: Row, pop_spec: dict, root: Path) -> None:
 CORPORA = ("product", "fixture", "source")
 
 
+# ANY `.goto(`, not `page.goto(`: the first version keyed on the fixture NAME `page` and classified 58 of
+# anat's 177 e2e files as nothing, because they navigate with `logged_in_page.goto(` and `public_page.goto(` —
+# the inherited-parameter class again, in the classifier built for it.
+_PRODUCT = re.compile(r"\.goto\(|\bclient\.(?:get|post|put|patch|delete)\(|\bhttpx\.(?:get|post)\(|"
+                      r"\brequests\.(?:get|post)\(|\bTestClient\(")
+_FIXTURE = re.compile(r"\bset_content\(")
+_SOURCE = re.compile(r"\.read_text\(|\bopen\(")
+
+
+def corpus_of(source: str) -> set[str]:
+    """What a test file MEASURES AGAINST, read from what it calls — never declared.
+
+    DECLARE THE ROW, DERIVE THE CORPUS (anat-qa). A corpus declared per guard is adoption-gated, so the
+    rows nobody annotates are exactly the rows nobody is thinking about, and "1 seam" over three
+    registered guards reads as an estate verdict. What a file calls is a fact about the code: measured on
+    anat, 156 of 183 e2e files call page.goto (product), 25 call set_content (fixture), and 10 do BOTH —
+    the pattern that closes the seam inside one file, and the one that would have saved UI-LST-08.
+    A file that only reads files is `source`. The regexes are the stated proxy; a project with another
+    driver adds its own calls.
+    """
+    out = set()
+    if _PRODUCT.search(source):
+        out.add("product")
+    if _FIXTURE.search(source):
+        out.add("fixture")
+    if not out and _SOURCE.search(source):
+        out.add("source")
+    return out
+
+
 def seams_of_corpus(guards: list) -> list[dict]:
     """Rows whose guards, together, read as coverage and, singly, never measure the product.
 
@@ -2506,9 +2536,9 @@ def seams_of_corpus(guards: list) -> list[dict]:
         if not isinstance(g, dict):
             continue
         rows_ = g.get("answers")
-        corpus = str(g.get("corpus") or "")
+        corpora = [str(g["corpus"])] if g.get("corpus") else sorted(g.get("_derived_corpus") or []) or [""]
         for rid in ([rows_] if isinstance(rows_, str) else rows_ or []):
-            by_row.setdefault(str(rid), []).append(corpus)
+            by_row.setdefault(str(rid), []).extend(corpora)
     return [{"row": rid, "corpora": sorted(set(c or "undeclared" for c in cs))}
             for rid, cs in sorted(by_row.items()) if "product" not in cs]
 
@@ -2531,6 +2561,10 @@ def run_population(root: Path, cfg: dict, *, today: dt.date | None = None, run=r
     covered = {r.check for r in rows}
     return {
         "unmet": seams_of_corpus(guards),
+        # The seam count is only as wide as the rows the register SAW; printed beside it, so "1 seam" over
+        # three registered guards is never read as "1 seam in the repo".
+        "rows_seen": len({str(r) for g in guards if isinstance(g, dict)
+                          for r in ([g["answers"]] if isinstance(g.get("answers"), str) else g.get("answers") or [])}),
         "register": str(reg_path),
         "guards": len(rows),
         "rows": [r.__dict__ for r in rows],
@@ -2580,6 +2614,9 @@ def run(argv: list[str], *, today: dt.date | None = None) -> int:
                 print(f"       {r['note']}")
             for p in r["problems"]:
                 print(f"       {p}")
+        if out["unmet"] or out["rows_seen"]:
+            print(f"  seams: {len(out['unmet'])} of {out['rows_seen']} row(s) the register names — rows it does not "
+                  "name are not in this count")
         for u in out["unmet"]:
             print(f"  SEAM {u['row']}: every guard that answers it measures {', '.join(u['corpora'])} — none measures "
                   "the product (reported; a fixture cannot contain the case its author did not imagine)")

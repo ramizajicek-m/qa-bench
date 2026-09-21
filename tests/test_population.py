@@ -1154,3 +1154,18 @@ def test_the_register_reports_seams(repo):
     root = repo([{**guard(), "answers": "ACT-11", "corpus": "fixture"}])
     out = population.run_population(root, {"register": "qa/guards.yml"}, today=TODAY)
     assert out["unmet"] == [{"row": "ACT-11", "corpora": ["fixture"]}]
+
+
+def test_the_corpus_is_read_from_what_a_file_calls():
+    assert population.corpus_of("def test(page):\n    page.goto('/admin')\n") == {"product"}
+    assert population.corpus_of("def test(page):\n    page.set_content(HTML)\n") == {"fixture"}
+    assert population.corpus_of("def test(page):\n    page.set_content(H)\n    page.goto('/x')\n") == {"product", "fixture"}
+    assert population.corpus_of("def test():\n    assert 'x' in (ROOT / 'static/a.css').read_text()\n") == {"source"}
+    assert population.corpus_of("def test():\n    assert 1\n") == set()
+    assert population.corpus_of("def test(logged_in_page):\n    logged_in_page.goto('/x')\n") == {"product"}
+
+
+def test_a_derived_corpus_counts_and_the_report_says_how_many_rows_it_saw(repo):
+    root = repo([{**guard(), "answers": "ACT-11", "_derived_corpus": ["product", "fixture"]}])
+    out = population.run_population(root, {"register": "qa/guards.yml"}, today=TODAY)
+    assert out["unmet"] == [] and out["rows_seen"] == 1
