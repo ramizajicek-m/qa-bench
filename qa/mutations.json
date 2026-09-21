@@ -2141,25 +2141,6 @@
   },
   {
    "file": "qabench/runners.py",
-   "expr": "s.replace('    return 0 if readable else 3', '    return 0', 1)",
-   "command": [
-    "env",
-    "PYTHONPATH=.",
-    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
-    "-m",
-    "pytest",
-    "tests/test_runners.py",
-    "-q",
-    "-p",
-    "no:randomly",
-    "-x"
-   ],
-   "verdict": "caught",
-   "exit": 1,
-   "recorded": "2026-09-21"
-  },
-  {
-   "file": "qabench/runners.py",
    "expr": "s.replace('            row[\"state\"] = {\"ahead\": \"BEHIND\", \"behind\": \"ahead of green\", \"diverged\": \"DIVERGED\",', '            row[\"state\"] = {\"ahead\": \"ok\", \"behind\": \"ahead of green\", \"diverged\": \"DIVERGED\",', 1)",
    "command": [
     "env",
@@ -2320,25 +2301,6 @@
     "-m",
     "pytest",
     "tests/test_runners.py",
-    "-q",
-    "-p",
-    "no:randomly",
-    "-x"
-   ],
-   "verdict": "caught",
-   "exit": 1,
-   "recorded": "2026-09-21"
-  },
-  {
-   "file": "qabench/population.py",
-   "expr": "s.replace('            for rid, cs in sorted(by_row.items()) if \"product\" not in cs]', '            for rid, cs in sorted(by_row.items())]', 1)",
-   "command": [
-    "env",
-    "PYTHONPATH=.",
-    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
-    "-m",
-    "pytest",
-    "tests/test_population.py",
     "-q",
     "-p",
     "no:randomly",
