@@ -2515,8 +2515,8 @@
     "no:randomly",
     "-x"
    ],
-   "verdict": "survived",
-   "exit": 0,
+   "verdict": "caught",
+   "exit": 1,
    "recorded": "2026-09-21"
   },
   {
