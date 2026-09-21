@@ -125,6 +125,52 @@ different code. So every artefact stamps the commit it decided about, and
 distinguish "this run passed" from "some earlier run passed", and the second
 reads exactly like the first.
 
+AFTER ANY MUTATING STEP, READ BACK THE VALUE THAT MUST HAVE MOVED, AND ASSERT IT
+MOVED. Not "did the command succeed" — exit codes lie by omission — but "is the
+thing that had to change now different". `decided:` above is this rule for a
+command this module runs; the rule itself is wider and applies to every step a
+session takes by hand. Three instances in one session, three different kinds,
+none of which any guard would have found:
+
+  A STALE REPORT READ AS A FRESH ONE. A resolver was patched, a sweep launched,
+  and `judged 7500` reported — BYTE-IDENTICAL TO THE PREVIOUS RUN, to the digit,
+  after a change that had to move it. The run had not finished; the previous
+  report was being read. THE TELL WAS THE DIGITS, NOT THE TIMESTAMP.
+
+  A COMMIT THAT SILENTLY DID NOT HAPPEN. Backticks inside a double-quoted commit
+  message ran as COMMAND SUBSTITUTION, the chain died, and `git add` had already
+  succeeded — so the tree looked committed. Caught only by printing
+  `git log --oneline -1` and reading the OLD sha where a new one belonged.
+
+  A BULK EDIT THAT TOUCHED THE WRONG THING AND STOPPED. A colour rewrite
+  anchored on `color:` also matched the tail of `border-color:`; its own
+  assertion aborted after the first stylesheet was written and before the
+  second, so one file changed, one did not, and the count of rewritten files did
+  not match the count of files.
+
+EACH IS ONE EXTRA OBSERVATION, TAKEN FROM THE ARTEFACT RATHER THAN THE PROCESS:
+the report's own `judged`, the new sha, the second file's content. The
+alternative is three guards — for stale reports, for shell quoting, for regex
+anchoring — three maintenance burdens against one habit that covers all three
+and generalises to steps nobody has thought of yet.
+
+STATED SO IT DOES NOT COLLAPSE INTO "CHECK YOUR WORK": the assertion is on a
+SPECIFIC VALUE THAT THE STEP'S SEMANTICS REQUIRE TO DIFFER, CHOSEN BEFORE THE
+STEP RUNS. "The sha is new." "The judged count differs from the last run's."
+"Both files' mtimes moved." What it is NOT is re-running the command, re-reading
+the log, or asking whether it errored — all three cases above had a clean-looking
+process and a wrong artefact.
+
+ITS LIMIT, honestly: it works only where the required change is NAMEABLE IN
+ADVANCE. A step whose effect is "some subset of these fourteen files may change"
+has no single value to read back, and there the answer is the older one — open
+one changed line and READ it, never count matches.
+
+AND IT PAIRS WITH THE CORPUS DEFENCES rather than duplicating them: those defend
+a POPULATION from silently changing size, this defends an ACTION from silently
+not happening. Same underlying thing — a verdict that does not depend on the
+thing it claims to measure — caught at the read side and the write side.
+
 A REFUSAL TO VERIFY IS DATA, AND IT MAY NOT BE OVERRIDDEN WITH A DIFFERENT KIND
 OF EVIDENCE. The same day this module was written, a browser pass reported one
 row UNVERIFIED — it could not find an unfiltered-empty list to compare — and
