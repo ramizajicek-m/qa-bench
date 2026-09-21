@@ -787,7 +787,9 @@ def _arg(argv, flag, default=None):
 
 def run(argv: list[str], *, echo=print) -> int:
     if "--" not in argv:
-        print("usage: python -m qabench ran --name NAME -- COMMAND [ARGS...]\n"
+        print("usage: python -m qabench ran --name NAME [--heavy] -- COMMAND [ARGS...]\n"
+              "  --heavy  take the machine-wide heavy-run lock (~/.qabench/heavy.lock), naming its holder while "
+              "waiting; re-entrant for the command it wraps\n"
               "the command after `--` is run as argv, never through a shell: a pipeline is how "
               "`make land | tail -25` reported a failed gate as success", file=sys.stderr)
         return 3
