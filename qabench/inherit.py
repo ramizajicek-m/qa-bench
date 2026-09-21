@@ -348,6 +348,15 @@ def run(argv: list[str], *, echo=print) -> int:
     else:
         echo(f"inherited: {len(found)} selector word(s) in {path.name} that the property does not contain · "
              f"{len(how)} inherited method(s)")
+        # WHAT A CLEAN RUN MEANS, printed every time: the class is semantic ("a skip whose stated cause was
+        # not excluded", "a window that is not the element"), the detectors are syntactic, and they
+        # inherited the SYNTAX of the instances that prompted them. anat-ui's four page sweeps skip on an
+        # `if` over a missing element — the same class, no exception, not seen here.
+        echo("  looked for: WINDOW (containment over a slice ending at a fixed offset, find/index, or the next "
+             "match); DIAGNOSING-SKIP (a skip under a caught timeout, or unconditional under `except Exception`)"
+             + ("; INVARIANT (--invariant)" if "--invariant" in argv else "")
+             + ". A clean run means none of THESE shapes — not that the file has no such defect; an `if` that "
+               "skips on a missing element is the same class and is not read")
         for n, k, t in how:
             echo(f"  line {n} {k}: {t}")
         for w, lit in found:

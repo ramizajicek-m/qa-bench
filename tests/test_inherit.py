@@ -194,3 +194,11 @@ def f():
                        '        pytest.skip("no data yet")')
     assert inherit.methods(good) == []
     assert [k for _, k, _ in inherit.methods(bad)] == ["diagnosing-skip"]
+
+
+def test_a_clean_run_names_the_shapes_it_looked_for(tmp_path):
+    f = tmp_path / "t.py"
+    f.write_text("def test_x():\n    assert 1\n")
+    out = []
+    assert inherit.run([str(f), "--property", "anything"], echo=out.append) == 0
+    assert any("looked for:" in o and "not that the file has no such defect" in o for o in out)
