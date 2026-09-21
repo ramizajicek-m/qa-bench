@@ -257,3 +257,51 @@ def test_the_production_dispatch_is_never_on_the_run_list():
     assert "full_remote" in conformance.NEVER_RUN
     assert "production" in conformance.NEVER_RUN["full_remote"]
     assert not set(conformance.RUN_TO_VERIFY) & set(conformance.NEVER_RUN)
+
+
+def _lane_manifest(tmp_path, landing=None):
+    from qabench import conformance
+    c = conformance.contract()
+    checks = {cid: {"name": r["name"], "status": "absent", "evidence": [], "reason": "not yet"}
+              for cid, r in c["checks"].items()}
+    m = {"checks": checks, "full_remote": "gh workflow run qa-nightly.yml"}
+    if landing is not None:
+        m["landing"] = landing
+    return m
+
+
+def test_a_promotion_lane_that_does_not_say_what_landing_causes_is_named(tmp_path):
+    """On tharros a merge to main, documented as the day lane to staging, is
+    also a production release that night. Found by reading the workflow."""
+    from qabench import conformance
+    kinds = {f["kind"] for f in conformance.judge(_lane_manifest(tmp_path), root=tmp_path)}
+    assert "landing_unmapped" in kinds
+
+
+def test_a_landing_chain_pointing_at_missing_files_is_named(tmp_path):
+    from qabench import conformance
+    m = _lane_manifest(tmp_path, {"event": "push to main", "chain": [".github/workflows/gone.yml"],
+                                  "reaches_production": True})
+    assert "landing_chain_missing" in {f["kind"] for f in conformance.judge(m, root=tmp_path)}
+
+
+def test_a_mapped_landing_chain_is_clean(tmp_path):
+    from qabench import conformance
+    (tmp_path / ".github" / "workflows").mkdir(parents=True)
+    (tmp_path / ".github" / "workflows" / "qa-nightly.yml").write_text("on: workflow_dispatch\n")
+    m = _lane_manifest(tmp_path, {"event": "push to main", "chain": [".github/workflows/qa-nightly.yml"],
+                                  "trigger": {"kind": "external",
+                                              "ref": "~/Library/LaunchAgents run-if-due.sh, NIGHTLY_HOUR=22"},
+                                  "reaches_production": True})
+    kinds = {f["kind"] for f in conformance.judge(m, root=tmp_path)}
+    assert not kinds & {"landing_unmapped", "landing_chain_missing", "landing_trigger_unstated"}
+
+
+def test_a_chain_that_does_not_say_what_fires_it_is_named(tmp_path):
+    """tharros: the first hop is a LaunchAgent, not a workflow — the hop that hid."""
+    from qabench import conformance
+    (tmp_path / ".github" / "workflows").mkdir(parents=True)
+    (tmp_path / ".github" / "workflows" / "qa-nightly.yml").write_text("on: workflow_dispatch\n")
+    m = _lane_manifest(tmp_path, {"event": "push to main", "chain": [".github/workflows/qa-nightly.yml"],
+                                  "reaches_production": True})
+    assert "landing_trigger_unstated" in {f["kind"] for f in conformance.judge(m, root=tmp_path)}

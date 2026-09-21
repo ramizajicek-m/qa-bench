@@ -125,7 +125,46 @@ different code. So every artefact stamps the commit it decided about, and
 distinguish "this run passed" from "some earlier run passed", and the second
 reads exactly like the first.
 
-RECORDING AN INCIDENT IS NOT FREE — THE ACT OF RECORDING IT CAN DESTROY THE
+THE ACT OF OBSERVING IS NOT FREE. An investigation can consume, trigger or
+destroy the thing it is investigating, and it does so through the steps that
+look LEAST like intervention — recording, preparing, checking. The harmlessness
+is not incidental to the hazard, it is the mechanism: a step that announced
+itself as consequential would have been examined first. Three instances follow,
+from one project in one day, sharing NO mechanism — a git remote's side effect,
+an automation trigger, resource contention. What they share is the reasoning
+that walks into them: "this is only a read", "this is only preparation", "this
+is only writing it down". EACH OF THOSE IS A CLAIM ABOUT INTENT, AND SYSTEMS
+RESPOND TO ACTIONS — which is why a list of known triggers will not cover it:
+the next one will be a mechanism nobody listed.
+
+THE PRACTICAL TEST, which is worth more than the instances: FOR ANY STEP TAKEN
+BECAUSE IT SEEMS FREE, ASK WHAT IS DOWNSTREAM OF ITS SUCCESS, AND WHAT IT
+CONSUMES WHILE IT RUNS. Three sub-questions cover every instance here and
+generalise past them:
+
+    does it WRITE anywhere the system under investigation READS?
+        (a push, a branch, a file something watches)
+    does anything FIRE on its completion?
+        (auto-promote, auto-merge, a webhook, a job triggered by an artefact)
+    does it CONSUME the scarce thing whose scarcity is the subject?
+        (a runner, a lock, a rate limit, a connection pool)
+
+AND ITS LIMIT, because this could easily become a rule that stops anybody
+recording anything: THE ANSWER IS ALMOST ALWAYS "YES, AND IT IS FINE" — nothing
+pending, nothing fires, nothing scarce — so write it down and land it now. It is
+a QUESTION ASKED AT THE MOMENT, never a practice. And it has to be a prompted
+question rather than a remembered rule: two of the three instances were about to
+be committed by people who had ALREADY READ THE FIRST. UNDERSTANDING THE SHAPE
+DID NOT DEFEND AGAINST IT.
+
+  THIRD INSTANCE — WATCHING EXTENDS THE WAIT. A post-deploy guard is queued
+  behind a six-shard browser tier on a single self-hosted runner. Polling for
+  it means running jobs — or at minimum API calls in a loop — against the very
+  machine whose scarcity is the reason it is queued. OBSERVING THE CONTENTION
+  PARTICIPATES IN IT. (This was very nearly the next move of the session that
+  found the first two.)
+
+FIRST INSTANCE — RECORDING AN INCIDENT IS NOT FREE — THE ACT OF RECORDING IT CAN DESTROY THE
 EVIDENCE THAT WOULD HAVE EXPLAINED IT. This is a different category from every
 other failure in this kit: the rest are instruments that MEASURE THE WRONG
 THING, and this is an instrument that CHANGES THE THING.
@@ -219,6 +258,41 @@ AN ATTEMPT AND A REASON? It did, in a comment, at the point of the change: the
 argument for writing the reason AT THE SITE rather than in a document nobody
 reads on the night.
 
+THE RIGHT CHECK AT THE WRONG TIME: A SAFETY ARGUMENT WHOSE PRECONDITION IS
+SCHEDULED BEHIND THE THING IT PROTECTS AGAINST. A promote gate was deliberately
+loosened — a four-hour browser tier became post-promote surveillance — and the
+workflow says, at the site, what made that safe: every project gained an
+automated post-deploy rollback first, and the rule is rollback before
+gate-loosening, never the reverse. The reasoning is correct and the order holds
+in the DESIGN. It does not hold in the SCHEDULE. Measured minutes after a real
+promotion: production served the new commit, and the rollback `guard` job — the
+thing the whole loosening rests on — was QUEUED BEHIND SIX BROWSER SHARDS on a
+single self-hosted runner, one in progress. The tier had run 21:10 to 01:04 the
+night before. For a window after every promotion, the deployment is live and
+the thing that would roll it back has not started.
+
+Every other failure in this kit is a check that measures the WRONG THING. This
+one measures the RIGHT thing at the WRONG TIME: the guard is correct, the tier
+is correctly non-gating, and the queueing is a property of having one runner
+rather than a defect in any workflow. THE FAILURE IS IN THE COMPOSITION, AND NO
+INSTRUMENT ASKS WHEN A CHECK RUNS RELATIVE TO THE RISK IT COVERS. It was visible
+only because the precondition was written down at the site — without that
+sentence, a guard running late looks like a guard.
+
+So: WHEN A GATE IS LOOSENED BECAUSE SOMETHING ELSE COVERS THE RISK, ASK WHETHER
+THE COVERING THING IS SCHEDULED TO RUN BEFORE THE EXPOSURE BEGINS, NOT MERELY
+WHETHER IT EXISTS. The repair is priority, not policy: the guard needs the runner
+before the surveillance tier does. The same repository had learned this once
+already — its gates sat queued behind a 60-minute browser leg for three runs
+running and production stayed 25 commits behind a green main, fixed by ordering
+the browser tier after the gates — and the guard was the piece not included in
+that reordering. Across one estate the MECHANISM was present in five of five projects and the
+EXPOSURE verified in one: whether a project is exposed turns on one question —
+DOES ITS POST-DEPLOY PATH START A LONG JOB ON THE SAME RUNNER BEFORE OR WITH THE
+GUARD? If the guard is the only thing queued, design and schedule agree and there
+is nothing to fix. It is per-project scheduling, so it is carried here as a
+question rather than a check.
+
 AFTER ANY MUTATING STEP, READ BACK THE VALUE THAT MUST HAVE MOVED, AND ASSERT IT
 MOVED. Not "did the command succeed" — exit codes lie by omission — but "is the
 thing that had to change now different". `decided:` above is this rule for a
@@ -254,6 +328,31 @@ none of which any guard would have found:
 That is four operations with one detector in one night — measurement, commit,
 edit and fetch — and the fourth is the case for it being a habit rather than a
 set of guards: nobody would have written a guard for "the fetch did not finish".
+
+A FIFTH, AND IT INVALIDATES A CATEGORY OF CLAIM: ON THIS MACHINE A LANDING'S
+EXIT STATUS IS NOT EVIDENCE THE LANDING HAPPENED. Twice in one night in anat,
+from different causes with the same symptom. First the harness backgrounded the
+command and reported 0. Then `make land` died with `Terminated: 15`, pushed
+nothing and left staging unchanged, and the background-task notification said
+"completed (exit code 0)". SIGTERM is not an exception, so land.py's in-process
+recovery for a red batch could not fire, because nothing was raised. A killed
+landing and a real one look identical from the notification. So every "landed"
+report rests on the notification unless someone read back the CONTENT: the
+commits present on origin after a fetch, origin's sha equal to the intended tip,
+and the lane lock released. That read-back found three commits stranded under a
+leftover batch merge and staging unchanged, which would otherwise have been
+reported as shipped.
+
+AND ITS COROLLARY FOR THE READER: ESTABLISH WHAT FAILED BEFORE READING THE CODE
+THAT HANDLES FAILURES. In the same incident a peer's remembered instruction
+("re-run with --batch none") was checked by reading land.py, which already does
+exactly that. The reading was CORRECT about the script and IRRELEVANT to the
+situation, because the run was not dying of a red batch; it was being killed. A
+correct reading of an irrelevant mechanism is worse than no reading, because it
+produces confidence. It is the neighbouring-property class one level up: not
+evidence that measures the wrong quantity, but a reader examining the wrong
+mechanism. The discriminator is cheap: the exit signal, the last line of the
+log, or whether the handler's exception was ever raised.
 
 EACH IS ONE EXTRA OBSERVATION, TAKEN FROM THE ARTEFACT RATHER THAN THE PROCESS:
 the report's own `judged`, the new sha, the second file's content. The
