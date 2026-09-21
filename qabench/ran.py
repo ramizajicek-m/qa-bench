@@ -125,6 +125,44 @@ different code. So every artefact stamps the commit it decided about, and
 distinguish "this run passed" from "some earlier run passed", and the second
 reads exactly like the first.
 
+RECORDING AN INCIDENT IS NOT FREE — THE ACT OF RECORDING IT CAN DESTROY THE
+EVIDENCE THAT WOULD HAVE EXPLAINED IT. This is a different category from every
+other failure in this kit: the rest are instruments that MEASURE THE WRONG
+THING, and this is an instrument that CHANGES THE THING.
+
+A staging deploy failed on a commit whose CI was green, with no build and no
+logs attached, so no cause could be established from the record. Two readings
+were available and one experiment separated them — the NEXT commit carried the
+same config, so if it built, the "it tried to build without the config" reading
+was dead. That deployment was PENDING. The write-up was finished and about to
+land: deployment ids, the success and failure records side by side, the missing
+build. LANDING PUSHES TO MAIN. A PUSH TO MAIN CREATES A DEPLOYMENT. A NEW
+DEPLOYMENT SUPERSEDES THE PENDING ONE. The record would have documented an
+unresolvable mystery AND MADE IT UNRESOLVABLE, in the same commit, and it would
+have been accurate about everything except the one thing that mattered.
+
+The commit was held, the deployment resolved (it succeeded — the innocent
+reading, a single unexplained gate-stage failure), and the record landed WITH
+the resolution in it.
+
+BEFORE RECORDING AN INCIDENT, ASK WHETHER YOUR RECORDING MECHANISM TOUCHES THE
+SYSTEM UNDER INVESTIGATION. It does more often than it sounds: any repo whose
+pushes trigger deploys, any incident about a queue where filing takes a slot,
+any investigation into a runner where your own job competes for it, any
+log-volume problem investigated by writing logs, any lock contention diagnosed
+by taking the lock. The path is invisible because "WRITE IT DOWN" IS THE ONE
+ACTION EVERYBODY TREATS AS SAFE, and every rule about incident response says
+record it immediately and before it resolves — advice that is right, and that
+here would have burned the evidence.
+
+The mitigation is cheap once the question is asked: write the record, HOLD it,
+land it after the thing resolves, AND SAY IN THE RECORD THAT YOU HELD IT AND
+WHY — otherwise the next person wonders about the gap between the timestamp in
+the prose and the timestamp on the commit. AND THE SECOND-ORDER VERSION FOLLOWS
+IMMEDIATELY: the same hazard applies to the FIX. Retrying a failed deploy to see
+whether it fails again ALSO supersedes the pending one. "Reproduce it" and
+"observe it" can both be the destructive act, not only the write-up.
+
 AFTER ANY MUTATING STEP, READ BACK THE VALUE THAT MUST HAVE MOVED, AND ASSERT IT
 MOVED. Not "did the command succeed" — exit codes lie by omission — but "is the
 thing that had to change now different". `decided:` above is this rule for a
