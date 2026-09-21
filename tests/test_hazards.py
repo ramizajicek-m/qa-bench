@@ -64,3 +64,10 @@ def test_a_commented_line_is_not_code(tmp_path):
 
 def test_nothing_to_read_is_did_not_run(tmp_path):
     assert hazards.run(["--repo", str(tmp_path)], echo=lambda *_: None) == 3
+
+
+def test_advisory_prints_but_exits_zero(tmp_path):
+    f = tmp_path / "Makefile"
+    f.write_text("\tmake land | tail -25\n")
+    out = []
+    assert hazards.run(["--repo", str(tmp_path), "--advisory"], echo=out.append) == 0 and any("RED" in o for o in out)

@@ -86,3 +86,9 @@ def test_a_member_reference_is_not_a_line_citation(tmp_path):
 def test_an_excluded_file_is_not_read(tmp_path):
     root = repo(tmp_path, "see templates/gone.html:3", pin=5, extra={"exclude": ["docs.md"], "prose": ["docs.md", "qa/*.yml"]})
     assert run(root)[0] == 0
+
+
+def test_advisory_prints_but_exits_zero(tmp_path):
+    root = repo(tmp_path, "see catalog.html:900", pin=5)
+    out = []
+    assert anchors.run(["--repo", str(root), "--advisory"], echo=out.append) == 0 and any("RED" in o for o in out)
