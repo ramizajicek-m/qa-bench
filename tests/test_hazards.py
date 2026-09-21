@@ -71,3 +71,30 @@ def test_advisory_prints_but_exits_zero(tmp_path):
     f.write_text("\tmake land | tail -25\n")
     out = []
     assert hazards.run(["--repo", str(tmp_path), "--advisory"], echo=out.append) == 0 and any("RED" in o for o in out)
+
+
+def test_a_push_workflow_keyed_on_the_ref_cancels_earlier_commits(tmp_path):
+    """anat 2026-09-20 and tharros 2026-09-21: a later push cancelled the previous commit's pending gate."""
+    wf = "on:\n  push:\n    branches: [main]\nconcurrency:\n  group: ci-${{ github.ref }}\n  cancel-in-progress: true\njobs:\n  t:\n    runs-on: x\n    steps: []\n"
+    assert scan(tmp_path, wf, name=".github/workflows/ci.yml")[0] == 1
+
+
+def test_batching_that_protects_the_running_verdict_is_clean(tmp_path):
+    """ana-log's design, Rami's decision 2026-09-17: pending runs batch, a running one is never killed on main."""
+    wf = ("on:\n  push: {}\nconcurrency:\n  group: tests-${{ github.ref }}\n"
+          "  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}\njobs: {}\n")
+    assert scan(tmp_path, wf, name=".github/workflows/tests.yml")[0] == 0
+    plain = "on:\n  push: {}\nconcurrency:\n  group: tests-${{ github.ref }}\njobs: {}\n"
+    assert scan(tmp_path / "b", plain, name=".github/workflows/tests.yml")[0] == 0
+
+
+def test_a_sha_keyed_or_scheduled_workflow_is_clean(tmp_path):
+    ok = "on:\n  push: {}\nconcurrency:\n  group: ci-${{ github.ref }}-${{ github.sha }}\njobs: {}\n"
+    assert scan(tmp_path, ok, name=".github/workflows/ci.yml")[0] == 0
+    nightly = "on:\n  schedule: [{cron: '1 1 * * *'}]\nconcurrency:\n  group: n-${{ github.ref }}\njobs: {}\n"
+    assert scan(tmp_path / "b", nightly, name=".github/workflows/n.yml")[0] == 0
+
+
+def test_a_job_level_ref_group_is_found_too(tmp_path):
+    wf = "on: [push]\njobs:\n  unit:\n    concurrency:\n      group: unit-${{ github.ref }}\n      cancel-in-progress: true\n    runs-on: x\n"
+    assert scan(tmp_path, wf, name=".github/workflows/t.yml")[0] == 1

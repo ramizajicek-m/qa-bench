@@ -25,6 +25,20 @@ for two shapes, each of which reported a false outcome in this estate on
   and no `pipefail` in the file is refused: write the full output to a file and
   read the summary from the file.
 
+  A LATER PUSH KILLS A RUNNING VERDICT. A push-triggered workflow whose group
+  is keyed on `github.ref` with `cancel-in-progress: true` cancels the RUNNING
+  gate of the previous push, so under steady pushes no gate on that branch ever
+  finishes (tharros's and iga's ci.yml until 2026-09-21). Refused.
+  What is NOT refused, deliberately: a ref-keyed group that lets a newer PENDING
+  run replace an older one. That is batching, which Rami chose on 2026-09-17
+  («...it needs to merge with the other branch in the queue so when it is
+  cleared both will go together»): the newer commit contains the older, and the
+  older's deploy reads SKIPPED = shipped inside the next. This rule was first
+  written to refuse that too, and was narrowed the same hour when ana-log's
+  tests.yml turned out to hold the decision in writing. `cancel-in-progress` as
+  an expression that excludes the deploy branch (`github.ref != 'refs/heads/main'`)
+  is the shape to use.
+
 A line can be excused with a trailing `# hazard-ok: <reason>`; the reason is
 printed every run. What this does NOT read, stated: two steps joined by a
 newline where the second publishes what the first produced (ana-log's ledger
@@ -58,6 +72,30 @@ def _paths(root: Path, pats: list[str]) -> list[Path]:
     return sorted({p for pat in pats for p in root.glob(pat) if p.is_file() and not SKIP & set(p.parts)})
 
 
+def _ref_keyed(path: Path, text: str) -> list[str]:
+    """Push-triggered workflow concurrency groups keyed on the ref and not the sha."""
+    if ".github/workflows/" not in str(path).replace("\\", "/"):
+        return []
+    try:
+        doc = yaml.safe_load(text) or {}
+    except yaml.YAMLError:
+        return []
+    on = doc.get("on", doc.get(True)) or {}
+    if not ((isinstance(on, dict) and "push" in on) or on == "push" or (isinstance(on, list) and "push" in on)):
+        return []
+    groups = [("workflow", doc.get("concurrency"))] + [
+        (f"job {n}", (j or {}).get("concurrency")) for n, j in (doc.get("jobs") or {}).items() if isinstance(j, dict)]
+    out = []
+    for where, c in groups:
+        g = c.get("group") if isinstance(c, dict) else c
+        cancels = isinstance(c, dict) and c.get("cancel-in-progress") is True
+        if isinstance(g, str) and "github.ref" in g and "github.sha" not in g and cancels:
+            out.append(f"{where}: concurrency group `{g}` with cancel-in-progress: true — a later push KILLS the "
+                       "running gate of the previous one, and under steady pushes no gate finishes. Keep the batching "
+                       "and protect the running verdict: cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}")
+    return out
+
+
 def scan(root: Path, pats: list[str]) -> dict:
     files = _paths(root, pats)
     out = {"files": len(files), "red": [], "excused": []}
@@ -67,6 +105,8 @@ def scan(root: Path, pats: list[str]) -> dict:
         except OSError:
             continue
         pipefail = "pipefail" in text
+        for why in _ref_keyed(f, text):
+            (out["excused"] if "hazard-ok:" in text else out["red"]).append(f"{f.relative_to(root)}: {why}")
         recipe = f.name == "Makefile" or f.suffix == ".mk"
         rel = f.relative_to(root)
         for n, line in enumerate(text.splitlines(), 1):
