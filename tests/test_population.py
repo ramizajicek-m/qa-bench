@@ -1163,6 +1163,8 @@ def test_the_corpus_is_read_from_what_a_file_calls():
     assert population.corpus_of("def test():\n    assert 'x' in (ROOT / 'static/a.css').read_text()\n") == {"source"}
     assert population.corpus_of("def test():\n    assert 1\n") == set()
     assert population.corpus_of("def test(logged_in_page):\n    logged_in_page.goto('/x')\n") == {"product"}
+    # a product test that also reads a file is still product, not product+source
+    assert population.corpus_of("def test(page):\n    page.goto('/x')\n    (ROOT / 'a.json').read_text()\n") == {"product"}
 
 
 def test_a_derived_corpus_counts_and_the_report_says_how_many_rows_it_saw(repo):

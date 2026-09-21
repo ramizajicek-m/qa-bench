@@ -2385,6 +2385,63 @@
    "verdict": "caught",
    "exit": 1,
    "recorded": "2026-09-21"
+  },
+  {
+   "file": "qabench/population.py",
+   "expr": "s.replace('_PRODUCT = re.compile(r\"\\\\.goto\\\\(|', '_PRODUCT = re.compile(r\"\\\\bpage\\\\.goto\\\\(|', 1)",
+   "command": [
+    "env",
+    "PYTHONPATH=.",
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_population.py",
+    "-q",
+    "-p",
+    "no:randomly",
+    "-x"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-21"
+  },
+  {
+   "file": "qabench/population.py",
+   "expr": "s.replace('    if not out and _SOURCE.search(source):', '    if _SOURCE.search(source):', 1)",
+   "command": [
+    "env",
+    "PYTHONPATH=.",
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_population.py",
+    "-q",
+    "-p",
+    "no:randomly",
+    "-x"
+   ],
+   "verdict": "survived",
+   "exit": 0,
+   "recorded": "2026-09-21"
+  },
+  {
+   "file": "qabench/population.py",
+   "expr": "s.replace('        corpora = [str(g[\"corpus\"])] if g.get(\"corpus\") else sorted(g.get(\"_derived_corpus\") or []) or [\"\"]', '        corpora = [str(g[\"corpus\"])] if g.get(\"corpus\") else [\"\"]', 1)",
+   "command": [
+    "env",
+    "PYTHONPATH=.",
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_population.py",
+    "-q",
+    "-p",
+    "no:randomly",
+    "-x"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-21"
   }
  ]
 }
