@@ -485,6 +485,39 @@ means the honest record belongs upstream, the second means the case is fixed.
 Every project in the estate carries lists of this kind — exclusion maps, skip
 budgets, ratchet baselines — and nothing was checking any of them this way.
 
+EVIDENCE THAT IS SOUND AND ANSWERS THE WRONG QUESTION — not a narrow corpus, not
+a stale reason, not a marker-keyed population, not a vacuous check. A row reading
+"the display remains correct at up to 200% TEXT zoom" is implemented on four
+green tests, honestly written, which set the viewport to 640x400 and assert no
+sideways scroll and no clipping. NOTHING IN THE EVIDENCE ENLARGES ANY TEXT. The
+test's own docstring states the assumption — "a browser at 200% lays a 1280x800
+window out as 640x400 CSS pixels" — which is true of PAGE zoom and false of TEXT
+zoom.
+
+THE TWO HAVE DIFFERENT FAILURE MODES, NOT DIFFERENT PROCEDURES. Page zoom
+shrinks the viewport and the layout reflows. Text zoom leaves the viewport alone
+and text grows INSIDE its container, breaking fixed-height boxes,
+`overflow:hidden`, line clamps, and any control sized in px around text sized in
+em. A viewport change cannot produce a single instance of that. SO THE GREEN IS
+NOT A WEAKER VERSION OF THE RIGHT ANSWER, IT IS ORTHOGONAL TO IT, and no amount
+of strengthening the reflow test approaches the claim.
+
+The detection question is cheap and nobody had run it: DOES THE ROW'S EVIDENCE
+COVER EVERY CLAUSE OF THE ROW'S TEXT? Two fields in one file, no browser. And
+the tell that makes it hard is worth more than the instance: ALL FOUR TESTS ARE
+NAMED FOR THE ROW THEY DO NOT DISCHARGE, so every previous reading checked the
+evidence LIST, saw four matching names, and moved on. THE METHOD MUST READ WHAT
+EACH TEST ASSERTS, NEVER WHAT IT IS CALLED — the name is the one field that
+cannot be trusted, and it is the field every audit reads first. (That is why
+`capability.fires` and `silent` demand `was:`, the thing QUOTED, beside the
+command: a name is not evidence anywhere in this file.)
+
+No field here enforces it. `undecided:` is where it lands — that row's would have
+read "text zoom is not judged; the evidence measures page zoom" — and the
+criterion mismatch is a question for a reader rather than a declaration to add,
+since a guard that could state its own criterion correctly would not have had
+the problem.
+
 "LOCATED" IS NOT A SYNONYM FOR "TRUE", and this is the correction to the rule
 that a located finding beats a counted one. A contrast sweep reported 303
 FAILURES, EACH WITH A SELECTOR AND A COMPUTED VALUE — exactly the located
