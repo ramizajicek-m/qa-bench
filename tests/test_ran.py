@@ -306,3 +306,37 @@ def test_a_clean_summary_printing_zero_failed_is_not_a_failure():
 def test_a_bare_hundred_percent_is_finished_and_not_declared_empty():
     """[100%] proves the run finished and says nothing about how many ran."""
     assert ran.verdict(0, "tests/a.py ....   [100%]\n", {})[0] == ran.PASS
+
+
+def test_a_run_records_the_load_it_was_measured_under(tmp_path):
+    """ana-log: load 105 on 14 cores turned a saturated machine into 'order-dependent' tests."""
+    import os
+    from qabench import ran
+    (tmp_path / "qa").mkdir()
+    rec = ran.run_one(tmp_path, {}, "t", ["python3", "-c", "print('1 passed in 0.01s')"],
+                      getloadavg=lambda: (float((os.cpu_count() or 1) * 3), 0.0, 0.0))
+    assert rec["load"]["under_load"] is True and "UNDER LOAD" in rec["why"]
+    quiet = ran.run_one(tmp_path, {}, "t", ["python3", "-c", "print('1 passed in 0.01s')"],
+                        getloadavg=lambda: (0.1, 0.0, 0.0))
+    assert quiet["load"]["under_load"] is False and "UNDER LOAD" not in quiet["why"]
+
+
+def test_the_heavy_lock_serialises_two_runs(tmp_path):
+    import threading
+    import time
+    from qabench import ran
+    lock, order, said = str(tmp_path / "heavy.lock"), [], []
+
+    def hold():
+        with ran.HeavyLock("first", path=lock, echo=said.append):
+            order.append("first-in")
+            time.sleep(0.6)
+            order.append("first-out")
+    t = threading.Thread(target=hold)
+    t.start()
+    time.sleep(0.2)
+    with ran.HeavyLock("second", path=lock, echo=said.append) as l2:
+        order.append("second-in")
+    t.join()
+    assert order == ["first-in", "first-out", "second-in"]
+    assert l2.waited > 0.2 and any("first" in s for s in said)
