@@ -98,3 +98,15 @@ def test_a_sha_keyed_or_scheduled_workflow_is_clean(tmp_path):
 def test_a_job_level_ref_group_is_found_too(tmp_path):
     wf = "on: [push]\njobs:\n  unit:\n    concurrency:\n      group: unit-${{ github.ref }}\n      cancel-in-progress: true\n    runs-on: x\n"
     assert scan(tmp_path, wf, name=".github/workflows/t.yml")[0] == 1
+
+
+def test_a_self_hosted_docker_job_running_tests_must_trust_its_workspace(tmp_path):
+    """tharros and iga, 2026-09-21: git exited 128 after checkout and git-backed tests read an empty corpus."""
+    bare = ("on: [push]\njobs:\n  unit:\n    runs-on: [self-hosted, linux, iga]\n"
+            "    steps:\n      - run: python -m pytest tests -q\n")
+    assert scan(tmp_path, bare, name=".github/workflows/ci.yml")[0] == 1
+    fixed = ("on: [push]\nenv:\n  GIT_CONFIG_COUNT: '1'\n  GIT_CONFIG_KEY_0: safe.directory\n"
+             "  GIT_CONFIG_VALUE_0: ${{ github.workspace }}\n" + bare.split("\n", 1)[1])
+    assert scan(tmp_path / "b", fixed, name=".github/workflows/ci.yml")[0] == 0
+    macos = bare.replace("[self-hosted, linux, iga]", "[self-hosted, macOS]")
+    assert scan(tmp_path / "c", macos, name=".github/workflows/ci.yml")[0] == 0

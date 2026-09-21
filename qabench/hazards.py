@@ -39,6 +39,16 @@ for two shapes, each of which reported a false outcome in this estate on
   an expression that excludes the deploy branch (`github.ref != 'refs/heads/main'`)
   is the shape to use.
 
+  A SELF-HOSTED DOCKER JOB WHOSE GIT CANNOT READ ITS OWN CHECKOUT. actions/checkout
+  marks the workspace safe only in a TEMPORARY global config; on a self-hosted
+  Linux (Docker) runner whose workspace ownership differs, every later git call
+  exits 128 and a git-backed test reads an EMPTY corpus — green or red at
+  random (tharros's test_deploy_drift and iga's kit pin check, 2026-09-21).
+  ana-log's tests.yml carried the fix (GIT_CONFIG_COUNT/KEY/VALUE naming
+  safe.directory = github.workspace) and four siblings did not. A job on
+  `[self-hosted, linux…]` that runs pytest or git without that env, at workflow
+  or job level, is refused.
+
 A line can be excused with a trailing `# hazard-ok: <reason>`; the reason is
 printed every run. What this does NOT read, stated: two steps joined by a
 newline where the second publishes what the first produced (ana-log's ledger
@@ -96,6 +106,38 @@ def _ref_keyed(path: Path, text: str) -> list[str]:
     return out
 
 
+def _untrusted_git(path: Path, text: str) -> list[str]:
+    if ".github/workflows/" not in str(path).replace("\\", "/"):
+        return []
+    try:
+        doc = yaml.safe_load(text) or {}
+    except yaml.YAMLError:
+        return []
+
+    def trusted(env) -> bool:
+        env = env or {}
+        return any(str(env.get(f"GIT_CONFIG_KEY_{i}", "")) == "safe.directory" for i in range(8))
+
+    out = []
+    for name, job in (doc.get("jobs") or {}).items():
+        if not isinstance(job, dict):
+            continue
+        labels = job.get("runs-on")
+        labels = [labels] if isinstance(labels, str) else labels or []
+        low = [str(x).lower() for x in labels]
+        if "self-hosted" not in low or "linux" not in low:
+            continue
+        runs = " ".join(str(st.get("run", "")) for st in job.get("steps") or [] if isinstance(st, dict))
+        if not re.search(r"\bpytest\b|\bgit\s|qabench\s+(?:fixpop|anchors)|\bmake\s", runs):
+            continue
+        if trusted(doc.get("env")) or trusted(job.get("env")):
+            continue
+        out.append(f"job {name}: runs git-backed work on a self-hosted Linux runner without GIT_CONFIG "
+                   "safe.directory = ${{ github.workspace }} — checkout's trust does not outlive its step, and git "
+                   "then reads an EMPTY corpus at random")
+    return out
+
+
 def scan(root: Path, pats: list[str]) -> dict:
     files = _paths(root, pats)
     out = {"files": len(files), "red": [], "excused": []}
@@ -105,7 +147,7 @@ def scan(root: Path, pats: list[str]) -> dict:
         except OSError:
             continue
         pipefail = "pipefail" in text
-        for why in _ref_keyed(f, text):
+        for why in _ref_keyed(f, text) + _untrusted_git(f, text):
             (out["excused"] if "hazard-ok:" in text else out["red"]).append(f"{f.relative_to(root)}: {why}")
         recipe = f.name == "Makefile" or f.suffix == ".mk"
         rel = f.relative_to(root)
