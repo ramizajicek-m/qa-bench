@@ -219,6 +219,38 @@ AN ATTEMPT AND A REASON? It did, in a comment, at the point of the change: the
 argument for writing the reason AT THE SITE rather than in a document nobody
 reads on the night.
 
+THE RIGHT CHECK AT THE WRONG TIME: A SAFETY ARGUMENT WHOSE PRECONDITION IS
+SCHEDULED BEHIND THE THING IT PROTECTS AGAINST. A promote gate was deliberately
+loosened — a four-hour browser tier became post-promote surveillance — and the
+workflow says, at the site, what made that safe: every project gained an
+automated post-deploy rollback first, and the rule is rollback before
+gate-loosening, never the reverse. The reasoning is correct and the order holds
+in the DESIGN. It does not hold in the SCHEDULE. Measured minutes after a real
+promotion: production served the new commit, and the rollback `guard` job — the
+thing the whole loosening rests on — was QUEUED BEHIND SIX BROWSER SHARDS on a
+single self-hosted runner, one in progress. The tier had run 21:10 to 01:04 the
+night before. For a window after every promotion, the deployment is live and
+the thing that would roll it back has not started.
+
+Every other failure in this kit is a check that measures the WRONG THING. This
+one measures the RIGHT thing at the WRONG TIME: the guard is correct, the tier
+is correctly non-gating, and the queueing is a property of having one runner
+rather than a defect in any workflow. THE FAILURE IS IN THE COMPOSITION, AND NO
+INSTRUMENT ASKS WHEN A CHECK RUNS RELATIVE TO THE RISK IT COVERS. It was visible
+only because the precondition was written down at the site — without that
+sentence, a guard running late looks like a guard.
+
+So: WHEN A GATE IS LOOSENED BECAUSE SOMETHING ELSE COVERS THE RISK, ASK WHETHER
+THE COVERING THING IS SCHEDULED TO RUN BEFORE THE EXPOSURE BEGINS, NOT MERELY
+WHETHER IT EXISTS. The repair is priority, not policy: the guard needs the runner
+before the surveillance tier does. The same repository had learned this once
+already — its gates sat queued behind a 60-minute browser leg for three runs
+running and production stayed 25 commits behind a green main, fixed by ordering
+the browser tier after the gates — and the guard was the piece not included in
+that reordering. Any estate with one shared runner and a post-deploy guard has
+the question, and it is per-project scheduling, so it is carried here as a
+question rather than a check.
+
 AFTER ANY MUTATING STEP, READ BACK THE VALUE THAT MUST HAVE MOVED, AND ASSERT IT
 MOVED. Not "did the command succeed" — exit codes lie by omission — but "is the
 thing that had to change now different". `decided:` above is this rule for a
