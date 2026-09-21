@@ -11,7 +11,12 @@ for two shapes, each of which reported a false outcome in this estate on
   line contains that string, so pgrep matched THE WAITER, and "is the landing
   alive?" answered yes for as long as the waiter existed. A `pgrep -f` or
   `ps … | grep` whose pattern is not self-excluding (`[p]ython…`, `grep -v grep`)
-  is refused.
+  is refused WHERE THE PATTERN CAN BE IN A PARENT'S COMMAND LINE: a Makefile
+  recipe (make runs each line as `sh -c "<line>"`), or a line that itself runs
+  `sh|bash|zsh -c`. A workflow step or a script file is executed from a file, so
+  its own text is not on any command line and pgrep never matches itself — the
+  first estate run flagged five such steps in anat, all innocent, which is why
+  the scope is this narrow. `ps -p <pid>` names one process and is not a search.
 
   TRUNCATING THE ONLY COPY. `make land | tail -25` reported a failed gate as
   success (the pipeline's status is tail's), and ana-log piped a backgrounded
@@ -44,6 +49,8 @@ LIVENESS = re.compile(r"""\bpgrep\s+(?:-\w+\s+)*-\w*f\w*\s+(?:-\w+\s+)*(["']?)([
 RUNNER = re.compile(r"\b(?:pytest|playwright\s+test|vitest|jest|npm\s+(?:run\s+)?test|make\s+[\w-]*"
                     r"(?:test|land|full|tier|night|e2e|check)[\w-]*|qabench\s+(?:nightly|stage))\b")
 TRUNC = re.compile(r"\|\s*(?:tail|head)\b")
+INLINE = re.compile(r"\b(?:sh|bash|zsh)\s+(?:-\w+\s+)*-\w*c\b")
+PS_PID = re.compile(r"\bps\b[^|]*\s-\w*p\b")
 OK = re.compile(r"#\s*hazard-ok:\s*(\S.*)$")
 
 
@@ -60,15 +67,17 @@ def scan(root: Path, pats: list[str]) -> dict:
         except OSError:
             continue
         pipefail = "pipefail" in text
+        recipe = f.name == "Makefile" or f.suffix == ".mk"
         rel = f.relative_to(root)
         for n, line in enumerate(text.splitlines(), 1):
             code = line.split(" #", 1)[0] if not line.lstrip().startswith("#") else ""
             if not code.strip():
                 continue
             found = []
+            inline = recipe or bool(INLINE.search(code))
             for m in LIVENESS.finditer(code):
                 pat = m.group(2) or m.group(4) or ""
-                if "[" in pat or re.search(r"grep\s+-v\s+grep", code):
+                if not inline or "[" in pat or re.search(r"grep\s+-v\s+grep", code) or PS_PID.search(m.group(0)):
                     continue
                 found.append(f"liveness check `{m.group(0).strip()}` matches ITS OWN command line — use a "
                              "self-excluding pattern (`[p]ython.*land.py`) and assert the pid is the process you meant")
