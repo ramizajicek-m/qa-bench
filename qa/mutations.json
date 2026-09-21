@@ -1660,8 +1660,8 @@
     "no:randomly",
     "-x"
    ],
-   "verdict": "survived",
-   "exit": 0,
+   "verdict": "caught",
+   "exit": 1,
    "recorded": "2026-09-21"
   },
   {
@@ -1679,8 +1679,8 @@
     "no:randomly",
     "-x"
    ],
-   "verdict": "survived",
-   "exit": 0,
+   "verdict": "caught",
+   "exit": 1,
    "recorded": "2026-09-21"
   },
   {
@@ -1712,6 +1712,63 @@
     "-m",
     "pytest",
     "tests/test_inherit.py",
+    "-q",
+    "-p",
+    "no:randomly",
+    "-x"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-21"
+  },
+  {
+   "file": "qabench/population.py",
+   "expr": "s.replace('    _inherited_prompt(row, pop_spec, root)\\n', '\\n', 1)",
+   "command": [
+    "env",
+    "PYTHONPATH=.",
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_population.py",
+    "-q",
+    "-p",
+    "no:randomly",
+    "-x"
+   ],
+   "verdict": "survived",
+   "exit": 0,
+   "recorded": "2026-09-21"
+  },
+  {
+   "file": "qabench/population.py",
+   "expr": "s.replace('        if tok.endswith((\".py\", \".js\", \".mjs\", \".ts\", \".sh\")) and (root / tok).is_file():', '        if False:', 1)",
+   "command": [
+    "env",
+    "PYTHONPATH=.",
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_population.py",
+    "-q",
+    "-p",
+    "no:randomly",
+    "-x"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-21"
+  },
+  {
+   "file": "qabench/population.py",
+   "expr": "s.replace('    declared = pop_spec.get(\"literals\") or {}', '    declared = {}', 1)",
+   "command": [
+    "env",
+    "PYTHONPATH=.",
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_population.py",
     "-q",
     "-p",
     "no:randomly",

@@ -1125,3 +1125,12 @@ def test_the_script_a_selector_runs_is_read_too(tmp_path):
     population._inherited_prompt(row, {"cmd": "python3 scripts/sel.py",
                                        "property": "a count copied into the tracker equals its source"}, tmp_path)
     assert "146" in row.note
+
+
+def test_the_inherited_prompt_runs_inside_the_judge(repo):
+    row = judged(repo, population={"property": "routes that iterate a collection and report a count",
+                                   "literals": {}})
+    assert "selector words the property does not contain" in (row["note"] if isinstance(row, dict) else row.note) \
+        or "property is unstated" not in (row["note"] if isinstance(row, dict) else row.note)
+    bare = judged(repo)
+    assert "property is unstated" in (bare["note"] if isinstance(bare, dict) else bare.note)
