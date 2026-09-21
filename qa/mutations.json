@@ -2765,6 +2765,82 @@
    "verdict": "caught",
    "exit": 1,
    "recorded": "2026-09-21"
+  },
+  {
+   "file": "qabench/elements.py",
+   "expr": "s.replace('    css = _MEDIA.sub(\"\", _COMMENT.sub(\"\", css))', '    css = _MEDIA.sub(\"\", css)', 1)",
+   "command": [
+    "env",
+    "PYTHONPATH=.",
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_elements.py",
+    "-q",
+    "-p",
+    "no:randomly",
+    "-x"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-21"
+  },
+  {
+   "file": "qabench/elements.py",
+   "expr": "s.replace('    css = _MEDIA.sub(\"\", _COMMENT.sub(\"\", css))', '    css = _COMMENT.sub(\"\", css)', 1)",
+   "command": [
+    "env",
+    "PYTHONPATH=.",
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_elements.py",
+    "-q",
+    "-p",
+    "no:randomly",
+    "-x"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-21"
+  },
+  {
+   "file": "qabench/elements.py",
+   "expr": "s.replace('                if re.fullmatch(r\"\\\\.[\\\\w-]+\", one):', '                if one.startswith(\".\"):', 1)",
+   "command": [
+    "env",
+    "PYTHONPATH=.",
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_elements.py",
+    "-q",
+    "-p",
+    "no:randomly",
+    "-x"
+   ],
+   "verdict": "survived",
+   "exit": 0,
+   "recorded": "2026-09-21"
+  },
+  {
+   "file": "qabench/elements.py",
+   "expr": "s.replace('        return 1 if found and \"--strict\" in argv else 0', '        return 0', 1)",
+   "command": [
+    "env",
+    "PYTHONPATH=.",
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_elements.py",
+    "-q",
+    "-p",
+    "no:randomly",
+    "-x"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-21"
   }
  ]
 }

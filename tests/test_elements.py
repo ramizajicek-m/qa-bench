@@ -54,6 +54,7 @@ THARROS_CSS = """
 .rv.in { opacity: 1; transform: none; }
 @media (prefers-reduced-motion: reduce) { .fade { opacity: 0; } }
 html.js .later { opacity: 0 }
+.menu .sub { opacity: 0 }
 .modal { display: none; }
 """
 
