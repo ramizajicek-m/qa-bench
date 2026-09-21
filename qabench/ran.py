@@ -177,6 +177,48 @@ IMMEDIATELY: the same hazard applies to the FIX. Retrying a failed deploy to see
 whether it fails again ALSO supersedes the pending one. "Reproduce it" and
 "observe it" can both be the destructive act, not only the write-up.
 
+THE HARMLESS PRECURSOR IS THE IRREVERSIBLE ACT — the recording hazard above has
+a twin, and the two need each other. A coordinating session asked for a
+read-only answer to "what is the production promotion gate still missing for
+this commit, and how long would producing it take?" — explicitly so the later
+decision could be "it can go in N minutes" — and said IN CAPITALS: prepare
+nothing, promote nothing. SATISFYING THAT GATE IS THE PROMOTION. The repo had
+PROMOTE_ON_GREEN set, and the nightly's promote job needed exactly those two
+gate jobs and dispatched the production deploy about forty seconds after they
+passed; there is no gather-then-decide step anywhere in the path. So the
+instruction's ONLY possible execution was a production release nobody had
+authorised, written in the same message as the instruction not to.
+
+It was not caught by care, and care would not have found it: the request was
+innocuous and the constraint sounded conservative. It was caught because
+answering the TIMING question meant reading the workflow, and the promote job
+sat forty lines below the jobs being looked up. Nobody reads a workflow to
+answer a timing question.
+
+Two instances, different mechanisms, one form — recording an incident would
+have destroyed its evidence; preparing a decision would have MADE it — AND IN
+BOTH THE HARMLESSNESS IS WHAT CARRIES IT, because a step that announced itself
+as consequential would have been checked. So: BEFORE DOING THE HARMLESS
+PRECURSOR, READ WHAT IT TRIGGERS. And since that is unbounded, the practical
+test: for any action framed as preparation, gathering, recording or checking,
+ask what is DOWNSTREAM OF ITS SUCCESS — not what the action does, but what
+happens automatically when it succeeds. Auto-promote on green, auto-merge on
+green, a deploy on push, a webhook on a status change, a scheduled job that
+fires when an artefact appears. Each turns a read into a write, and none is
+visible from the thing you were asked to do.
+
+AND THE MIRROR IMAGE, which is the failure of applying this too hard: A DECISION
+THAT LOOKS LIKE A DEFECT COSTS THE SAME AS A DEFECT THAT LOOKS LIKE A DECISION.
+In the same investigation six browser-tier shards were failing in the nightly
+while production promoted anyway — which reads as a gap and was not: the tier
+had been deliberately made post-promote surveillance, dated, after a four-hour
+browser leg on one shared runner left production 25 commits behind a green main
+three runs running, and made safe by an automated post-deploy rollback landing
+FIRST. The discriminator is identical in both directions — DOES THE RECORD NAME
+AN ATTEMPT AND A REASON? It did, in a comment, at the point of the change: the
+argument for writing the reason AT THE SITE rather than in a document nobody
+reads on the night.
+
 AFTER ANY MUTATING STEP, READ BACK THE VALUE THAT MUST HAVE MOVED, AND ASSERT IT
 MOVED. Not "did the command succeed" — exit codes lie by omission — but "is the
 thing that had to change now different". `decided:` above is this rule for a
