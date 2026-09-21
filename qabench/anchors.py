@@ -58,7 +58,7 @@ import yaml
 
 EXT = r"(?:py|js|mjs|ts|tsx|jsx|html|jinja2?|css|scss|ya?ml|sql|md|sh|toml|json)"
 CONTENT = re.compile(r"""([\w./-]+\.""" + EXT + r""")#"([^"\n]{1,200})\"""")
-LINE = re.compile(r"(?<![\w/.-])([\w./-]*[\w-]\." + EXT + r"):(\d{1,6})(?![\d:])")
+LINE = re.compile(r"([\w./-]*[\w-]\." + EXT + r"):(\d{1,6})(?![\d:])")
 QUOTED = re.compile(r"`([^`\n]{3,80})`")
 NEAR = 3
 
