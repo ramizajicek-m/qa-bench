@@ -398,6 +398,33 @@ candidates SAYS HOW MANY IT DID NOT READ. THE READING IS NOT A QUALITY CHECK ON
 THE PATTERN, IT IS PART OF THE MEASUREMENT. (`subject.reports: candidates` with
 `read:` is that; the verdict prints the unread remainder.)
 
+A CANDIDATE'S SAFETY IS IN ITS CONTEXT, NOT ITS TEXT, and two sites of one
+expression proved it in one sweep. `AnatTime.todayLocal()` was the recommended
+replacement for `new Date().toISOString().slice(0,10)`, and it carries TWO
+boundaries neither visible in the matched expression: it is right for a date a
+person READS and not automatically for one the client SENDS, where a server may
+judge it against a third clock; and it is only CALLABLE where DEFERRED GLOBALS
+EXIST. `wall-time.js` loads with `defer`, so an inline script inside a content
+block runs at PARSE TIME and the helper is undefined there. One matched site is
+an IIFE invoked immediately — the swap would have thrown, killing the whole IIFE
+and the seventy lines below it: console error, SILENT DEAD FEATURE. The other
+sits inside an `async function` fired by a user gesture and is safe. SAME
+EXPRESSION, SAME SWEEP, SAME "MECHANICAL" CLASSIFICATION, and the only reason
+anyone knows they differ is that somebody checked THE ENCLOSING FUNCTION rather
+than assuming two sites of one expression were alike.
+
+A THIRD CATEGORY BESIDE CONFIRMED AND REJECTED, which had no name in anybody's
+output: SITES WHERE THE MATCH IS REAL, THE SUBSTITUTION IS AVAILABLE, AND THE
+CHANGE IS STILL NOT WORTH MAKING. That IIFE key is one person's own routine,
+never sent anywhere, never compared to a server value, so the viewer's day is
+the only day it must agree with and it agrees with itself in any zone. IT WAS
+NEVER A DEFECT; the swap was cosmetic, and the ledger read zero user-visible
+benefit against three real costs. A CHANGE WITH NO BENEFIT AND THREE COSTS IS
+NOT A CHANGE. The site now carries two sentences saying why, so the next sweep
+stops at the line instead of rediscovering the trap — or worse, not discovering
+it. `subject.declined:` with `declined_why:` is that category; without the
+sentence a declined site is indistinguishable from an unexamined one.
+
 AND THE COST OF REFUTATION IS WHAT SEPARATES THE TIERS, which is not an accuracy
 argument. A SOURCE-READ CLAIM COSTS AS MUCH TO REFUTE AS TO MAKE: four button
 lines to kill four claims, one each. A RENDERED CLAIM CAN BE KILLED WHOLESALE:
@@ -1429,7 +1456,8 @@ class Row:
     covered_by: dict = field(default_factory=dict)        # reach guards: layer -> how much of the bypass it covers
     note: str = ""                                        # reported, not judged
     reports: str = "count"                                # `floor` or `candidates` when the subject is weaker
-    unread: int = 0                                       # candidates nobody opened                                # `floor` when the subject cannot resolve the unit
+    unread: int = 0                                       # candidates nobody opened
+    declined: int = 0                                     # real matches deliberately not changed                                # `floor` when the subject cannot resolve the unit
 
 
 def read_members(root: Path, cmd: str, *, timeout: float = 120.0) -> Set_:
@@ -1836,6 +1864,15 @@ def judge(spec: dict, root: Path, today: dt.date, *, run=read_members, surfaces=
                 "Over-returning is visible only if somebody opens each one, and it presents AS A FINDING")
         else:
             row.unread = max(0, row.subject - read)
+        declined = sub_spec.get("declined")
+        if declined and not sub_spec.get("declined_why"):
+            row.problems.append(
+                f"{declined} candidates are DECLINED and `declined_why:` says nothing. A site where the match "
+                "is real, the substitution is available and the change is still not worth making is a third "
+                "category beside confirmed and rejected — and without the sentence it is indistinguishable "
+                "from a site nobody examined. A change with no benefit and three costs is not a change, but "
+                "only the reason makes that legible to the next sweep")
+        row.declined = int(declined or 0)
     row.detectors = {n: len(m) for n, m in by_detector.items()}
     exemptions = spec.get("exemptions") or []
     for ex in exemptions:
@@ -2074,7 +2111,8 @@ def run(argv: list[str], *, today: dt.date | None = None) -> int:
                   + (f"   ({r['exempted']} exempted)" if r["exempted"] else ""))
             if r["reports"] == "candidates":
                 print(f"       these are CANDIDATES, not findings — {r['unread']} of {r['subject']} were never "
-                      "opened, and a pattern standing in for a property fabricates as readily as it misses")
+                      "opened, and a pattern standing in for a property fabricates as readily as it misses"
+                      + (f"; {r['declined']} declined with a reason" if r["declined"] else ""))
             if r["reports"] == "floor":
                 print(f"       these are a FLOOR, NOT A COUNT — the subject cannot resolve to one {r['unit']}, "
                       "so what it missed is invisible in its own output")

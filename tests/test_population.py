@@ -990,3 +990,15 @@ def test_candidates_are_not_findings_and_the_unread_remainder_is_printed(repo, c
 def test_reporting_candidates_without_saying_how_many_were_read_is_refused(repo):
     row = judged(repo, subject={"cmd": emit("a"), "reports": "candidates"})
     assert any("names `read:`" in p and "candidate set, not the finding" in p for p in row["problems"])
+
+
+def test_a_declined_candidate_needs_its_reason(repo):
+    """A real match, an available substitution, and a change still not worth
+    making is a third category — and without the sentence it is
+    indistinguishable from a site nobody examined."""
+    row = judged(repo, subject={"cmd": emit("a", "b", "c"), "reports": "candidates", "read": 3, "declined": 1})
+    assert any("DECLINED and `declined_why:` says nothing" in p for p in row["problems"])
+
+    ok = judged(repo, subject={"cmd": emit("a", "b", "c"), "reports": "candidates", "read": 3, "declined": 1,
+                               "declined_why": "one person's own routine, never sent, correct in any zone"})
+    assert ok["problems"] == [] and ok["declined"] == 1
