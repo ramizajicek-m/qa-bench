@@ -1625,6 +1625,101 @@
    "verdict": "caught",
    "exit": 1,
    "recorded": "2026-09-21"
+  },
+  {
+   "file": "qabench/inherit.py",
+   "expr": "s.replace('            return w[: -len(suf)]', '            return w', 1)",
+   "command": [
+    "env",
+    "PYTHONPATH=.",
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_inherit.py",
+    "-q",
+    "-p",
+    "no:randomly",
+    "-x"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-21"
+  },
+  {
+   "file": "qabench/inherit.py",
+   "expr": "s.replace('                if s in CODE or part.lower() in CODE:', '                if s in CODE:', 1)",
+   "command": [
+    "env",
+    "PYTHONPATH=.",
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_inherit.py",
+    "-q",
+    "-p",
+    "no:randomly",
+    "-x"
+   ],
+   "verdict": "survived",
+   "exit": 0,
+   "recorded": "2026-09-21"
+  },
+  {
+   "file": "qabench/inherit.py",
+   "expr": "s.replace('                if isinstance(node, ast.Assert) and node.msg is not None:', '                if False:', 1)",
+   "command": [
+    "env",
+    "PYTHONPATH=.",
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_inherit.py",
+    "-q",
+    "-p",
+    "no:randomly",
+    "-x"
+   ],
+   "verdict": "survived",
+   "exit": 0,
+   "recorded": "2026-09-21"
+  },
+  {
+   "file": "qabench/inherit.py",
+   "expr": "s.replace('    return sorted((w, lit) for w, lit in words(literals(source, python=python)).items() if w not in have)', '    return []', 1)",
+   "command": [
+    "env",
+    "PYTHONPATH=.",
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_inherit.py",
+    "-q",
+    "-p",
+    "no:randomly",
+    "-x"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-21"
+  },
+  {
+   "file": "qabench/inherit.py",
+   "expr": "s.replace('    have |= {_stem(w) for w in declared}', '    pass', 1)",
+   "command": [
+    "env",
+    "PYTHONPATH=.",
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_inherit.py",
+    "-q",
+    "-p",
+    "no:randomly",
+    "-x"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-21"
   }
  ]
 }

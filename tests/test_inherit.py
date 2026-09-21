@@ -45,3 +45,13 @@ def test_cli_exit_codes(tmp_path):
     assert inherit.run([str(f), "--property", "batch or bulk routes"], echo=lambda *_: None) == 0
     assert inherit.run([str(f), "--property", ""], echo=lambda *_: None) == 3
     assert inherit.run([str(tmp_path / "missing.py"), "--property", "x"], echo=lambda *_: None) == 3
+
+
+def test_an_assertion_message_is_prose_not_a_selector():
+    src = 'def test_x():\n    assert ok, "bulk"\n'
+    assert inherit.unexplained(src, "routes that iterate a collection", {}, python=True) == []
+
+
+def test_code_vocabulary_is_matched_before_stemming_too():
+    """`files` stems to `fil`, which is not code vocabulary; `files` is."""
+    assert inherit.unexplained('X = "files"\n', "anything at all", {}, python=True) == []
