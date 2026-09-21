@@ -181,3 +181,79 @@ def test_an_install_with_no_ref_at_all_is_named_even_though_it_has_no_pin(tmp_pa
                                  f'      - run: pip install "qabench @ git+https://github.com/x/qa-bench.git@{COMMIT}"\n')
     subprocess.run(["git", "add", "-A"], cwd=r, check=True)
     assert conformance.pin_agrees(r, installed=("0.1.40", COMMIT)) == []
+
+
+def _enum_manifest(tmp_path, guards=None, witness=True):
+    """A manifest declaring an enumeration command, optionally registered."""
+    import yaml
+    from qabench import conformance
+    c = conformance.contract()
+    checks = {cid: {"name": r["name"], "status": "absent", "evidence": [], "reason": "not yet"}
+              for cid, r in c["checks"].items()}
+    m = {"checks": checks, "enumerate_routes": "python3 scripts/routes.py"}
+    if guards is not None:
+        (tmp_path / "qa").mkdir(exist_ok=True)
+        (tmp_path / "qa" / "guards.yml").write_text(yaml.safe_dump({"guards": guards}), encoding="utf-8")
+        m["population"] = {"register": "qa/guards.yml"}
+    return m
+
+
+def test_a_declared_enumeration_nothing_runs_is_named(tmp_path):
+    """tharros's enumerate_routes printed 4 routes of 216 under its pinned
+    framework, with no error; the manifest held a stale copy and nothing ran it.
+    Any command a document hands you is untested unless something runs it."""
+    from qabench import conformance
+    kinds = {f["kind"] for f in conformance.judge(_enum_manifest(tmp_path), root=tmp_path)}
+    assert "enumeration_unrun" in kinds
+
+
+def test_an_enumeration_registered_without_a_witness_is_named(tmp_path):
+    from qabench import conformance
+    m = _enum_manifest(tmp_path, guards=[{"id": "routes", "population": {"cmd": "python3 scripts/routes.py"}}])
+    kinds = {f["kind"] for f in conformance.judge(m, root=tmp_path)}
+    assert "enumeration_unwitnessed" in kinds and "enumeration_unrun" not in kinds
+
+
+def test_an_enumeration_run_and_witnessed_is_clean(tmp_path):
+    from qabench import conformance
+    m = _enum_manifest(tmp_path, guards=[{"id": "routes", "population": {
+        "cmd": "python3 scripts/routes.py",
+        "witness": [{"member": "/order/{code}", "why": "the customer surface"}]}}])
+    kinds = {f["kind"] for f in conformance.judge(m, root=tmp_path)}
+    assert not kinds & {"enumeration_unrun", "enumeration_unwitnessed"}
+
+
+def test_the_enumeration_findings_are_advisory_first(tmp_path):
+    """The estate's adoption rule: provision, verify it passes, then make it fatal."""
+    from qabench import conformance
+    found = [f for f in conformance.judge(_enum_manifest(tmp_path), root=tmp_path) if f["kind"] == "enumeration_unrun"]
+    assert found and not found[0]["fatal"]
+
+
+def test_a_pasted_copy_of_the_enumeration_is_named(tmp_path):
+    """String equality would accept a guard holding its own copy of the
+    manifest's command — which passes today and drifts the next time the
+    manifest line changes. D4 one file over."""
+    from qabench import conformance
+    m = _enum_manifest(tmp_path, guards=[{"id": "routes", "population": {
+        "cmd": "python3 scripts/routes.py", "witness": [{"member": "/order", "why": "customer"}]}}])
+    kinds = {f["kind"] for f in conformance.judge(m, root=tmp_path)}
+    assert "enumeration_copied" in kinds
+
+
+def test_a_guard_that_reads_the_command_from_the_manifest_is_clean(tmp_path):
+    from qabench import conformance
+    m = _enum_manifest(tmp_path, guards=[{"id": "routes", "population": {
+        "cmd_from": "enumerate_routes", "witness": [{"member": "/order", "why": "customer"}]}}])
+    kinds = {f["kind"] for f in conformance.judge(m, root=tmp_path)}
+    assert not kinds & {"enumeration_unrun", "enumeration_copied", "enumeration_unwitnessed"}
+
+
+def test_the_production_dispatch_is_never_on_the_run_list():
+    """full_remote dispatches the night lane, which on tharros promotes to
+    production on green. A widening that read it as a cheap one-line field would
+    turn a conformance run into a production deploy."""
+    from qabench import conformance
+    assert "full_remote" in conformance.NEVER_RUN
+    assert "production" in conformance.NEVER_RUN["full_remote"]
+    assert not set(conformance.RUN_TO_VERIFY) & set(conformance.NEVER_RUN)

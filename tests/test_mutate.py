@@ -10,6 +10,7 @@ tool correctly four times first.
 """
 from __future__ import annotations
 
+import json
 import pathlib
 import subprocess
 import sys
@@ -77,3 +78,92 @@ def test_a_missing_file_and_a_bad_expression_touch_nothing(tmp_path):
     assert main([str(tmp_path / "nope.py"), 's', "--", "true"]) == 2
     assert main([str(f), 's.this_is_not_valid(', "--", "true"]) == 2
     assert f.read_text() == "value = 2\n"
+
+
+def test_a_dirty_target_is_warned_about_not_refused(tmp_path, capsys):
+    """Mid-edit is the case this tool exists for, so it runs. The warning is
+    aimed at the `git checkout --` that comes afterwards out of habit — two
+    people lost work to exactly that on 2026-09-20, hours apart."""
+    f = _repo(tmp_path)
+    f.write_text("value = 3  # an uncommitted fix\n")
+
+    rc = main([str(f), 's.replace("3", "99")', "--", sys.executable, "-c", "raise SystemExit(1)"])
+    err = capsys.readouterr().err
+    assert rc == 1                                        # the command's own code: the guard caught it
+    assert "UNCOMMITTED" in err and "git checkout --" in err
+    assert f.read_text() == "value = 3  # an uncommitted fix\n"
+
+
+def test_a_clean_target_is_not_warned_about(tmp_path, capsys):
+    f = _repo(tmp_path)
+    main([str(f), 's.replace("2", "4")', "--", sys.executable, "-c", "pass"])
+    assert "UNCOMMITTED" not in capsys.readouterr().err
+
+
+def test_a_recorded_mutation_is_re_run_and_red_when_it_no_longer_fails(tmp_path, capsys):
+    """A mutation watched red once is a claim with an expiry nobody tracks. A
+    mutation recorded for "the typed value is still there" went red; two days
+    later drafts restored on mount landed, and the same mutation left all four
+    cases green. The record still read as evidence and had stopped being able
+    to fail."""
+    f = _repo(tmp_path)
+    record = tmp_path / "qa" / "mutations.json"
+
+    # Recorded on a day when the guard caught it.
+    caught = main(["--record", str(record), str(f), 's.replace("2", "99")',
+                   "--", sys.executable, "-c", "raise SystemExit(1)"])
+    assert caught == 1
+    assert json.loads(record.read_text())["mutations"][0]["verdict"] == "caught"
+
+    # Replayed on a day when nothing sees it any more.
+    import qabench.mutate as m
+    original = m.subprocess.run
+    m.subprocess.run = lambda cmd, *a, **k: (subprocess.CompletedProcess(cmd, 0)
+                                             if cmd and cmd[0] == sys.executable else original(cmd, *a, **k))
+    try:
+        assert m.replay(record, echo=lambda *_: None) == 1
+    finally:
+        m.subprocess.run = original
+
+
+def test_a_replayed_mutation_still_caught_is_green(tmp_path):
+    f = _repo(tmp_path)
+    record = tmp_path / "qa" / "mutations.json"
+    main(["--record", str(record), str(f), 's.replace("2", "99")',
+          "--", sys.executable, "-c", "raise SystemExit(1)"])
+    from qabench.mutate import replay
+    assert replay(record, echo=lambda *_: None) == 0
+
+
+def test_a_stale_anchor_is_a_stale_record_not_a_pass(tmp_path):
+    """The expression no longer applies: the code moved under the record."""
+    f = _repo(tmp_path)
+    record = tmp_path / "qa" / "mutations.json"
+    main(["--record", str(record), str(f), 's.replace("2", "99")',
+          "--", sys.executable, "-c", "raise SystemExit(1)"])
+    f.write_text("value = 7  # the anchor is gone\n")
+    from qabench.mutate import replay
+    assert replay(record, echo=lambda *_: None) == 1
+
+
+def test_replaying_an_empty_record_is_three_not_zero(tmp_path):
+    from qabench.mutate import replay
+    (tmp_path / "none.json").write_text('{"mutations": []}', encoding="utf-8")
+    assert replay(tmp_path / "none.json", echo=lambda *_: None) == 3
+
+
+def test_the_usage_line_names_every_flag_the_command_takes(capsys):
+    """The usage line is itself a recorded conclusion, and it did not move when
+    --record and --replay landed: somebody probing with a bare `mutate` read the
+    old signature off the NEW code and reported the flags missing."""
+    assert main([]) == 2
+    err = capsys.readouterr().err
+    assert "--record" in err and "--replay" in err
+
+
+def test_an_empty_record_says_it_is_the_normal_state_not_a_fault(tmp_path, capsys):
+    from qabench.mutate import replay
+    said = []
+    (tmp_path / "none.json").write_text('{"mutations": []}', encoding="utf-8")
+    assert replay(tmp_path / "none.json", echo=said.append) == 3
+    assert "REPLAY IS ONLY AS GOOD AS THE RECORD" in said[0] and "not a configuration fault" in said[0]

@@ -216,7 +216,19 @@ class Bench:
     explore: Explore = field(default_factory=Explore)
     probes: list[Probe] = field(default_factory=list)
     sandbox_entity: str = ""       # the one tenant/client a write may touch (manifest top level)
-    enumerate_routes: str = ""     # the project's own route-listing command (manifest top level)
+    #: The project's own route-listing command (manifest top level). THIS KIT
+    #: NEVER EXECUTES IT AND NEVER CHECKS IT, and the browser-sweep procedure
+    #: pipes it straight into a sweep — so a stale command yields a near-empty
+    #: surface that READS AS A SMALL, CLEAN PROJECT. tharros's is
+    #: `[print(r.path) for r in app.routes if hasattr(r, "methods")]`, which
+    #: under the pinned FastAPI (every include_router wrapped in an
+    #: `_IncludedRouter`) prints 4 health routes out of 216, with no error. The
+    #: project's own code already knew the trap; the manifest held the stale
+    #: copy, and nothing ran it. Register it as a `population` guard whose
+    #: `superset:` is a SECOND derivation (the app's openapi() paths), so the
+    #: two are compared by member — and a zero from it is did-not-run, never
+    #: "no routes".
+    enumerate_routes: str = ""
     project: str = ""
 
     def provider(self, dotted: str) -> Callable[..., Any]:

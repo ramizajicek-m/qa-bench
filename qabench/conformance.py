@@ -37,6 +37,21 @@ CONTRACT = Path(__file__).with_name("contract.yml")
 MARK = {"implemented": "●", "partial": "◐", "absent": "○"}
 FATAL_KINDS = {"missing", "status", "name", "evidence_missing", "no_evidence", "no_reason"}
 
+#: Manifest fields this kit must NEVER execute, with the reason — asserted, not
+#: merely absent from a run list. `full_remote` dispatches the night lane, and on
+#: at least one project that lane PROMOTES TO PRODUCTION ON GREEN: a future
+#: widening that reads it as "a cheap one-line command field" would turn a
+#: conformance run into a production deploy. Any code that runs a manifest field
+#: consults this set first.
+NEVER_RUN = {
+    "full_remote": "dispatches the night lane, which on tharros promotes to production on green",
+    "full_local": "is the whole night lane on a laptop — the most expensive thing a project owns",
+    "unit_tier": "is a test tier; tiers are verdicted by `ran` when they actually run",
+    "browser_tier": "is a test tier; tiers are verdicted by `ran` when they actually run",
+}
+#: Manifest fields that are cheap and read-only, and so may be demanded to run.
+RUN_TO_VERIFY = ("enumerate_routes",)
+
 
 def contract() -> dict:
     return yaml.safe_load(CONTRACT.read_text(encoding="utf-8"))
@@ -94,6 +109,42 @@ def judge(manifest: dict, root: Path | None = None) -> list[dict]:
                 elif isinstance(missing, list) and set(missing) - allowed:
                     out.append(_finding(cid, "partial_unnamed",
                                         f"{cid}: `missing` names {sorted(set(missing) - allowed)}, which the contract does not know; use {sorted(allowed)}"))
+    # ANY COMMAND A DOCUMENT HANDS YOU IS UNTESTED UNLESS SOMETHING RUNS IT.
+    # tharros's `enumerate_routes` printed 4 routes out of 216 under its pinned
+    # framework, with no error, while the project's own code walked the router
+    # correctly: the manifest held a stale copy and nothing executed it. A
+    # presence check on the KEY is the only thing that was checking it. So a
+    # manifest declaring an enumeration command must register it as a
+    # `population` guard — run, compared by member against a second derivation,
+    # and holding at least one named witness. Advisory first, per the estate's
+    # adoption rule; it becomes fatal per repo once that repo is clean.
+    command = str(manifest.get("enumerate_routes") or "").strip()
+    if command and root is not None:
+        reg = (manifest.get("population") or {}).get("register")
+        guards = []
+        if reg and (Path(root) / reg).exists():
+            guards = (yaml.safe_load((Path(root) / reg).read_text(encoding="utf-8")) or {}).get("guards") or []
+        reads_it = [g for g in guards if isinstance(g, dict)
+                    and (g.get("population") or {}).get("cmd_from") == "enumerate_routes"]
+        copies_it = [g for g in guards if isinstance(g, dict)
+                     and str(((g.get("population") or {}).get("cmd") or "")).strip() == command]
+        runs_it = reads_it or copies_it
+        if copies_it and not reads_it:
+            out.append(_finding("C10", "enumeration_copied",
+                                "a population guard runs a PASTED COPY of enumerate_routes rather than reading it with "
+                                "`cmd_from: enumerate_routes` — the copy passes today and drifts the next time the "
+                                "manifest line changes, which is the same defect one file over: the copy runs, and "
+                                "is no longer the command anybody consumes"))
+        if not runs_it:
+            out.append(_finding("C10", "enumeration_unrun",
+                                "enumerate_routes is declared and NOTHING RUNS IT — any command a document hands you "
+                                "is untested unless something runs it. tharros's printed 4 routes of 216 with no "
+                                "error while its own code walked the router correctly. Register it as a population "
+                                "guard with a second-derivation superset and a named witness"))
+        elif not any((g.get("population") or {}).get("witness") for g in runs_it):
+            out.append(_finding("C10", "enumeration_unwitnessed",
+                                "enumerate_routes runs as a population guard with no named witness — a near-empty "
+                                "result reads as a small, clean project, and only a named route can see that"))
     extra = sorted(set(checks) - set(c["checks"]))
     if extra:
         out.append(_finding("*", "missing", f"checks beyond the twelve: {extra} — a thirteenth needs three ledger rows that fit none of the twelve"))

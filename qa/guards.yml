@@ -1,0 +1,24 @@
+version: 1
+guards:
+  - id: every-command-can-say-it-did-not-run
+    check: C8
+    claims: "every command `python -m qabench` dispatches exits 3 when it decided nothing, and a test asserts it"
+    claims_faculty: "what a command RETURNS when it has nothing to measure"
+    unit: "one dispatched command"
+    undecided: "whether the 3 is returned on the RIGHT did-not-run path; only that some test watched a 3 at all"
+    population:
+      derived_from: ast
+      faculty: "the dispatch table in __main__, parsed"
+      cmd: "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python scripts/qa/pop_commands.py"
+      count: 16
+    subject:
+      cmd: "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python scripts/qa/subj_exit3.py"
+    capability:
+      fires:
+        - cmd: "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python scripts/qa/selftest_exit3.py --fires"
+          from: qabench/__main__.py
+          was: "`show` — dispatched, and no test asserts any exit for it"
+      silent:
+        - cmd: "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python scripts/qa/selftest_exit3.py --silent"
+          from: tests/test_population.py
+          was: "population, whose tests assert `== 3` in four places"

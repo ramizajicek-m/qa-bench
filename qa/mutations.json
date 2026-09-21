@@ -1,0 +1,756 @@
+{
+ "mutations": [
+  {
+   "file": "qabench/population.py",
+   "expr": "s.replace('    if not sub.members:', '    if False:', 1)",
+   "command": [
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_population.py",
+    "-q",
+    "-p",
+    "no:randomly"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-20"
+  },
+  {
+   "file": "qabench/population.py",
+   "expr": "s.replace('    row.missing = [m for m in missing if m not in excused]', '    row.missing = []', 1)",
+   "command": [
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_population.py",
+    "-q",
+    "-p",
+    "no:randomly"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-20"
+  },
+  {
+   "file": "qabench/population.py",
+   "expr": "s.replace('    elif derived in REFUSED:', '    elif False:', 1)",
+   "command": [
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_population.py",
+    "-q",
+    "-p",
+    "no:randomly"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-20"
+  },
+  {
+   "file": "qabench/population.py",
+   "expr": "s.replace('    if actual > pinned:', '    if True:', 1)",
+   "command": [
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_population.py",
+    "-q",
+    "-p",
+    "no:randomly"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-20"
+  },
+  {
+   "file": "qabench/population.py",
+   "expr": "s.replace('    if not silent:', '    if False:', 1)",
+   "command": [
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_population.py",
+    "-q",
+    "-p",
+    "no:randomly"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-20"
+  },
+  {
+   "file": "qabench/population.py",
+   "expr": "s.replace('    if isinstance(fires, str):', '    if False:', 1)",
+   "command": [
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_population.py",
+    "-q",
+    "-p",
+    "no:randomly"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-20"
+  },
+  {
+   "file": "qabench/population.py",
+   "expr": "s.replace('        if outside:', '        if False:', 1)",
+   "command": [
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_population.py",
+    "-q",
+    "-p",
+    "no:randomly"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-20"
+  },
+  {
+   "file": "qabench/population.py",
+   "expr": "s.replace('    elif claims_faculty == pop_faculty:', '    elif False:', 1)",
+   "command": [
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_population.py",
+    "-q",
+    "-p",
+    "no:randomly"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-20"
+  },
+  {
+   "file": "qabench/population.py",
+   "expr": "s.replace('        if prefix and not any(str(prefix) in m for m in pop.members):', '        if False:', 1)",
+   "command": [
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_population.py",
+    "-q",
+    "-p",
+    "no:randomly"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-20"
+  },
+  {
+   "file": "qabench/population.py",
+   "expr": "s.replace('    if observed:', '    if False:', 1)",
+   "command": [
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_population.py",
+    "-q",
+    "-p",
+    "no:randomly"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-20"
+  },
+  {
+   "file": "qabench/population.py",
+   "expr": "s.replace('        results = {n: run(root, c) for n, c in named}', '        results = {n: run(root, c) for n, c in named[:1]}', 1)",
+   "command": [
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_population.py",
+    "-q",
+    "-p",
+    "no:randomly"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-20"
+  },
+  {
+   "file": "qabench/population.py",
+   "expr": "s.replace('    if kind == \"reach\" and not complement:', '    if False:', 1)",
+   "command": [
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_population.py",
+    "-q",
+    "-p",
+    "no:randomly"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-20"
+  },
+  {
+   "file": "qabench/ran.py",
+   "expr": "s.replace('    if not hits:', '    if False:', 1)",
+   "command": [
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_ran.py",
+    "-q",
+    "-p",
+    "no:randomly"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-20"
+  },
+  {
+   "file": "qabench/ran.py",
+   "expr": "s.replace('    if refused and re.search(refused, output, re.M):', '    if False:', 1)",
+   "command": [
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_ran.py",
+    "-q",
+    "-p",
+    "no:randomly"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-20"
+  },
+  {
+   "file": "qabench/ran.py",
+   "expr": "s.replace('    if decided and not re.search(decided, output, re.M):', '    if False:', 1)",
+   "command": [
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_ran.py",
+    "-q",
+    "-p",
+    "no:randomly"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-20"
+  },
+  {
+   "file": "qabench/ran.py",
+   "expr": "s.replace('    if silent:', '    if False:', 1)",
+   "command": [
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_ran.py",
+    "-q",
+    "-p",
+    "no:randomly"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-20"
+  },
+  {
+   "file": "qabench/distinct.py",
+   "expr": "s.replace('    return {text[i:i + k] for i in range(len(text) - k + 1)}', '    return {text[0:k]} if len(text) >= k else set()', 1)",
+   "command": [
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_distinct.py",
+    "-q",
+    "-p",
+    "no:randomly"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-20"
+  },
+  {
+   "file": "qabench/distinct.py",
+   "expr": "s.replace('    if measured >= pin:', '    if False:', 1)",
+   "command": [
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_distinct.py",
+    "-q",
+    "-p",
+    "no:randomly"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-20"
+  },
+  {
+   "file": "qabench/warrant.py",
+   "expr": "s.replace('    if coordinates:', '    if False:', 1)",
+   "command": [
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_warrant.py",
+    "-q",
+    "-p",
+    "no:randomly"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-20"
+  },
+  {
+   "file": "qabench/warrant.py",
+   "expr": "s.replace(\"{r['id']} reviewed {mine} \u2014 not wrong, \", \"{r['id']} reviewed {mine} \u2014 WRONG, \", 1)",
+   "command": [
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_warrant.py",
+    "-q",
+    "-p",
+    "no:randomly"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-20"
+  },
+  {
+   "file": "qabench/warrant.py",
+   "expr": "s.replace('    elif unresolved != unresolved_pin:', '    elif unresolved > unresolved_pin:', 1)",
+   "command": [
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_warrant.py",
+    "-q",
+    "-p",
+    "no:randomly"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-20"
+  },
+  {
+   "file": "qabench/mutate.py",
+   "expr": "s.replace('    dirty = _uncommitted(target)', '    dirty = False', 1)",
+   "command": [
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_mutate.py",
+    "-q",
+    "-p",
+    "no:randomly"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-20"
+  },
+  {
+   "file": "qabench/mutate.py",
+   "expr": "s.replace('        elif code == 0 and r.get(\"verdict\") == \"caught\":', '        elif False:', 1)",
+   "command": [
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_mutate.py",
+    "-q",
+    "-p",
+    "no:randomly"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-20"
+  },
+  {
+   "file": "qabench/population.py",
+   "expr": "s.replace(\"    never_a_candidate = sorted(m for m in excused if m not in set(pop.members))\", \"    never_a_candidate = []\", 1)",
+   "command": [
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_population.py",
+    "-q",
+    "-p",
+    "no:randomly"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-20"
+  },
+  {
+   "file": "qabench/population.py",
+   "expr": "s.replace(\"    if not spec.get(\\\"unit\\\"):\", \"    if False:\", 1)",
+   "command": [
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_population.py",
+    "-q",
+    "-p",
+    "no:randomly"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-20"
+  },
+  {
+   "file": "qabench/population.py",
+   "expr": "s.replace(\"    if metric and isinstance(fires, list) and not any(\", \"    if False and isinstance(fires, list) and not any(\", 1)",
+   "command": [
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_population.py",
+    "-q",
+    "-p",
+    "no:randomly"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-20"
+  },
+  {
+   "file": "qabench/population.py",
+   "expr": "s.replace(\"            if not layer.get(\\\"proven_by\\\"):\", \"            if False:\", 1)",
+   "command": [
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_population.py",
+    "-q",
+    "-p",
+    "no:randomly"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-20"
+  },
+  {
+   "file": "qabench/ran.py",
+   "expr": "s.replace(chr(32)*4+\"if was[\\\"sha\\\"] != now[\\\"sha\\\"]:\", chr(32)*4+\"if False:\", 1)",
+   "command": [
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_ran.py",
+    "-q",
+    "-p",
+    "no:randomly"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-20"
+  },
+  {
+   "file": "qabench/population.py",
+   "expr": "s.replace(chr(32)*8+\"if not paired:\", chr(32)*8+\"if False:\", 1)",
+   "command": [
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_population.py",
+    "-q",
+    "-p",
+    "no:randomly"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-20"
+  },
+  {
+   "file": "qabench/population.py",
+   "expr": "s.replace(chr(32)*8+\"if not pair or str(pair.get(\\\"kind\\\") or \\\"sweep\\\") != \\\"reach\\\":\", chr(32)*8+\"if False:\", 1)",
+   "command": [
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_population.py",
+    "-q",
+    "-p",
+    "no:randomly"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-20"
+  },
+  {
+   "file": "qabench/population.py",
+   "expr": "s.replace(\"    if stimulus and isinstance(fires, list) and not any(\", \"    if False and isinstance(fires, list) and not any(\", 1)",
+   "command": [
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_population.py",
+    "-q",
+    "-p",
+    "no:randomly"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-20"
+  },
+  {
+   "file": "qabench/population.py",
+   "expr": "s.replace(chr(32)*8+\"elif not spec.get(\\\"ends_when\\\"):\", chr(32)*8+\"elif False:\", 1)",
+   "command": [
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_population.py",
+    "-q",
+    "-p",
+    "no:randomly"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-20"
+  },
+  {
+   "file": "qabench/population.py",
+   "expr": "s.replace(chr(32)*12+\"if r[\\\"reports\\\"] == \\\"floor\\\":\", chr(32)*12+\"if False:\", 1)",
+   "command": [
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_population.py",
+    "-q",
+    "-p",
+    "no:randomly"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-20"
+  },
+  {
+   "file": "qabench/population.py",
+   "expr": "s.replace(chr(32)*8+\"unlocatable = [m for m in pop.members if \\\"::\\\" not in m][:8]\", chr(32)*8+\"unlocatable = []\", 1)",
+   "command": [
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_population.py",
+    "-q",
+    "-p",
+    "no:randomly"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-20"
+  },
+  {
+   "file": "qabench/population.py",
+   "expr": "s.replace(\"    if metric and not measured_in:\", \"    if False:\", 1)",
+   "command": [
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_population.py",
+    "-q",
+    "-p",
+    "no:randomly"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-21"
+  },
+  {
+   "file": "qabench/population.py",
+   "expr": "s.replace(chr(32)*8+\"if seam:\", chr(32)*8+\"if False:\", 1)",
+   "command": [
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_population.py",
+    "-q",
+    "-p",
+    "no:randomly"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-21"
+  },
+  {
+   "file": "qabench/population.py",
+   "expr": "s.replace(\"    if metric and not cap.get(\\\"plausible\\\"):\", \"    if False:\", 1)",
+   "command": [
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_population.py",
+    "-q",
+    "-p",
+    "no:randomly"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-21"
+  },
+  {
+   "file": "qabench/population.py",
+   "expr": "s.replace(\"    if kind == \\\"reach\\\" and not sub.members and pop.members:\", \"    if False:\", 1)",
+   "command": [
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_population.py",
+    "-q",
+    "-p",
+    "no:randomly"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-21"
+  },
+  {
+   "file": "qabench/population.py",
+   "expr": "s.replace(chr(32)*8+\"if not isinstance(read, int):\", chr(32)*8+\"if False:\", 1)",
+   "command": [
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_population.py",
+    "-q",
+    "-p",
+    "no:randomly"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-21"
+  },
+  {
+   "file": "qabench/population.py",
+   "expr": "s.replace(chr(32)*8+\"if declined and not sub_spec.get(\\\"declined_why\\\"):\", chr(32)*8+\"if False:\", 1)",
+   "command": [
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_population.py",
+    "-q",
+    "-p",
+    "no:randomly"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-21"
+  },
+  {
+   "file": "qabench/population.py",
+   "expr": "s.replace(chr(32)*8+chr(105)+chr(102)+\" not any(str(w[\\\"member\\\"]) in m for m in pop.members):\", chr(32)*8+\"if False:\", 1)",
+   "command": [
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_population.py",
+    "-q",
+    "-p",
+    "no:randomly"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-21"
+  },
+  {
+   "file": "qabench/population.py",
+   "expr": "s.replace(chr(32)*12+\"if not hit:\", chr(32)*12+\"if False:\", 1)",
+   "command": [
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_population.py",
+    "-q",
+    "-p",
+    "no:randomly"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-21"
+  },
+  {
+   "file": "qabench/conformance.py",
+   "expr": "s.replace(chr(32)*8+\"if not runs_it:\", chr(32)*8+\"if False:\", 1)",
+   "command": [
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_conformance.py",
+    "-q",
+    "-p",
+    "no:randomly"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-21"
+  },
+  {
+   "file": "qabench/conformance.py",
+   "expr": "s.replace(chr(32)*8+\"if copies_it and not reads_it:\", chr(32)*8+\"if False:\", 1)",
+   "command": [
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_conformance.py",
+    "-q",
+    "-p",
+    "no:randomly"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-21"
+  },
+  {
+   "file": "qabench/population.py",
+   "expr": "s.replace(chr(32)*4+\"if \\\"::\\\" not in detector:\", chr(32)*4+\"if False:\", 1)",
+   "command": [
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_population.py",
+    "-q",
+    "-p",
+    "no:randomly"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-21"
+  },
+  {
+   "file": "qabench/ran.py",
+   "expr": "s.replace(\"    if executed_nothing:\", \"    if False:\", 1)",
+   "command": [
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_ran.py",
+    "-q",
+    "-p",
+    "no:randomly"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-21"
+  },
+  {
+   "file": "qabench/population.py",
+   "expr": "s.replace(\"    if not isinstance(spec, dict):\", \"    if False:\", 1)",
+   "command": [
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_population.py",
+    "-q",
+    "-p",
+    "no:randomly"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-21"
+  }
+ ]
+}
