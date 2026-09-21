@@ -55,3 +55,50 @@ def test_an_assertion_message_is_prose_not_a_selector():
 def test_code_vocabulary_is_matched_before_stemming_too():
     """`files` stems to `fil`, which is not code vocabulary; `files` is."""
     assert inherit.unexplained('X = "files"\n', "anything at all", {}, python=True) == []
+
+
+WINDOW_BEFORE = '''
+def dialogs(s, ms):
+    out = []
+    for i, m in enumerate(ms):
+        end = ms[i + 1].start() if i + 1 < len(ms) else len(s)
+        out.append("data-dialog-close" in s[m.start():end])
+    return out
+'''
+WINDOW_AFTER = WINDOW_BEFORE.replace("ms[i + 1].start() if i + 1 < len(ms) else len(s)", "_extent(s, m.start())")
+
+INVARIANT_BEFORE = '''
+import pytest, re
+@pytest.mark.parametrize("name", ["A", "B"])
+def test_a_marking_dialog_really_publishes(name):
+    hosts = "\\\\n".join(_source(h) for h in HOSTS)
+    completion = re.search(rf"<{name}.*?onDone", hosts)
+    assert completion
+    assert "publish" in hosts
+'''
+INVARIANT_AFTER = INVARIANT_BEFORE.replace('assert "publish" in hosts', 'assert "publish(" in _callback_of(name, hosts)')
+
+
+def test_the_window_is_the_one_anat_shipped_and_the_walk_is_not():
+    """anat 4eba1e09: the extent of dialog i ended at dialog i+1's start; 17 reported against 18 by nesting."""
+    assert [k for _, k, _ in inherit.methods(WINDOW_BEFORE)] == ["window"]
+    assert inherit.methods(WINDOW_AFTER) == []
+
+
+def test_the_invariant_assertion_is_the_one_ana_shipped_and_the_scoped_one_is_not():
+    """ana 7a6a1b7b^: `"publish" in hosts` passed for every dialog because one dialog in the file publishes."""
+    assert [k for _, k, _ in inherit.methods(INVARIANT_BEFORE)] == ["invariant"]
+    assert inherit.methods(INVARIANT_AFTER) == []
+
+
+def test_an_exception_captured_from_the_parameter_carries_it():
+    src = '''
+import pytest
+@pytest.mark.parametrize("field", ["a", "b"])
+def test_x(field):
+    with pytest.raises(ValueError) as e:
+        make(field)
+    assert field in str(e.value)
+    assert "final_price_agreed" in str(e.value)
+'''
+    assert inherit.methods(src) == []

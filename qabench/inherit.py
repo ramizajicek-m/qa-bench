@@ -143,6 +143,95 @@ def unexplained(source: str, prop: str, declared: dict[str, str], *, python: boo
     return sorted((w, lit) for w, lit in words(literals(source, python=python)).items() if w not in have)
 
 
+# --- THE METHOD HALF --------------------------------------------------------
+# Two inherited METHODS carry no wrong literal at all, so the scan above cannot
+# see them. Both were measured on the real before-states before this was written:
+#
+#   WINDOW. anat's dialog ratchet (origin/staging blob 4eba1e09) took the extent
+#   of dialog i as the span to the START of dialog i+1, `ms[i + 1].start()`, and
+#   asked whether `data-dialog-close` was `in` that span. Every literal in the
+#   file is right; the span is not the element. voice-test-modal's next overlay
+#   is ~13,000 lines below, so its window found a neighbour's attribute: 17
+#   reported against 18 by true nesting — a signal of 1 in 146.
+#
+#   PARAMETER-INVARIANT ASSERTION. ana's ACT-02 (7a6a1b7b^) is parametrised by
+#   dialog `name`, and its second assertion, `"publish" in hosts`, never mentions
+#   `name`: the right word over the right corpus at the wrong extent, reused from
+#   the line above where that extent was correct. It passes for every dialog
+#   because ONE dialog in the file publishes.
+
+def _names(node) -> set[str]:
+    return {n.id for n in ast.walk(node) if isinstance(n, ast.Name)}
+
+
+def _next_match_bound(expr, assigned: dict) -> bool:
+    """True when a slice bound is, or was assigned from, the NEXT match's start."""
+    seen = [expr]
+    if isinstance(expr, ast.Name) and expr.id in assigned:
+        seen.append(assigned[expr.id])
+    for e in seen:
+        for n in ast.walk(e):
+            if (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr in ("start", "end")
+                    and isinstance(n.func.value, ast.Subscript)
+                    and isinstance(n.func.value.slice, ast.BinOp) and isinstance(n.func.value.slice.op, ast.Add)):
+                return True
+    return False
+
+
+def methods(source: str) -> list[tuple[int, str, str]]:
+    """[(line, kind, code)] for the two inherited methods, in a Python guard file."""
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return []
+    out = []
+    for fn in [n for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]:
+        assigned = {t.id: a.value for a in ast.walk(fn) if isinstance(a, ast.Assign)
+                    for t in a.targets if isinstance(t, ast.Name)}
+        for cmp in [n for n in ast.walk(fn) if isinstance(n, ast.Compare)]:
+            if any(isinstance(op, (ast.In, ast.NotIn)) for op in cmp.ops):
+                for right in cmp.comparators:
+                    if (isinstance(right, ast.Subscript) and isinstance(right.slice, ast.Slice)
+                            and right.slice.upper is not None and _next_match_bound(right.slice.upper, assigned)):
+                        out.append((cmp.lineno, "window",
+                                    "containment over a span that ends at the NEXT match's start — the span is not "
+                                    "the element; walk the element's own extent"))
+        params = set()
+        for d in fn.decorator_list:
+            if (isinstance(d, ast.Call) and isinstance(d.func, ast.Attribute) and d.func.attr == "parametrize"
+                    and d.args and isinstance(d.args[0], ast.Constant) and isinstance(d.args[0].value, str)):
+                params |= {x.strip() for x in d.args[0].value.split(",") if x.strip()}
+        if not params:
+            continue
+        # Every argument carries the parameter's effect, not only the parametrised
+        # names: a fixture like `page` was navigated WITH the parameter, so an
+        # assertion on it is per-subject even though it never names it. Measured:
+        # without this the estate run flagged 973 assertions, nearly all browser
+        # tests asserting on `page`.
+        tainted = set(params) | {a.arg for a in fn.args.args + fn.args.kwonlyargs}
+        for _ in range(3):                          # propagate through locals derived from the parameter
+            for a in [n for n in ast.walk(fn) if isinstance(n, ast.Assign)]:
+                if _names(a.value) & tainted:
+                    tainted |= {t.id for t in a.targets if isinstance(t, ast.Name)}
+            # `with pytest.raises(...) as e:` whose body used the parameter: `e` carries it.
+            for w in [n for n in ast.walk(fn) if isinstance(n, (ast.With, ast.AsyncWith))]:
+                if any(_names(b) & tainted for b in w.body):
+                    tainted |= {i.optional_vars.id for i in w.items if isinstance(i.optional_vars, ast.Name)}
+        asserts = [n for n in ast.walk(fn) if isinstance(n, ast.Assert)]
+        per_subject = [a for a in asserts if _names(a.test) & tainted]
+        for a in asserts:
+            # A CONTAINMENT over a corpus the parameter never touched, BESIDE an
+            # assertion that does read the parameter: ana's second assert, reusing
+            # the extent the first one needed. A function whose assertions are all
+            # invariant is a different shape (a fixed-case test), not this one.
+            containment = isinstance(a.test, ast.Compare) and any(isinstance(op, (ast.In, ast.NotIn)) for op in a.test.ops)
+            if containment and per_subject and not (_names(a.test) & tainted):
+                out.append((a.lineno, "invariant",
+                            f"parametrised by {', '.join(sorted(params))}, and this assertion never mentions it — it "
+                            "is the same check for every parameter, so one member can satisfy it for all"))
+    return sorted(out)
+
+
 def run(argv: list[str], *, echo=print) -> int:
     if not argv or argv[0].startswith("-") or "--property" not in argv:
         print('usage: python -m qabench inherited FILE --property "<the property, in words>" [--declared LIT=why ...]',
@@ -164,10 +253,15 @@ def run(argv: list[str], *, echo=print) -> int:
         print(f"inherited: cannot read {path}: {ex} (exit 3)", file=sys.stderr)
         return 3
     found = unexplained(src, prop, declared, python=path.suffix == ".py")
+    how = methods(src) if path.suffix == ".py" else []
     if "--json" in argv:
-        echo(json.dumps([{"word": w, "from": lit} for w, lit in found], ensure_ascii=False, indent=1))
+        echo(json.dumps({"words": [{"word": w, "from": lit} for w, lit in found],
+                         "methods": [{"line": n, "kind": k, "why": t} for n, k, t in how]}, ensure_ascii=False, indent=1))
     else:
-        echo(f"inherited: {len(found)} selector word(s) in {path.name} that the property does not contain")
+        echo(f"inherited: {len(found)} selector word(s) in {path.name} that the property does not contain · "
+             f"{len(how)} inherited method(s)")
+        for n, k, t in how:
+            echo(f"  line {n} {k}: {t}")
         for w, lit in found:
             echo(f"  {w:18} from {lit!r}  — the scope, so add it to the property, or declare why it names it")
-    return 1 if found else 0
+    return 1 if found or how else 0
