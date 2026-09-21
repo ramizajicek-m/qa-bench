@@ -200,6 +200,19 @@ none of which any guard would have found:
   second, so one file changed, one did not, and the count of rewritten files did
   not match the count of files.
 
+  A FETCH THAT TIMED OUT AND WAS NEVER READ BACK. `git fetch origin` timed out
+  at session start and was moved to the background; an audit then read `main`
+  seven commits behind `origin/main`, and its findings survived only because
+  none of the audited files changed across that range. A TIMED-OUT COMMAND IS
+  THE LOUDEST POSSIBLE SIGNAL AND IT STILL PASSED SILENTLY, because the next
+  step read a ref that was merely PRESENT. PRESENCE IS NOT FRESHNESS. The
+  read-back for a fetch is `git ls-remote origin refs/heads/<branch>` equal to
+  `git rev-parse origin/<branch>`, before reading the tree.
+
+That is four operations with one detector in one night — measurement, commit,
+edit and fetch — and the fourth is the case for it being a habit rather than a
+set of guards: nobody would have written a guard for "the fetch did not finish".
+
 EACH IS ONE EXTRA OBSERVATION, TAKEN FROM THE ARTEFACT RATHER THAN THE PROCESS:
 the report's own `judged`, the new sha, the second file's content. The
 alternative is three guards — for stale reports, for shell quoting, for regex
