@@ -2483,6 +2483,36 @@ def _inherited_prompt(row: Row, pop_spec: dict, root: Path) -> None:
               "(declare it under population.literals with why)")
 
 
+#: What a guard MEASURES AGAINST. Only `product` sees the thing a person uses.
+CORPORA = ("product", "fixture", "source")
+
+
+def seams_of_corpus(guards: list) -> list[dict]:
+    """Rows whose guards, together, read as coverage and, singly, never measure the product.
+
+    THE RIGHT CHECK ON THE WRONG CORPUS, BESIDE THE WRONG CHECK ON THE RIGHT CORPUS, BOTH GREEN. anat's
+    UI-LST-08 ("table headers stay visible while scrolling") had three green guards: one walked the REAL pages
+    and checked that a heading does not OVERLAP its row (never scrolls); one scrolled and asserted the heading
+    stays on screen, on a hand-written `page.set_content` fixture; one asserted the class and the CSS rule
+    exist. The union reads as coverage; the intersection is empty — /admin/settings/alerts scrolled its heading
+    to top -195 with four checkbox columns unlabelled. Neither instrument is wrong; the failure is in the seam,
+    and nothing in a suite computes seams, because nothing records, per property, which guard measures it on
+    which corpus. So a guard names the row it `answers:` and its `corpus:` (product | fixture | source), and a
+    row every one of whose guards is fixture or source is listed: nobody has measured it on the product. A
+    fixture cannot contain the case its author did not imagine — which is the case that bites.
+    """
+    by_row: dict[str, list[str]] = {}
+    for g in guards:
+        if not isinstance(g, dict):
+            continue
+        rows_ = g.get("answers")
+        corpus = str(g.get("corpus") or "")
+        for rid in ([rows_] if isinstance(rows_, str) else rows_ or []):
+            by_row.setdefault(str(rid), []).append(corpus)
+    return [{"row": rid, "corpora": sorted(set(c or "undeclared" for c in cs))}
+            for rid, cs in sorted(by_row.items()) if "product" not in cs]
+
+
 def run_population(root: Path, cfg: dict, *, today: dt.date | None = None, run=read_members) -> dict:
     today = today or dt.date.today()
     reg_path = root / cfg["register"]
@@ -2500,6 +2530,7 @@ def run_population(root: Path, cfg: dict, *, today: dt.date | None = None, run=r
                          if isinstance(spec, dict) and spec.get("status") == "implemented")
     covered = {r.check for r in rows}
     return {
+        "unmet": seams_of_corpus(guards),
         "register": str(reg_path),
         "guards": len(rows),
         "rows": [r.__dict__ for r in rows],
@@ -2549,6 +2580,9 @@ def run(argv: list[str], *, today: dt.date | None = None) -> int:
                 print(f"       {r['note']}")
             for p in r["problems"]:
                 print(f"       {p}")
+        for u in out["unmet"]:
+            print(f"  SEAM {u['row']}: every guard that answers it measures {', '.join(u['corpora'])} — none measures "
+                  "the product (reported; a fixture cannot contain the case its author did not imagine)")
         for c in out["unregistered"]:
             print(f"  RED  {c} is `implemented` in the manifest and no guard says what population it covers")
     if not out["guards"]:

@@ -1134,3 +1134,23 @@ def test_the_inherited_prompt_runs_inside_the_judge(repo):
         or "property is unstated" not in (row["note"] if isinstance(row, dict) else row.note)
     bare = judged(repo)
     assert "property is unstated" in (bare["note"] if isinstance(bare, dict) else bare.note)
+
+
+def test_a_row_whose_guards_never_measure_the_product_is_a_seam():
+    """anat UI-LST-08: real pages without scrolling, scrolling on a fixture, and the CSS rule's presence — all green."""
+    guards = [
+        {"id": "overlap", "answers": "UI-LST-08", "corpus": "product"},
+        {"id": "scroll", "answers": ["UI-LST-08", "UI-LST-09"], "corpus": "fixture"},
+        {"id": "css", "answers": "UI-LST-09", "corpus": "source"},
+        {"id": "other", "answers": "UI-X-01"},
+    ]
+    seams = {u["row"]: u["corpora"] for u in population.seams_of_corpus(guards)}
+    assert "UI-LST-08" not in seams                       # one guard measures the product
+    assert seams["UI-LST-09"] == ["fixture", "source"]     # the union reads as coverage; nothing measures the product
+    assert seams["UI-X-01"] == ["undeclared"]
+
+
+def test_the_register_reports_seams(repo):
+    root = repo([{**guard(), "answers": "ACT-11", "corpus": "fixture"}])
+    out = population.run_population(root, {"register": "qa/guards.yml"}, today=TODAY)
+    assert out["unmet"] == [{"row": "ACT-11", "corpora": ["fixture"]}]
