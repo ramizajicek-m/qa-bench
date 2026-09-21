@@ -1539,6 +1539,18 @@ THE PROPERTY THE PREMISE NEEDS, NOT THE LITERAL THAT HAPPENS TO EXHIBIT IT —
 which is the marker-keyed rule arriving in an assertion's expected value: a test
 keyed on the literal is keyed on the current implementation of the fix.
 
+The second instance, anat the same day, shows the literal need not be a whole
+message — a FORMAT is enough. A test whose purpose was "real data is not
+dropped" from dunning scripts asserted "2026-10-01" was in the output: the due
+date exactly as the column stores it, which is what three customer paths were
+sending. Fixing the date to "Oct 1, 2026" turned it red, and the natural reading
+of that red is "the fix broke dunning". A TEST FOR THE PRESENCE OF A VALUE MUST
+NOT ALSO ASSERT ITS FORM UNLESS FORM IS THE CLAIM — there it silently was, and
+nobody chose it. Where to look next: all three paths formatted the AMOUNT for
+the reader and passed the DATE through raw. Presentation had been thought about
+for money only, so every other typed value on an outbound surface (C9) is a
+suspect.
+
 So nothing in this file should be read as covering the criterion question, and
 the decision not to add a `criterion:` field is now supported rather than merely
 prudent: a guard able to state its own criterion correctly would not have had
