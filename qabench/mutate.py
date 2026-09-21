@@ -60,6 +60,15 @@ the same side of every breakpoint and both cases would have passed with every
 viewport listener deleted. A FIXTURE THAT VARIES A PARAMETER ACROSS NO THRESHOLD
 IS NOT VARYING IT.
 
+AND A FIXTURE PAIR LEAVES AN INTERVAL FOR A WRONG THRESHOLD TO LIVE IN; A
+SELECTOR HAS NO INTERVAL. A row requiring a loading indicator after 300 ms was
+tested with fixtures at 80 ms (no bar) and 900 ms (bar). Those BRACKET the
+threshold to (80, 900) and pin it nowhere inside, so `SHOW_AFTER_MS = 700` kept
+ten tests green while breaking the row; a 400 ms case pins it to (80, 400]. The
+positive pattern is a guard whose POPULATION IS THE THRESHOLD — pick lists
+"longer than 10 items" swept as `options.length > 10` — where the row's number
+and the test's number are ONE EXPRESSION and cannot drift apart.
+
 Two refusals, both earned:
 
   * an expression that changes nothing exits 2. AN UNANCHORED MUTATION IS A

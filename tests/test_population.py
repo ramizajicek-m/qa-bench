@@ -56,6 +56,8 @@ def repo(tmp_path):
     (tmp_path / "qa").mkdir()
     (tmp_path / "docs").mkdir()
     (tmp_path / "docs" / "ledger.md").write_text("evidence", encoding="utf-8")
+    (tmp_path / "docs" / "detector.py").write_text(
+        "def find_stale_citations(rows, statuses):\n    return []\n", encoding="utf-8")
 
     def write(guards, checks=None):
         (tmp_path / "qa" / "manifest.yml").write_text(
@@ -255,7 +257,8 @@ def test_an_empty_live_corpus_is_allowed_only_when_the_detector_is_proven(repo):
 def cap(**over) -> dict:
     """A capability that proves BOTH halves: it fires, and it stays silent on a
     REAL near-miss out of the tree."""
-    c = {"plausible": "[1, 21]; a ratio of 1.0 on rendered text is unreachable",
+    c = {"detector": "docs/detector.py::find_stale_citations",
+         "plausible": "[1, 21]; a ratio of 1.0 on rendered text is unreachable",
          "fires": [{"cmd": emit("caught the stale citation"), "from": "docs/ledger.md",
                     "was": "PRF-06 justifies itself by STA-01 being absent"}],
          "silent": [{"cmd": emit("silent"), "from": "docs/ledger.md",
@@ -1056,3 +1059,20 @@ def test_a_population_can_read_its_command_from_the_manifest(repo, tmp_path):
 def test_a_cmd_from_naming_nothing_is_did_not_run(repo):
     row = judged(repo, population={"cmd": None, "cmd_from": "no_such_field"})
     assert row["unrunnable"] and "names no command in the manifest" in row["problems"][0]
+
+
+def test_a_capability_whose_detector_is_not_a_named_callable_is_refused(repo):
+    """An inline `if stuck > baseline:` had a control asserting 3 > 0 — true on
+    an empty repository and unable to fail. Testing the detector means running
+    the detector; extract first."""
+    row = judged(repo, capability=cap(detector=None))
+    assert any("NAMED, CALLABLE FUNCTION" in p and "extract first" in p for p in row["problems"])
+
+
+def test_a_detector_that_is_not_defined_where_it_is_named_is_refused(repo):
+    row = judged(repo, capability=cap(detector="docs/detector.py::no_such_function"))
+    assert any("no `def no_such_function(`" in p for p in row["problems"])
+
+
+def test_a_named_callable_detector_is_accepted(repo):
+    assert judged(repo, capability=cap())["problems"] == []

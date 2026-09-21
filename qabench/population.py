@@ -65,6 +65,48 @@ FOUR RULES, each paid for by one of the rows above:
      detector elsewhere. The capability runs on every invocation, not only when
      the corpus is empty, because a detector that quietly stopped detecting
      over a NON-empty corpus is FRM-10 itself.
+
+     A CAPABILITY DECLARES BOTH HALVES, and both are REAL cases out of the
+     tree, each naming where it comes from: `fires:`, at least one
+     known-positive the detector must catch, and `silent:`, at least one
+     near-miss it must not. POSITIVES-ONLY PROVES A DETECTOR FIRES, NEVER THAT
+     IT DISCRIMINATES — FRM-04's switch tested against the cases in the switch
+     — and an all-positives self-test over an EMPTY corpus is indistinguishable
+     from a detector that fires on everything over a clean tree. So a
+     capability missing either half is refused by name.
+
+     THE KNOWN-POSITIVE MUST BE THE REAL INSTANCE, and this is the cheapest test
+     nobody runs, because checking the case you were staring at when you wrote
+     the detector feels absurd. It is not: the detector was written from a
+     MEMORY of that instance, not from the instance. A verifier that followed
+     23 dialogs' dismiss handlers reported 16 verified and 15 cleared, with the
+     one independently confirmed bypass in the CLEARED list. Re-running found
+     nothing; re-reading the code found nothing; checking the one case whose
+     answer was already known found it in a minute.
+
+     THE NEAR-MISS HAS TO COME OUT OF THE TREE FOR THE SAME REASON. A detector
+     for "typing is never blocked mid-entry" reported four blocking handlers,
+     all false: its regex knew `if (e.key === "Enter")` and missed the inverted
+     `if (e.key !== "Enter") return`, which is how three of them are written. A
+     near-miss drawn from real code catches that, because the inverted form is
+     what the codebase actually uses; an invented one is written in the
+     spelling its author already had in mind.
+
+     AND THE DETECTOR MUST BE A NAMED, CALLABLE FUNCTION, OR THE SELF-TEST CAN
+     ONLY BE A TAUTOLOGY. Inline logic offers no other move, so the only control
+     expressible is a restatement of the arithmetic — a tautology with the shape
+     of a measurement, which its author does not feel writing. An inline
+     `if stuck > baseline:` had a control asserting `3 > 0`, `not (1 > 1)` and
+     `2 - 1 == 1`: TRUE ON AN EMPTY REPOSITORY, green, beside a docstring
+     correctly naming the degeneracy it failed to check. Extracting
+     `_stuck_finding(stuck, baseline)` made the mutation `stuck > stuck` go red,
+     which it could not before — and the same author wrote two more within the
+     hour of naming the class, in guards written deliberately against it. The
+     cure was ALREADY IN THE TREE TWICE, once under the best sentence of the
+     night — TESTING THE DETECTOR MEANS RUNNING THE DETECTOR — and KEPT BEING
+     REDISCOVERED BECAUSE IT LIVED IN A DOCSTRING RATHER THAN IN THE KIT. So
+     `capability.detector:` names it as `path::function`, and a capability whose
+     detector cannot be named that way is refused: extract first.
   3. THE GAP IS NAMED MEMBER BY MEMBER, so "credited to every template alike"
      is impossible to write (FRM-01).
   4. A RATCHET'S FALL PROVES NOTHING ABOUT A POPULATION THE RATCHET DEFINES.
@@ -1125,6 +1167,28 @@ from a structural derivation or from reading the sites. That is what
 is a hand-read instance, and a guard that cannot produce one is reporting an
 upper bound.
 
+THE PROXY CLASS, with its own tally: filtering on a proxy for the property
+UNDER-COUNTS IN THE DIRECTION THAT LOOKS COMPLETE. Ten proxies in one night, one
+reader — a unit-bearing number for "names a threshold" (found 3, real 6), a
+quoted phrase for "names a contract term" (8 of 9 flagged, 7 fine), writer
+location for "no seed produces it" (found 3, real 43), a column name for "gates
+something visible", HAS-A-CONTROL for "the row is sound" (8 of 9, both failures
+included), a conjunction for "states two obligations" (found 28, missed 4), the
+`UI-` prefix for "cites a row" (37 seen, 127 exist), `[required]` for "a control
+a person fills", co-occurrence for "one mechanism", and a branch name for "what
+the branch does". NINE OF TEN UNDER-RETURN. The one that over-returned was the
+one discarded as noisy: A NOISY FILTER ANNOUNCES ITSELF; A QUIET ONE HANDS YOU A
+SHORT CLEAN LIST AND YOU STOP. Five would have shipped as findings.
+
+AND THE ONLY RULE ANYBODY PRODUCED FOR WHEN A PROXY IS SAFE: A FILTER THAT
+SELECTS ATTENTION IS NOT A FILTER THAT PRODUCES CLAIMS. Absolute wording
+("every", "always", "never") was used to choose which unread rows to OPEN; one
+row — "the count is ALWAYS shown" — had evidence named like a register of
+exceptions to itself, and a finding was half-written before the register was
+opened and found empty. The proxy chose where to look and the reading decided.
+That is the same rule as the next paragraph from the other side: a proxy may
+rank what to read, and may never be the verdict.
+
 A TELL IS A PRIORITISER, NEVER A FILTER — and this matters for anything that
 might one day rank which guards to suspect. The tell that works is vocabulary: a
 reason that cannot be stated without naming an implementation detail is
@@ -1746,6 +1810,22 @@ def judge_capability(cap: dict, root: Path, *, metric: str = "", stimulus: str =
     cannot drift into a synthetic case somebody wrote to be easy to pass.
     """
     out: list[str] = []
+    detector = str(cap.get("detector") or "")
+    if "::" not in detector:
+        out.append(
+            "capability names no `detector: path::function` — a capability whose detector is not a NAMED, "
+            "CALLABLE FUNCTION cannot have a self-test, only a tautology. An inline `if stuck > baseline:` had a "
+            "control asserting `3 > 0`, `not (1 > 1)` and `2 - 1 == 1`: true on an empty repository, green, "
+            "and unable to fail. TESTING THE DETECTOR MEANS RUNNING THE DETECTOR — extract first")
+    else:
+        path, func = detector.split("::", 1)
+        target = root / path
+        if not target.exists():
+            out.append(f"capability.detector {detector!r}: {path} does not exist")
+        elif not re.search(r"^\s*(?:async\s+)?def\s+" + re.escape(func) + r"\s*\(",
+                           target.read_text(encoding="utf-8", errors="replace"), re.M):
+            out.append(f"capability.detector {detector!r}: no `def {func}(` in {path} — the detector is not a "
+                       "named callable there, so the self-test cannot be running it")
     fires = cap.get("fires")
     if stimulus and isinstance(fires, list) and not any(
             isinstance(f, dict) and f.get("produced") for f in fires):
