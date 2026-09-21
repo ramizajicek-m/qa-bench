@@ -322,6 +322,41 @@ the two apart. This file has reasoned from convention itself — "the same page
 carries ten correctly bound pairs, so the codebase knows how" — which is the
 same inference and was luckier.
 
+A SWEEP RETURNS WHAT IT EXAMINED, NOT ONLY HOW MUCH — and this is the
+precondition for the witness rule below, not a tidiness point. A SWEEP THAT
+RETURNS A COUNT AND A VERDICT CANNOT HAVE A WITNESS AT ALL WITHOUT BEING
+REWRITTEN FIRST. Two guards got witnesses for the price of a substring check
+because their scans already returned identifiable rows; a third cost a change to
+its resolver, which returned `{failures, undecided, judged}` — a count and a
+verdict, with nothing to name — and had to grow a `seen` map of the distinct
+signatures it JUDGED, not only the failing ones, before a witness was
+expressible.
+
+THAT IS PROBABLY WHY SO FEW GUARDS HAVE ONE. "Assert a named witness" reads as a
+discipline problem and is an INTERFACE problem: the guard's return shape decides
+whether the discipline is available, a scan returning `(count, ok)` forecloses
+it, AND THE FORECLOSURE IS INVISIBLE, because nothing about `(count, ok)` looks
+incomplete. If a guard returns a bare count today, that is the change to make
+first — none of the witness guidance can be applied to it until it does. (This
+module's `population` and `subject` commands print MEMBERS for exactly this
+reason, and the count falls out of them for free.) Cost is small in the
+direction that matters: a few hundred DISTINCT signatures over 7,426 judged
+nodes, because distinct is the right granularity for membership — you never want
+every node, you want every KIND of node.
+
+AND A WITNESS CAN BE A KIND RATHER THAN A MEMBER, which is the other half. A
+floor of 30 on a citation guard was written specifically to assert a widening,
+was measured, and was mutation-tested — AND WOULD STILL PASS AGAINST A CORPUS
+THAT HAD LOST THE ENTIRE SHAPE THE WIDENING WAS FOR: thirty citations all
+carrying the `UI-` prefix satisfy it perfectly, while the prefixless ones the
+widening existed to include could all be gone. A SIZE CANNOT EXPRESS "CONTAINS
+THIS KIND OF THING". So a witness takes `member:` or `matching:`, a pattern at
+least one population member must satisfy.
+
+IF THIS FILE KEEPS ONE LINE FROM THE NIGHT IT IS THIS: A SHRINK-ONLY RATCHET IS
+BLIND IN THE DIRECTION THAT LOOKS LIKE SUCCESS, AND ONLY A NAMED MEMBER CAN SEE
+THERE.
+
 ASSERT THE WITNESS, NOT THE SIZE — two rules that look alike, are not
 interchangeable, and the weaker one is the likelier to get written.
 
@@ -1451,6 +1486,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import re
 import shlex
 import subprocess
 import sys
@@ -2068,8 +2104,25 @@ def judge(spec: dict, root: Path, today: dt.date, *, run=read_members, surfaces=
                 + ". Each guard is correct in its own scope and the pair does not meet")
 
     for w in (pop_spec.get("witness") or []):
-        if not isinstance(w, dict) or not w.get("member") or not w.get("why"):
-            row.problems.append(f"witness {w!r} names a `member` and the `why` that makes it the witness")
+        if not isinstance(w, dict) or not (w.get("member") or w.get("matching")) or not w.get("why"):
+            row.problems.append(
+                f"witness {w!r} names a `member` (or `matching:`, a pattern at least one member must satisfy) "
+                "and the `why` that makes it the witness")
+            continue
+        if w.get("matching"):
+            try:
+                hit = any(re.search(str(w["matching"]), m) for m in pop.members)
+            except re.error as ex:
+                row.problems.append(f"witness pattern {w['matching']!r} does not compile: {ex}")
+                continue
+            if not hit:
+                row.problems.append(
+                    f"WITNESS KIND ABSENT: no member matches {w['matching']!r}, and that kind is why this guard "
+                    f"exists ({w['why']}). A size cannot express 'contains this kind of thing' — a floor of 30 "
+                    "on a citation guard is satisfied perfectly by thirty citations all carrying the prefix, "
+                    "while the prefixless ones the widening existed to include are all gone")
+            else:
+                row.witnesses += 1
             continue
         if not any(str(w["member"]) in m for m in pop.members):
             row.problems.append(

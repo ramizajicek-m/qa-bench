@@ -655,6 +655,22 @@
    "verdict": "caught",
    "exit": 1,
    "recorded": "2026-09-21"
+  },
+  {
+   "file": "qabench/population.py",
+   "expr": "s.replace(chr(32)*12+\"if not hit:\", chr(32)*12+\"if False:\", 1)",
+   "command": [
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_population.py",
+    "-q",
+    "-p",
+    "no:randomly"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-21"
   }
  ]
 }

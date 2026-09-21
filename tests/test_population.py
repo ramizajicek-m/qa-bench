@@ -1021,4 +1021,21 @@ def test_a_present_witness_is_counted(repo):
 
 def test_a_witness_needs_the_why_that_makes_it_one(repo):
     row = judged(repo, population={"witness": [{"member": "b"}]})
-    assert any("names a `member` and the `why`" in p for p in row["problems"])
+    assert any("names a `member` (or `matching:`" in p for p in row["problems"])
+
+
+def test_a_witness_can_be_a_kind_rather_than_a_member(repo):
+    """A floor of 30 is satisfied perfectly by thirty citations all carrying the
+    prefix, while the prefixless ones the widening existed to include are gone.
+    A size cannot express 'contains this kind of thing'."""
+    row = judged(repo, population={"witness": [
+        {"matching": r"^UI-", "why": "the prefixless citations the widening existed to include"}]})
+    assert any("WITNESS KIND ABSENT" in p and "contains this kind of thing" in p for p in row["problems"])
+
+    ok = judged(repo, population={"witness": [{"matching": r"^[abc]$", "why": "the kind this guard exists for"}]})
+    assert ok["witnesses"] == 1 and ok["problems"] == []
+
+
+def test_a_witness_pattern_that_does_not_compile_is_named(repo):
+    row = judged(repo, population={"witness": [{"matching": "([", "why": "x"}]})
+    assert any("does not compile" in p for p in row["problems"])
