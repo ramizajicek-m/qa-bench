@@ -20,7 +20,7 @@ def test_a_ruling_with_its_falsifier_passes_and_one_without_is_named():
 
 
 def test_a_placeholder_falsifier_is_no_falsifier():
-    for f in ("n/a", "none", "never", "wrong"):
+    for f in ("n/a", "none", "never", "wrong", ""):
         assert decisions.judge([{"id": "x", "rule": "r", "falsified_by": f}]), f
 
 
@@ -37,3 +37,19 @@ def test_no_register_is_did_not_run(tmp_path):
 
 def test_an_empty_register_is_did_not_run_not_clean(tmp_path):
     assert decisions.run(["--repo", str(reg(tmp_path, []))], echo=lambda *_: None) == 3
+
+
+def test_length_is_not_the_test_and_vagueness_is_reported_not_failed():
+    """anat-qa: a word count passes 'we would know if it broke' and fails 'the users complain'."""
+    vague = {"id": "V", "rule": "r", "falsified_by": "we would know if it broke"}
+    short = {"id": "S", "rule": "r", "falsified_by": "`/admin/cars` pages"}
+    assert decisions.judge([vague, short]) == []
+    assert decisions.unanchored([vague, short]) == ["V"]
+    # The proxy's stated limit: NAV-08's real, good falsifier names a surface in words, not a path, and is
+    # listed as vague. That is why this is reported and never failed.
+    assert decisions.unanchored([NAV08]) == ["NAV-08"]
+
+
+def test_a_named_surface_or_quantity_is_concrete():
+    e = {"id": "C", "rule": "r", "falsified_by": "the two sidebar marks render with identical computed style on /clients/{id}"}
+    assert decisions.unanchored([e]) == []
