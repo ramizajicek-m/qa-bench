@@ -733,7 +733,11 @@ class HeavyLock:
         self.waited = round(time.monotonic() - t0, 1)
         self.fh.seek(0)
         self.fh.truncate()
-        self.fh.write(f"{self.name} pid {os.getpid()} in {os.getcwd()} since "
+        # WHO, not only what: git and ps record no owner, so sessions inferred one from a worktree NAME and
+        # were wrong twice on 2026-09-21. The session name comes from the landing conventions already in use.
+        who = next((os.environ[k] for k in ("QABENCH_SESSION", "LAND_SESSION", "ANAT_SESSION") if os.environ.get(k)),
+                   "an unnamed session")
+        self.fh.write(f"{self.name} for {who}, pid {os.getpid()} in {os.getcwd()} since "
                       f"{dt.datetime.now(dt.timezone.utc).isoformat(timespec='seconds')}")
         self.fh.flush()
         self._prev = os.environ.get("QABENCH_HEAVY_HELD")

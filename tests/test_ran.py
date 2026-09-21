@@ -371,3 +371,13 @@ def test_the_top_consumers_are_ranked_not_matched_by_name():
                   "102.8 26:00 /System/Library/Frameworks/CoreServices.framework/mdworker\n")
     top = ran.top_consumers(2, ps=ps)
     assert "mdworker" in top[0] and "chrome-headless-shell" in top[1]
+
+
+def test_the_lock_names_the_session_that_holds_it(tmp_path, monkeypatch):
+    """git and ps record no owner; two sessions today inferred one from a worktree name and were wrong."""
+    from qabench import ran
+    monkeypatch.delenv("QABENCH_HEAVY_HELD", raising=False)
+    monkeypatch.setenv("LAND_SESSION", "ana-qa")
+    lock = tmp_path / "heavy.lock"
+    with ran.HeavyLock("unit", path=str(lock), echo=lambda *_: None):
+        assert "for ana-qa" in lock.read_text()
