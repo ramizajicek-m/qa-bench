@@ -34,8 +34,9 @@ def test_fix_forms_are_recognised_and_merges_skipped():
     assert fixpop.judge_message("Merge branch 'fix/x'\n") == ""
 
 
-def test_comment_lines_do_not_count_as_the_trailer():
-    assert fixpop.judge_message("fix: x\n\n# Population: a, b\n")
+def test_git_comment_lines_are_not_the_subject():
+    """A commit-msg hook sees git's `#` lines; one above the subject must not hide a fix."""
+    assert fixpop.judge_message("# Please enter the commit message\nfix: x\n")
 
 
 def test_range_mode_reads_git_and_advisory_exits_zero(tmp_path):
