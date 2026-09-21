@@ -158,3 +158,39 @@ def test_regex_escapes_paths_and_short_numbers_are_not_selector_words():
     assert "modul" not in found and "path:node_modules/x" in found
     assert "02" not in found
     assert "146" in dict(inherit.unexplained('P = r"(\\d+) of 146"\n', "a count equals its source", {}, python=True))
+
+
+def test_a_skip_after_a_timeout_names_a_cause_it_cannot_know():
+    """anat: 'no rows — a DATA blocker' on a page that had no such table at all."""
+    src = """
+import pytest
+def test_x(page):
+    page.goto('/admin/gifts')
+    try:
+        page.wait_for_selector('#t tbody tr', timeout=12000)
+    except PlaywrightTimeout:
+        pytest.skip('no rows on the test stack - a DATA blocker')
+"""
+    assert [k for _, k, _ in inherit.methods(src)] == ["diagnosing-skip"]
+    fixed = src.replace("    try:", "    page.wait_for_selector('#t')\n    try:").replace(
+        "except PlaywrightTimeout:\n        pytest.skip", "except PlaywrightTimeout:\n        pytest.skip")
+    other = src.replace("except PlaywrightTimeout:", "except ValueError:")
+    assert inherit.methods(other) == []
+
+
+def test_a_broad_catch_that_discriminates_before_skipping_is_the_right_shape():
+    """anat conftest: reads the error text, skips only on named causes, re-raises the rest."""
+    good = """
+import pytest
+def f():
+    try:
+        g()
+    except Exception as e:
+        if "Connection" in str(e):
+            pytest.skip("unreachable")
+        raise
+"""
+    bad = good.replace('        if "Connection" in str(e):\n            pytest.skip("unreachable")\n        raise',
+                       '        pytest.skip("no data yet")')
+    assert inherit.methods(good) == []
+    assert [k for _, k, _ in inherit.methods(bad)] == ["diagnosing-skip"]

@@ -273,7 +273,43 @@ def methods(source: str) -> list[tuple[int, str, str]]:
                 out.append((a.lineno, "invariant",
                             f"parametrised by {', '.join(sorted(params))}, and this assertion never mentions it — it "
                             "is the same check for every parameter, so one member can satisfy it for all"))
-    return sorted(out)
+    return sorted(out + diagnosing_skips(tree))
+
+
+def diagnosing_skips(tree) -> list[tuple[int, str, str]]:
+    """A skip that cannot distinguish its own cause.
+
+    anat, 2026-09-21: an e2e waited for `#table tbody tr`, and on timeout skipped with "no rows on the test
+    stack — a DATA blocker". Two of three pages had NO SUCH TABLE (no route; a different template): an absent
+    table and an empty one produce the identical timeout, and the skip named one with confidence — into a
+    tracker row and another session's queue. The `assert not missing` below it was dead code. Four more page
+    sweeps skipped a page lacking #main-content as "not an admin-layout page", which a 404 or 500 also is.
+    A wrong reason travels further than none, because nobody re-derives a stated cause.
+
+    Flagged: `pytest.skip(...)` inside an `except` that caught a TIMEOUT. A timeout cannot tell absence from
+    emptiness, so the cause the skip names is a guess unless the structural precondition (the container
+    exists, the response is below 400) was asserted first."""
+    out = []
+    for h in [n for n in ast.walk(tree) if isinstance(n, ast.ExceptHandler)]:
+        names = {x.id if isinstance(x, ast.Name) else getattr(x, "attr", "") for x in
+                 ([h.type] if not isinstance(h.type, ast.Tuple) else list(h.type.elts)) if x is not None}
+        timeout = any("Timeout" in nm for nm in names)
+        broad = h.type is None or names & {"Exception", "BaseException"}
+        if not (timeout or broad):
+            continue
+        # A timeout cannot discriminate at all, so any skip under it is flagged. A broad catch CAN — anat's
+        # conftest reads the error text and re-raises what it cannot name, which is the right shape — so
+        # only an UNCONDITIONAL skip (a direct statement of the handler) is flagged there.
+        calls = ([n for b in h.body for n in ast.walk(b) if isinstance(n, ast.Call)] if timeout else
+                 [st.value for st in h.body if isinstance(st, ast.Expr) and isinstance(st.value, ast.Call)])
+        for c in calls:
+            f = c.func
+            if isinstance(f, ast.Attribute) and f.attr == "skip" and getattr(f.value, "id", "") == "pytest":
+                out.append((c.lineno, "diagnosing-skip",
+                            "pytest.skip after a TIMEOUT names a cause the timeout cannot distinguish (absent vs "
+                            "empty vs broken page) — assert the container exists / the status is < 400 first, and "
+                            "skip only on the narrow condition that remains"))
+    return out
 
 
 def run(argv: list[str], *, echo=print) -> int:
