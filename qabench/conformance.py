@@ -154,6 +154,13 @@ def judge(manifest: dict, root: Path | None = None) -> list[dict]:
     # promotion lane names the chain a routine event starts, as FILES the judge
     # can check exist — a free-text sentence here would be one more warrant
     # nobody verifies.
+    #
+    # AND THE FIRST LINK IS OFTEN NOT A WORKFLOW. On tharros qa-nightly has no
+    # cron; a LaunchAgent on a Mac dispatches it. With workflow files only, the
+    # chain reads qa-nightly -> deploy-production and looks like it needs a
+    # person — which is exactly the hop that hid. So `trigger:` is REQUIRED and
+    # may name something outside the repo: {kind: workflow, ref: <path in repo>}
+    # or {kind: external, ref: <what fires it and where it lives>}.
     if str(manifest.get("full_remote") or "").strip():
         landing = manifest.get("landing")
         if not isinstance(landing, dict) or not landing.get("chain"):
@@ -161,9 +168,21 @@ def judge(manifest: dict, root: Path | None = None) -> list[dict]:
                                 "this project has a promotion lane and does not say what LANDING CAUSES. On tharros a "
                                 "merge to main, documented as the day lane to staging, is also a production release "
                                 "that night — found by reading the workflow, not from any doc. Declare `landing: "
-                                "{event, chain: [workflow files], reaches_production}` so it is written down and "
-                                "checked rather than rediscovered"))
-        elif root is not None:
+                                "{event, trigger: {kind, ref}, chain: [workflow files], reaches_production}` so "
+                                "it is written down and checked rather than rediscovered"))
+        else:
+            trig = landing.get("trigger")
+            if (not isinstance(trig, dict) or trig.get("kind") not in ("workflow", "external")
+                    or not str(trig.get("ref") or "").strip()):
+                out.append(_finding("C7", "landing_trigger_unstated",
+                                    "`landing.trigger` must say what FIRES the chain — {kind: workflow, ref: <file>} or "
+                                    "{kind: external, ref: <what and where>}. On tharros the first hop is a LaunchAgent on "
+                                    "a Mac, not a workflow; a chain of workflow files alone reads as needing a person, "
+                                    "and that is the hop that hid"))
+            elif trig["kind"] == "workflow" and root is not None and not (Path(root) / str(trig["ref"])).exists():
+                out.append(_finding("C7", "landing_chain_missing",
+                                    f"`landing.trigger.ref` names {trig['ref']}, which does not exist"))
+        if isinstance(landing, dict) and landing.get("chain") and root is not None:
             gone = [f for f in landing["chain"] if not (Path(root) / str(f)).exists()]
             if gone:
                 out.append(_finding("C7", "landing_chain_missing",
