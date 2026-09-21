@@ -9,6 +9,7 @@
     python -m qabench distinct [--repo DIR] [--json]   # a table edited programmatically keeps its rows distinct; the threshold is measured, never chosen
     python -m qabench census [--repo DIR] [--json]   # every declared key reaches every consumer layer, or is exempted with evidence
     python -m qabench population [--repo DIR] [--json]   # every guard sweeps the population it claims over, not the example it was written against
+    python -m qabench heavy [--name N] -- COMMAND ...   # machine-wide lock around a Makefile target; exit passed through
     python -m qabench ran --name NAME [--heavy] [--json] -- COMMAND ...   # --heavy: machine-wide lock, one heavy run at a time; run it without a shell, keep the whole output, and refuse to call a run that did not finish a pass
     python -m qabench delta (--before A.xml | --store DIR --name TIER) --after B.xml   # which failures are NEW on a tier that was already red
     python -m qabench fixpop (--msg FILE | --range A..B) [--advisory]   # a fix commit names the other sites with its shape
@@ -80,6 +81,8 @@ def main(argv: list[str] | None = None) -> int:
         return distinct.run(rest)
     if cmd == "census":                     # reads source and descriptors, never a deployment
         return census.run(rest)
+    if cmd == "heavy":                      # the machine-wide lock around any command; no manifest, no artefact
+        return _ran.heavy(rest)
     if cmd == "ran":                        # runs a command and judges its completion; no manifest pin
         return _ran.run(rest)
     if cmd == "population":                 # reads the guard register and runs both sides, never a deployment

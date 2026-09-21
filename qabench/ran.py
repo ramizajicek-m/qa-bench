@@ -817,6 +817,44 @@ def _arg(argv, flag, default=None):
     return argv[argv.index(flag) + 1] if flag in argv else default
 
 
+def heavy(argv: list[str], *, echo=print, getloadavg=os.getloadavg) -> int:
+    """`python -m qabench heavy [--name N] -- COMMAND ...` — the machine-wide lock around ANY command.
+
+    For Makefile targets (`make test`, `make full`, a landing's tier): no manifest, no artefact, the
+    command's own exit code passed through. `ran --heavy` needs a `ran:` block and writes a record, which
+    is right for a judged run and wrong for wrapping every project's `make test` — none of the six
+    manifests has a `ran:` block, so wrapping with `ran` would have broken all of them.
+
+    It reports what it saw: the holder it waited for (or that it took the lock at once), and the machine
+    load at start and end, marked UNDER LOAD above 1.5 x cores. WHAT IT DOES NOT COVER, stated every run:
+    the GitHub Actions runners on this machine, Spotlight, and anything not run through this command. A
+    quiet lock is not a quiet machine."""
+    if "--" not in argv:
+        print("usage: python -m qabench heavy [--name NAME] -- COMMAND [ARGS...]", file=sys.stderr)
+        return 3
+    cut = argv.index("--")
+    opts, cmd = argv[:cut], argv[cut + 1:]
+    if not cmd:
+        print("heavy: nothing after `--` to run (exit 3)", file=sys.stderr)
+        return 3
+    name = _arg(opts, "--name") or Path(cmd[0]).name
+    cores = os.cpu_count() or 1
+    with HeavyLock(name, echo=echo) as lock:
+        start = _load(getloadavg)
+        try:
+            rc = subprocess.call(cmd)
+        except OSError as ex:
+            echo(f"heavy: could not run {cmd[0]!r}: {ex} (exit 3)")
+            return 3
+        end = _load(getloadavg)
+    peak = max([x for x in (start, end) if x is not None], default=None)
+    loaded = peak is not None and peak / cores > LOADED
+    echo(f"heavy: {name} exited {rc} · waited {lock.waited}s for the lock · load {start} -> {end} on {cores} cores"
+         + (" · UNDER LOAD: a failure here is not yet evidence about the code" if loaded else "")
+         + " · not covered: GitHub Actions runners on this machine, Spotlight, anything not run through qabench heavy")
+    return rc
+
+
 def run(argv: list[str], *, echo=print) -> int:
     if "--" not in argv:
         print("usage: python -m qabench ran --name NAME [--heavy] -- COMMAND [ARGS...]\n"

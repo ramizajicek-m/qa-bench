@@ -390,3 +390,17 @@ def test_an_uncontended_lock_says_so(tmp_path, monkeypatch):
     with ran.HeavyLock("x", path=str(tmp_path / "l"), echo=said.append):
         pass
     assert any("no other holder" in s for s in said)
+
+
+def test_heavy_wraps_any_command_passes_its_exit_and_says_what_it_does_not_cover(tmp_path, monkeypatch):
+    """For `make test`: no manifest, no artefact — `ran` would have refused all six projects (no ran: block)."""
+    import sys
+    from qabench import ran
+    monkeypatch.delenv("QABENCH_HEAVY_HELD", raising=False)
+    monkeypatch.setenv("QABENCH_HEAVY_LOCK", str(tmp_path / "l"))
+    out = []
+    assert ran.heavy(["--name", "unit", "--", sys.executable, "-c", "raise SystemExit(4)"], echo=out.append) == 4
+    assert ran.heavy(["--", sys.executable, "-c", "pass"], echo=out.append) == 0
+    assert any("no other holder" in o for o in out)
+    assert any("not covered: GitHub Actions runners" in o for o in out)
+    assert ran.heavy(["no-separator"], echo=out.append) == 3
