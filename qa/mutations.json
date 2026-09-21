@@ -2328,6 +2328,63 @@
    "verdict": "caught",
    "exit": 1,
    "recorded": "2026-09-21"
+  },
+  {
+   "file": "qabench/population.py",
+   "expr": "s.replace('            for rid, cs in sorted(by_row.items()) if \"product\" not in cs]', '            for rid, cs in sorted(by_row.items())]', 1)",
+   "command": [
+    "env",
+    "PYTHONPATH=.",
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_population.py",
+    "-q",
+    "-p",
+    "no:randomly",
+    "-x"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-21"
+  },
+  {
+   "file": "qabench/population.py",
+   "expr": "s.replace('        for rid in ([rows_] if isinstance(rows_, str) else rows_ or []):', '        for rid in (rows_ or []):', 1)",
+   "command": [
+    "env",
+    "PYTHONPATH=.",
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_population.py",
+    "-q",
+    "-p",
+    "no:randomly",
+    "-x"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-21"
+  },
+  {
+   "file": "qabench/population.py",
+   "expr": "s.replace('        \"unmet\": seams_of_corpus(guards),', '        \"unmet\": [],', 1)",
+   "command": [
+    "env",
+    "PYTHONPATH=.",
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_population.py",
+    "-q",
+    "-p",
+    "no:randomly",
+    "-x"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-21"
   }
  ]
 }
