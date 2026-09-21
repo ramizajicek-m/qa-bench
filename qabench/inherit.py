@@ -1,6 +1,6 @@
 """inherit — a guard built from an instance inherits the instance's parameters.
 
-    python -m qabench inherited FILE --property "<the property, in words>" [--declared LIT=why ...] [--invariant] [--json]
+    python -m qabench inherited FILE --property "<the property, in words>" [--declared LIT=why ...] [--words] [--invariant] [--json]
 
 MEASURED ACROSS THE ESTATE (2026-09-21, 3,014 test files), which is what the
 output is worth: the WINDOW method — a containment over a slice ending at a
@@ -131,11 +131,27 @@ def literals(source: str, *, python: bool) -> list[str]:
     return out
 
 
+ESCAPE = re.compile(r"\\[bBsSdDwWnrt]")
+PATHLIKE = re.compile(r"^[\w.@-]+(?:/[\w.@*-]+)+/?$")
+
+
 def words(lits: list[str]) -> dict[str, str]:
-    """{stem: an example literal it came from}, code vocabulary removed."""
+    """{stem: an example literal it came from}, code vocabulary removed.
+
+    ana-qa ran the first version over twelve guards and got 8-124 words each, of
+    four kinds: `\\b` eaten into the next word (`bheight`), path fragments split
+    into words (`modul` from node_modules), and short numbers from dates and
+    phone numbers (`02`, `06`). Regex escapes are removed before splitting, a
+    path is reported as a path, and a number must have three digits (146 did)."""
     out: dict[str, str] = {}
     for lit in lits:
-        for tok in WORD.findall(lit):
+        if PATHLIKE.match(lit.strip()):
+            out.setdefault("path:" + lit.strip(), lit[:60])
+            continue
+        lit_words = ESCAPE.sub(" ", lit)
+        for tok in WORD.findall(lit_words):
+            if tok.isdigit() and len(tok) < 3:
+                continue
             for part in _split_camel(tok) if not tok.isdigit() else [tok]:
                 s = _stem(part)
                 if len(s) < 3 and not s.isdigit():
@@ -150,6 +166,7 @@ def unexplained(source: str, prop: str, declared: dict[str, str], *, python: boo
     """[(word, the literal it came from)] for every selector word the property does not contain."""
     have = {_stem(p) for tok in WORD.findall(prop) for p in (_split_camel(tok) if not tok.isdigit() else [tok])}
     have |= {_stem(w) for w in declared}
+    have |= {"path:" + d for d in declared}
     return sorted((w, lit) for w, lit in words(literals(source, python=python)).items() if w not in have)
 
 
@@ -279,7 +296,11 @@ def run(argv: list[str], *, echo=print) -> int:
     except OSError as ex:
         print(f"inherited: cannot read {path}: {ex} (exit 3)", file=sys.stderr)
         return 3
-    found = unexplained(src, prop, declared, python=path.suffix == ".py")
+    # WORDS over a whole test file are opt-in (`--words`): denoised, they still
+    # listed 21-33 per real guard file, because a test file is mostly assertions
+    # and fixtures. Their home is the population SELECTOR, where `population`
+    # applies them to the cmd and its script only.
+    found = unexplained(src, prop, declared, python=path.suffix == ".py") if "--words" in argv else []
     # INVARIANT is opt-in: ordering did not separate it (17 of 21 estate candidates
     # already follow a per-subject assertion) and 3 of 3 sampled were deliberate.
     # A list with an unknown hit rate teaches its reader to skim the next one.

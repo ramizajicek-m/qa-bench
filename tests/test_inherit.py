@@ -41,8 +41,9 @@ def test_docstrings_are_prose_not_selectors():
 def test_cli_exit_codes(tmp_path):
     f = tmp_path / "t.py"
     f.write_text('P = "(batch|bulk)"\n')
-    assert inherit.run([str(f), "--property", "routes that iterate a collection"], echo=lambda *_: None) == 1
-    assert inherit.run([str(f), "--property", "batch or bulk routes"], echo=lambda *_: None) == 0
+    assert inherit.run([str(f), "--property", "routes that iterate a collection", "--words"], echo=lambda *_: None) == 1
+    assert inherit.run([str(f), "--property", "routes that iterate a collection"], echo=lambda *_: None) == 0
+    assert inherit.run([str(f), "--property", "batch or bulk routes", "--words"], echo=lambda *_: None) == 0
     assert inherit.run([str(f), "--property", ""], echo=lambda *_: None) == 3
     assert inherit.run([str(tmp_path / "missing.py"), "--property", "x"], echo=lambda *_: None) == 3
 
@@ -147,3 +148,13 @@ def test_invariant_is_opt_in_on_the_command_line(tmp_path):
                        echo=lambda *_: None) == 0
     assert inherit.run([str(f), "--property", "a dialog publishes name hosts completion onDone source HOSTS",
                         "--invariant"], echo=lambda *_: None) == 1
+
+
+def test_regex_escapes_paths_and_short_numbers_are_not_selector_words():
+    """ana-qa: `bheight` from \\bmaxHeight, `modul` from node_modules, `02` from a phone number."""
+    src = 'A = r"\\bmaxHeight\\b|\\bheight\\s*:"\nB = "node_modules/x"\nC = "02-9999999"\n'
+    found = dict(inherit.unexplained(src, "max height", {}, python=True))
+    assert not any(w.startswith("b") and w[1:] in ("height", "max") for w in found)
+    assert "modul" not in found and "path:node_modules/x" in found
+    assert "02" not in found
+    assert "146" in dict(inherit.unexplained('P = r"(\\d+) of 146"\n', "a count equals its source", {}, python=True))
