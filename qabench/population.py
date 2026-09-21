@@ -2169,6 +2169,7 @@ def judge(spec: dict, root: Path, today: dt.date, *, run=read_members, surfaces=
             row.problems.append(f"population.cmd_from: {pop_spec['cmd_from']!r} names no command in the manifest")
             return row
         pop_spec = {**pop_spec, "cmd": node}
+    _inherited_prompt(row, pop_spec, root)
     pop = run(root, pop_spec["cmd"])
     # ONE REQUIREMENT, SEVERAL DETECTORS: the population is the REQUIREMENT'S,
     # and what has to be asserted is that the detectors' corpora COVER it. Two
@@ -2435,6 +2436,51 @@ def judge(spec: dict, root: Path, today: dt.date, *, run=read_members, surfaces=
         if pin:
             row.problems.append(pin)
     return row
+
+
+def _inherited_prompt(row: Row, pop_spec: dict, root: Path) -> None:
+    """A GUARD BUILT FROM AN INSTANCE INHERITS THE INSTANCE'S PARAMETERS — reported, not judged.
+
+    Four guards on 2026-09-21 were correct and were guards for the CASE: keyed on
+    `batch|bulk` (the routes that prompted it), on the denominator `146`, on the
+    prop `onDone`, on `.modal-overlay`. The parameter is never stated, so the
+    scope is a fact about the implementation that nobody claimed. So a population
+    states its PROPERTY in words, and every word in its selector (the command and
+    the script it runs) that the property does not contain is listed: add it to
+    the property (it IS the scope — say so) or declare it under `literals:` with
+    why it names the property.
+
+    Measured before it was written, which is why it is a NOTE: over whole guard
+    files the tell flagged 18-34 words each, almost all harmless; over the
+    population selector alone it is short enough to read. The METHOD half (a
+    character window, a whole-file containment) is not a literal and is not seen
+    here; its discriminator is a per-subject mutation (`qabench mutate`).
+    """
+    from . import inherit
+    prop = str(pop_spec.get("property") or "").strip()
+    if not prop:
+        row.note = ((row.note + " · ") if row.note else "") + (
+            "population.property is unstated — say in words what makes a thing a member, so a selector literal "
+            "the property does not contain can be seen for what it is: the case's parameter, or the class's")
+        return
+    cmd = str(pop_spec.get("cmd") or "")
+    declared = pop_spec.get("literals") or {}
+    found = list(inherit.unexplained(cmd, prop, declared, python=False))
+    for tok in cmd.split():
+        tok = tok.strip("'\"")
+        if tok.endswith((".py", ".js", ".mjs", ".ts", ".sh")) and (root / tok).is_file():
+            try:
+                found += inherit.unexplained((root / tok).read_text(encoding="utf-8"), prop, declared,
+                                             python=tok.endswith(".py"))
+            except OSError:
+                pass
+    words = sorted({w for w, _ in found})
+    if words:
+        row.note = ((row.note + " · ") if row.note else "") + (
+            f"selector words the property does not contain: {', '.join(words[:12])}"
+            + (f" (+{len(words) - 12})" if len(words) > 12 else "")
+            + " — each is the CASE's parameter (add it to the property: it is the scope) or names the class "
+              "(declare it under population.literals with why)")
 
 
 def run_population(root: Path, cfg: dict, *, today: dt.date | None = None, run=read_members) -> dict:

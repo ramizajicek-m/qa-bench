@@ -1095,3 +1095,33 @@ def test_a_block_that_is_not_a_mapping_is_named(repo):
 def test_malformed_detectors_are_named(repo):
     row = judged(repo, subject={"cmd": None, "detectors": ["a-string"]})
     assert row["unrunnable"] and "list of mappings" in row["problems"][0]
+
+
+def test_a_selector_literal_the_property_does_not_contain_is_named(tmp_path):
+    """anat's route sweep keyed on batch|bulk, the names of the routes that prompted it."""
+    from qabench import population
+    row = population.Row(id="g", check="C10", claims="x")
+    population._inherited_prompt(row, {"cmd": "python3 -c 'import re; re.compile(\"/api/.*(batch|bulk)\")'",
+                                       "property": "routes that iterate a collection and report a count"}, tmp_path)
+    assert "batch" in row.note and "bulk" in row.note
+
+
+def test_an_unstated_property_is_named_and_a_declared_literal_is_answered(tmp_path):
+    from qabench import population
+    row = population.Row(id="g", check="C10", claims="x")
+    population._inherited_prompt(row, {"cmd": "echo '(batch|bulk)'"}, tmp_path)
+    assert "property is unstated" in row.note
+    row2 = population.Row(id="g", check="C10", claims="x")
+    population._inherited_prompt(row2, {"cmd": "echo '(batch|bulk)'", "property": "bulk routes",
+                                        "literals": {"batch": "the codebase's other word for a bulk route"}}, tmp_path)
+    assert row2.note == ""
+
+
+def test_the_script_a_selector_runs_is_read_too(tmp_path):
+    from qabench import population
+    (tmp_path / "scripts").mkdir()
+    (tmp_path / "scripts" / "sel.py").write_text('import re\nPAT = re.compile(r"(\\d+) of 146")\n')
+    row = population.Row(id="g", check="C3", claims="x")
+    population._inherited_prompt(row, {"cmd": "python3 scripts/sel.py",
+                                       "property": "a count copied into the tracker equals its source"}, tmp_path)
+    assert "146" in row.note
