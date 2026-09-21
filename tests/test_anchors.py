@@ -5,7 +5,7 @@ from qabench import anchors
 
 
 def repo(tmp_path, prose, pin=None, extra=None):
-    (tmp_path / "qa").mkdir()
+    (tmp_path / "qa").mkdir(parents=True)
     (tmp_path / "templates").mkdir()
     (tmp_path / "templates" / "catalog.html").write_text(
         "\n".join(f"<p>line {i}</p>" for i in range(1, 11)) + "\n<script>AnatFlash.toast('saved')</script>\n")
@@ -48,8 +48,18 @@ def test_a_citation_past_the_end_is_red(tmp_path):
 
 
 def test_a_citation_to_a_missing_file_is_red(tmp_path):
-    code, out = run(repo(tmp_path, "see gone.py:3", pin=5))
+    code, out = run(repo(tmp_path, "see templates/gone.html:3", pin=5))
     assert code == 1 and any("no such file" in o for o in out)
+
+
+def test_a_bare_name_this_repo_lacks_is_unresolved_not_red(tmp_path):
+    """ana-log cites `intakeService.ts:302` — the codebase it was ported from, which this cannot read."""
+    assert run(repo(tmp_path, "ported from intakeService.ts:302", pin=5))[0] == 0
+
+
+def test_a_citation_in_backticks_does_not_pair_its_closing_tick_with_the_next(tmp_path):
+    assert run(repo(tmp_path, "`catalog.html:3` and `catalog.html:4` agree", pin=5))[0] == 0
+    assert run(repo(tmp_path / "b" , "`catalog.html:3` writes `statusDiv.textContent`", pin=5))[0] == 1
 
 
 def test_line_citations_are_ratcheted_and_an_unpinned_count_is_named(tmp_path):
@@ -71,3 +81,8 @@ def test_no_block_or_no_files_is_did_not_run(tmp_path):
 
 def test_a_member_reference_is_not_a_line_citation(tmp_path):
     assert anchors.LINE.findall("tests/test_x.py::test_y and localhost:8000") == []
+
+
+def test_an_excluded_file_is_not_read(tmp_path):
+    root = repo(tmp_path, "see templates/gone.html:3", pin=5, extra={"exclude": ["docs.md"], "prose": ["docs.md", "qa/*.yml"]})
+    assert run(root)[0] == 0

@@ -44,6 +44,7 @@ Manifest:
 
     anchors:
       prose: ["docs/ui-standard.md", "qa/*.yml", "static/**/*.js", "app/**/*.py"]
+      exclude: ["tests/fixtures/**"]   # files whose paths are made up on purpose
       max_line_citations: 41     # measured 2026-09-21; may only fall
 """
 from __future__ import annotations
@@ -94,9 +95,10 @@ def _read(root: Path, rel: str) -> list[str]:
 
 def scan(root: Path, cfg: dict) -> dict:
     files = _files(root)
+    excluded = {str(p.relative_to(root)) for pat in cfg.get("exclude") or [] for p in root.glob(pat)}
     prose = sorted({f for pat in cfg.get("prose") or [] for f in
-                    (str(p.relative_to(root)) for p in root.glob(pat) if p.is_file())})
-    out = {"files": len(prose), "content": [], "citations": [], "red": []}
+                    (str(p.relative_to(root)) for p in root.glob(pat) if p.is_file())} - excluded)
+    out = {"files": len(prose), "content": [], "citations": [], "unresolved": [], "red": []}
     for src in prose:
         for n, text in enumerate(_read(root, src), 1):
             where = f"{src}:{n}"
@@ -108,16 +110,21 @@ def scan(root: Path, cfg: dict) -> dict:
                     out["red"].append(f"{where}: anchor {path}#\"{literal}\" — "
                                       + (why if not rel else "the file no longer contains it") +
                                       ". Every sentence resting on it is now unsupported")
-            for path, num in LINE.findall(text):
-                if f"{path}:{num}" == where.rsplit("/", 1)[-1]:
-                    continue
+            for m in LINE.finditer(text):
+                path, num = m.group(1), m.group(2)
                 rel, why = resolve(path, files)
                 c = {"at": where, "cited": f"{path}:{num}", "now": None}
                 out["citations"].append(c)
                 if not rel:
-                    if why == "no such file":
+                    # Red only when the path claims to be in THIS repo: its first directory exists here.
+                    # A bare `intakeService.ts:302` in a port cites the codebase it came from, which this
+                    # cannot read — counted as unresolved, never as drift.
+                    top = path.lstrip("./").split("/")[0]
+                    if why == "no such file" and "/" in path.lstrip("./") and (root / top).is_dir():
                         out["red"].append(f"{where}: cites {path}:{num} — no such file; a reason citing a file "
                                           "that has gone is a reason nobody has read since it went")
+                    else:
+                        out["unresolved"].append(f"{where}: {path}:{num} ({why})")
                     continue
                 lines = _read(root, rel)
                 i = int(num)
@@ -126,9 +133,18 @@ def scan(root: Path, cfg: dict) -> dict:
                     continue
                 c["now"] = lines[i - 1].strip()[:160]
                 window = "\n".join(lines[max(0, i - 1 - NEAR): i + NEAR])
-                for q in QUOTED.findall(text):
-                    if path in q or q.strip() in (path, f"{path}:{num}"):
-                        continue
+                # Only the code quoted IMMEDIATELY after the citation is what the citation is about: a
+                # backtick three clauses later is about something else (the first estate run read every
+                # backtick on the line and called 1441 citations drifted, almost none of them real).
+                after = text[m.end():]
+                if text[:m.start()].count("`") % 2:  # the citation sits inside a code span: leave it first
+                    close = after.find("`")
+                    after = after[close + 1:] if close >= 0 else ""
+                q = QUOTED.search(re.split(r"\. |; | — | \| |, and |\)", after)[0][:80])
+                q = q.group(1) if q else None
+                # Code, not prose between two spans: no edge spaces, not a bare `:208` range or a sha.
+                if (q and q == q.strip() and not LINE.search(q) and path not in q
+                        and not re.fullmatch(r":?\d+(?:[-–]\d+)?|[0-9a-f]{7,40}\^?", q)):
                     if q not in window:
                         out["red"].append(f"{where}: cites {path}:{num} beside `{q}`, which is not within {NEAR} "
                                           f"lines of it — the citation has DRIFTED (line {num} now reads "
