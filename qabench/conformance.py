@@ -145,6 +145,30 @@ def judge(manifest: dict, root: Path | None = None) -> list[dict]:
             out.append(_finding("C10", "enumeration_unwitnessed",
                                 "enumerate_routes runs as a population guard with no named witness — a near-empty "
                                 "result reads as a small, clean project, and only a named route can see that"))
+    # WHAT DOES LANDING CAUSE? On tharros a merge to main — documented as "the
+    # day lane to staging" — is also a PRODUCTION RELEASE that night: a 22:00
+    # LaunchAgent dispatches qa-nightly, which on green dispatches the
+    # production deploy for main's SHA. Found by reading the workflow, not from
+    # any document that says "merging schedules production". The act that looks
+    # like staging is the act that schedules production. So a manifest with a
+    # promotion lane names the chain a routine event starts, as FILES the judge
+    # can check exist — a free-text sentence here would be one more warrant
+    # nobody verifies.
+    if str(manifest.get("full_remote") or "").strip():
+        landing = manifest.get("landing")
+        if not isinstance(landing, dict) or not landing.get("chain"):
+            out.append(_finding("C7", "landing_unmapped",
+                                "this project has a promotion lane and does not say what LANDING CAUSES. On tharros a "
+                                "merge to main, documented as the day lane to staging, is also a production release "
+                                "that night — found by reading the workflow, not from any doc. Declare `landing: "
+                                "{event, chain: [workflow files], reaches_production}` so it is written down and "
+                                "checked rather than rediscovered"))
+        elif root is not None:
+            gone = [f for f in landing["chain"] if not (Path(root) / str(f)).exists()]
+            if gone:
+                out.append(_finding("C7", "landing_chain_missing",
+                                    f"`landing.chain` names files that do not exist: {', '.join(map(str, gone))} — a "
+                                    "map of what landing causes that points at nothing is the stale copy again"))
     extra = sorted(set(checks) - set(c["checks"]))
     if extra:
         out.append(_finding("*", "missing", f"checks beyond the twelve: {extra} — a thirteenth needs three ledger rows that fit none of the twelve"))
