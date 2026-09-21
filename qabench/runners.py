@@ -98,13 +98,26 @@ def served(projects: list[dict], *, fetch=report.gh_json, health=report.health_c
         branch = p.get("staging_branch") or p.get("main") or "main"
         if not repo or not url:
             continue
-        runs = fetch(f"repos/{repo}/actions/runs?branch={branch}&event=push&status=success&per_page=10")
-        green = (runs.get("workflow_runs") or [None])[0] if isinstance(runs, dict) else None
+        # THE BRANCH'S OWN HISTORY, newest first, and each commit's push runs by head_sha. The runs LIST
+        # endpoint answered differently call to call on 2026-09-21 — tharros's "newest green" came back 40 h,
+        # 656 h, 575 h and 257 h old while a run from that morning existed — filtered or not. The commit list
+        # is authoritative, and a commit is green when it has push runs and every one concluded success.
+        commits = fetch(f"repos/{repo}/commits?sha={branch}&per_page=15")
+        runs = commits                      # kept for the UNREADABLE test below
+        green = None
+        for c in (commits if isinstance(commits, list) else []):
+            sha = c.get("sha", "")
+            rr = fetch(f"repos/{repo}/actions/runs?head_sha={sha}&event=push&per_page=20")
+            pushes = (rr.get("workflow_runs") or []) if isinstance(rr, dict) else []
+            if pushes and all(r.get("conclusion") == "success" for r in pushes):
+                newest = max(pushes, key=lambda r: str(r.get("updated_at") or ""))
+                green = {"head_sha": sha, "updated_at": newest.get("updated_at")}
+                break
         serves = health(url)
         row = {"repo": repo, "branch": branch, "serves": (serves or "")[:9],
                "newest_green": str((green or {}).get("head_sha", ""))[:9],
                "green_for": _age((green or {}).get("updated_at"), now)}
-        if not isinstance(runs, dict) or not serves:
+        if not isinstance(runs, list) or not serves:
             row["state"] = "UNREADABLE"
         elif not green:
             row["state"] = "no green push run"
@@ -118,8 +131,30 @@ def served(projects: list[dict], *, fetch=report.gh_json, health=report.health_c
             status = cmp.get("status") if isinstance(cmp, dict) else None
             row["state"] = {"ahead": "BEHIND", "behind": "ahead of green", "diverged": "DIVERGED",
                             "identical": "ok"}.get(status, "UNREADABLE")
+        if row.get("state") == "BEHIND":
+            row["why"] = _why(repo, str(green["head_sha"]), fetch)
         out.append(row)
     return out
+
+
+def _why(repo: str, sha: str, fetch) -> str:
+    """Which of the three mechanisms of 2026-09-21 holds the green commit back, where it can tell.
+
+    Three causes that day needed three responses: a check that FAILS on the same commit (tharros's and
+    iga's scheduled `drift`, which Railway's Wait-for-CI counts); the platform's own status stuck PENDING
+    (ana-log: "Railway is deploying" for 2.5 h); or neither, which leaves a timeout or a platform refusal.
+    """
+    checks = fetch(f"repos/{repo}/commits/{sha}/check-runs?per_page=100")
+    failed = sorted({c.get("name", "?") for c in (checks.get("check_runs") or [])
+                     if c.get("conclusion") in ("failure", "timed_out", "cancelled")}) if isinstance(checks, dict) else []
+    if failed:
+        return f"a check that gates the deploy FAILED on this commit: {', '.join(failed)}"
+    status = fetch(f"repos/{repo}/commits/{sha}/status")
+    pending = [f"{x.get('context')}: {x.get('description')}" for x in (status.get("statuses") or [])
+               if x.get("state") == "pending"] if isinstance(status, dict) else []
+    if pending:
+        return "the platform's own status is PENDING: " + "; ".join(pending)[:120]
+    return "no failed check and no pending status — a Wait-for-CI timeout or a platform refusal; read the platform"
 
 
 def run(argv: list[str], *, echo=print, fetch=report.gh_json, health=report.health_commit) -> int:
@@ -149,6 +184,8 @@ def run(argv: list[str], *, echo=print, fetch=report.gh_json, health=report.heal
         for r in rows:
             echo(f"  {r['state']:10} {r['repo']:32} staging serves {r['serves'] or '?':9}  newest green on "
                  f"{r['branch']}: {r['newest_green'] or '?':9} (green for {r['green_for']})")
+            if r.get("why"):
+                echo(f"             why: {r['why']}")
         if any(r["state"] == "BEHIND" for r in rows):
             return 1
     return 0
