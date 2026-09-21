@@ -786,6 +786,40 @@ mechanism is not the thing making it true cannot notice when it stops being
 true, and the only cheap check is a CONSTRUCTED known-positive: build the
 icon-only badge in `capability.fires` and watch whether the guard sees it.
 
+PREFER THE POPULATION THE CODE DETERMINES OVER THE POPULATION AN EXECUTION
+DETERMINES. A corpus assembled by RUNNING the product measures whatever states
+happened to exist when it ran — which depends on the seed, on what else ran
+first in the same session, and on the order the runner chose. It fails in two
+directions and BOTH READ AS CLEAN.
+
+  UNSTABLE: a composited-contrast ratchet over 78 rendered pages breached in
+  tier1 with a fifth signature — `span.ts-status-badge.ts-badge-submitted`,
+  2.86:1 at 9.792 px — and DID NOT REPRODUCE in isolation on the same merged
+  tree. The class is built at runtime as `'ts-status-badge ts-badge-' + r.status`,
+  so it exists in the DOM only when a row is in `submitted` state, and nothing
+  seeds one; something upstream in that session had submitted a timesheet. Same
+  code, same tree, two answers. The honest-looking conclusion available to the
+  next person is "flaky, re-run it".
+
+  TOO SMALL: on the same night, a chip could not render at all on the test stack
+  because nothing seeded the field its only writer sets, so a shrink-only
+  ratchet SAT PERMANENTLY GREEN OVER ITS OWN MOTIVATING DEFECT until four values
+  were seeded.
+
+The population it should have keyed on is the one the CODE fixes: fourteen
+selectors still set the inaccessible token, and FOURTEEN SELECTORS IS FOURTEEN
+SELECTORS WHATEVER THE DATA DOES — no seeding, no ordering, no state. Chasing
+the unreproducible fifth collapsed all five findings into ONE defect.
+
+AND THIS IS A ROLE DISTINCTION, NOT A REPLACEMENT: the DOM sweep sees what a
+static scan cannot — composited stacks, inherited colour, what actually rendered
+— and the static scan cannot tell you an element ever appears. They are
+complements. The failure was using the execution-determined one AS A RATCHET,
+which is the role that needs a stable population. THE RATCHET BELONGS ON THE
+CODE-DETERMINED POPULATION; THE EXECUTION-DETERMINED SWEEP BELONGS IN A
+REPORTING TIER THAT IS ALLOWED TO VARY. `observed_from:` marks the second kind
+and makes its size INFORMATION rather than a gate, which is that rule enforced.
+
 A FLOOR COUNTED FROM WHAT THE ENVIRONMENT HAPPENS TO CONTAIN IS NOT A FLOOR,
 and this is the same failure from the opposite direction: not a denominator too
 small to discriminate, but a denominator whose property was ASSERTED rather than
@@ -1930,7 +1964,10 @@ def judge(spec: dict, root: Path, today: dt.date, *, run=read_members, surfaces=
         row.note = ((row.note + " · ") if row.note else "") + (
             f"population observed from {observed}; its size ({row.population}) is INFORMATION, not a gate — a "
             "floor counted from what an environment happens to contain is not a floor, and the discrimination "
-            "comes from the capability's constructed case")
+            "comes from the capability's constructed case. THIS GUARD BELONGS IN A REPORTING TIER THAT IS "
+            "ALLOWED TO VARY, never in a gating one: an execution-determined population is unstable in one "
+            "direction and too small in the other, and both read as clean. If a RATCHET is wanted here, key it "
+            "on what the CODE determines — fourteen selectors is fourteen selectors whatever the data does")
     else:
         pin = judge_pin(pop_spec.get("count"), row.population, pop_spec.get("shrunk"), root)
         if pin:
