@@ -379,6 +379,34 @@ phrases in both lists. It could not see the difference it existed to measure.
 The population there is the union; the subject was the intersection, and this
 module prints the twenty-three names in the first and not the second.
 
+WHEN A PATTERN STANDS IN FOR A PROPERTY, THE COUNT IS THE CANDIDATE SET AND NOT
+THE FINDING. A sweep for "same button, same word" keyed on what a button is
+WIRED to — a primary button carrying an id naming a commit verb — because most
+dialogs there are div clusters with no `type="submit"`. 27 matched; all 27 were
+opened; FOUR WERE FABRICATED. A client-picker "Apply", a bulk-flag "Apply", a
+checklist-fill "Apply" and a TOTP "Confirm" are different acts correctly
+carrying different words: THE MATCH WAS ON THE STRING AND THE PROPERTY WAS THE
+ACT. Published as a count, the row would now carry four invented findings.
+
+That is the same root as an under-returning pattern and the opposite direction.
+Under-returning is INVISIBLE — nothing tells you what the pattern did not match.
+Over-returning is visible ONLY IF SOMEBODY OPENS EACH ONE, and it presents AS A
+FINDING, which is the direction with social momentum behind it: four extra
+findings look like the sweep working. So report "27 candidates, 23 confirmed by
+reading, 4 rejected with reasons", and a sweep that cannot afford to read its
+candidates SAYS HOW MANY IT DID NOT READ. THE READING IS NOT A QUALITY CHECK ON
+THE PATTERN, IT IS PART OF THE MEASUREMENT. (`subject.reports: candidates` with
+`read:` is that; the verdict prints the unread remainder.)
+
+AND THE COST OF REFUTATION IS WHAT SEPARATES THE TIERS, which is not an accuracy
+argument. A SOURCE-READ CLAIM COSTS AS MUCH TO REFUTE AS TO MAKE: four button
+lines to kill four claims, one each. A RENDERED CLAIM CAN BE KILLED WHOLESALE:
+of 84 reported contrast failures, 78 were one selector at FONT-SIZE 0, and
+killing all 78 cost ONE observation — the computed font size, from the element
+itself. The source read was entirely accurate about what it matched; the
+difference is that a property of the rendered thing refutes a whole class at
+once, and a property of the text refutes one line at a time.
+
 AN ABSENCE HAS NO LINE NUMBER, so an absence-shaped finding needs a different
 contract from a presence-shaped one. A scan flagged 8 files for lacking a
 filtered-empty message — "this FILE contains 'no X yet' AND does NOT contain a
@@ -1400,7 +1428,8 @@ class Row:
     outside: list = field(default_factory=list)           # in the structural superset, outside the marked set
     covered_by: dict = field(default_factory=dict)        # reach guards: layer -> how much of the bypass it covers
     note: str = ""                                        # reported, not judged
-    reports: str = "count"                                # `floor` when the subject cannot resolve the unit
+    reports: str = "count"                                # `floor` or `candidates` when the subject is weaker
+    unread: int = 0                                       # candidates nobody opened                                # `floor` when the subject cannot resolve the unit
 
 
 def read_members(root: Path, cmd: str, *, timeout: float = 120.0) -> Set_:
@@ -1499,7 +1528,12 @@ def judge_capability(cap: dict, root: Path, *, metric: str = "", stimulus: str =
             "THE ENVIRONMENT IT WAS MEASURED IN, OR IT IS NOT A MEASUREMENT. A search latency of 1998 ms was "
             "staging, on a different instance from production, from one laptop on one network with one client's "
             "data volume, and the session declined to flip its rows green on it: a row that goes green on one "
-            "laptop's reading of staging rests on the wrong measurement")
+            "laptop's reading of staging rests on the wrong measurement. AND A RATIO NAMES ITS GROUND: a token "
+            "documented as 3.2:1 on white against a replacement at 5.0:1 on white was still wrong for its job, "
+            "because the badges sit on a TINT rather than on white, where the replacement is 4.52:1 — passing "
+            "by 0.02. Nobody measured badly; they measured against the wrong GROUND, which produces a "
+            "reproducible, checkable, review-surviving number that does not answer the question. Any "
+            "ratio-style assertion whose denominator is implicit is incomplete")
     if metric and isinstance(fires, list) and not any(
             isinstance(f, dict) and f.get("by_mutating") and f.get("moved") for f in fires):
         out.append(
@@ -1790,8 +1824,18 @@ def judge(spec: dict, root: Path, today: dt.date, *, run=read_members, surfaces=
 
     row.population, row.subject = len(pop.members), len(sub.members)
     row.reports = str(sub_spec.get("reports") or "count")
-    if row.reports not in ("count", "floor"):
-        row.problems.append(f"subject.reports is {row.reports!r}; it is `count` or `floor`")
+    if row.reports not in ("count", "floor", "candidates"):
+        row.problems.append(f"subject.reports is {row.reports!r}; it is `count`, `floor` or `candidates`")
+    elif row.reports == "candidates":
+        read = sub_spec.get("read")
+        if not isinstance(read, int):
+            row.problems.append(
+                "`reports: candidates` names `read:` — how many candidates were OPENED. When a pattern stands "
+                "in for a property the count is the candidate set, not the finding: 27 matched a commit-verb "
+                "id, all 27 were opened, and FOUR were different acts correctly carrying different words. "
+                "Over-returning is visible only if somebody opens each one, and it presents AS A FINDING")
+        else:
+            row.unread = max(0, row.subject - read)
     row.detectors = {n: len(m) for n, m in by_detector.items()}
     exemptions = spec.get("exemptions") or []
     for ex in exemptions:
@@ -2028,6 +2072,9 @@ def run(argv: list[str], *, today: dt.date | None = None) -> int:
                   + f"  [{r['derived_from']}]"
                   + ("  [capability proven]" if r["capability"] else "")
                   + (f"   ({r['exempted']} exempted)" if r["exempted"] else ""))
+            if r["reports"] == "candidates":
+                print(f"       these are CANDIDATES, not findings — {r['unread']} of {r['subject']} were never "
+                      "opened, and a pattern standing in for a property fabricates as readily as it misses")
             if r["reports"] == "floor":
                 print(f"       these are a FLOOR, NOT A COUNT — the subject cannot resolve to one {r['unit']}, "
                       "so what it missed is invisible in its own output")

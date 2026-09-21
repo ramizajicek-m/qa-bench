@@ -886,7 +886,7 @@ def test_a_subject_that_cannot_resolve_the_unit_reports_a_floor(repo):
 
 
 def test_a_bad_reports_value_is_named(repo):
-    assert any("it is `count` or `floor`" in p
+    assert any("it is `count`, `floor` or `candidates`" in p
                for p in judged(repo, subject={"cmd": emit("a"), "reports": "estimate"})["problems"])
 
 
@@ -973,3 +973,20 @@ def test_a_reach_guard_with_no_consumers_names_the_inert_fix(repo):
                                              "proven_by": "tests/x.py::t"}]))
     assert any("THE REMEDY IS INERT: zero of 4 sites use it" in p for p in row["problems"])
     assert not any("indistinguishable from a clean tree" in p for p in row["problems"])
+
+
+def test_candidates_are_not_findings_and_the_unread_remainder_is_printed(repo, capsys):
+    """27 matched a commit-verb id, all 27 were opened, four were different acts
+    correctly carrying different words. The match was on the string and the
+    property was the act."""
+    row = judged(repo, subject={"cmd": emit("a", "b", "c"), "reports": "candidates", "read": 1})
+    assert row["reports"] == "candidates" and row["unread"] == 2
+
+    root = repo([guard(subject={"cmd": emit("a", "b", "c"), "reports": "candidates", "read": 1})])
+    population.run(["--repo", str(root)], today=TODAY)
+    assert "these are CANDIDATES, not findings — 2 of 3 were never opened" in capsys.readouterr().out
+
+
+def test_reporting_candidates_without_saying_how_many_were_read_is_refused(repo):
+    row = judged(repo, subject={"cmd": emit("a"), "reports": "candidates"})
+    assert any("names `read:`" in p and "candidate set, not the finding" in p for p in row["problems"])
