@@ -33,3 +33,7 @@ def test_report_only_by_default_and_strict_on_request(tmp_path):
 
 def test_no_register_is_did_not_run(tmp_path):
     assert decisions.run(["--repo", str(tmp_path)], echo=lambda *_: None) == 3
+
+
+def test_an_empty_register_is_did_not_run_not_clean(tmp_path):
+    assert decisions.run(["--repo", str(reg(tmp_path, []))], echo=lambda *_: None) == 3
