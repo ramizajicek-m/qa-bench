@@ -288,3 +288,21 @@ def test_an_artefact_stamps_the_commit_it_decided_about(repo, tmp_path):
 
 def test_an_artefact_with_no_stamp_cannot_be_told_from_an_earlier_run(tmp_path):
     assert "cannot be told from an earlier run" in ran.stale({"verdict": "PASS"}, tmp_path)
+
+
+def test_an_empty_run_under_the_default_markers_is_invalid():
+    """Found by an independent review: the default marker's capture group held
+    the STATUS WORD, not the digit, so 'executed nothing' could never fire under
+    the kit's own defaults and an empty run read as PASS."""
+    assert ran.verdict(0, "no tests ran in 0.01s\n0 passed in 0.01s\n", {})[0] == ran.INVALID
+    assert ran.verdict(0, "0 passed, 3 skipped in 0.05s\n", {})[0] == ran.INVALID
+
+
+def test_a_clean_summary_printing_zero_failed_is_not_a_failure():
+    assert ran.verdict(0, "12 passed, 0 failed in 1.2s\n", {})[0] == ran.PASS
+    assert ran.verdict(1, "11 passed, 1 failed in 1.2s\n", {})[0] == ran.FAIL
+
+
+def test_a_bare_hundred_percent_is_finished_and_not_declared_empty():
+    """[100%] proves the run finished and says nothing about how many ran."""
+    assert ran.verdict(0, "tests/a.py ....   [100%]\n", {})[0] == ran.PASS

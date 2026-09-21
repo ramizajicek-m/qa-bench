@@ -1929,6 +1929,20 @@ def judge_pin(pinned, actual: int, shrunk, root: Path) -> str:
 
 def judge(spec: dict, root: Path, today: dt.date, *, run=read_members, surfaces=(), register=()) -> Row:
     """One guard: run both sides, compare by member, apply the four rules."""
+    if not isinstance(spec, dict):
+        # A malformed register entry is a finding, never a traceback — a crash
+        # reads as a tool fault and hides that the register itself is wrong.
+        bad = Row(id=str(spec)[:40], check="", claims="")
+        bad.unrunnable = True
+        bad.problems.append(f"register entry {spec!r} is not a mapping — every guard is a mapping with id, check, "
+                            "claims, population and subject")
+        return bad
+    for key in ("population", "subject", "capability"):
+        if spec.get(key) is not None and not isinstance(spec.get(key), dict):
+            bad = Row(id=str(spec.get("id") or "?"), check=str(spec.get("check") or ""), claims="")
+            bad.unrunnable = True
+            bad.problems.append(f"`{key}:` is a {type(spec[key]).__name__}, not a mapping")
+            return bad
     row = Row(id=str(spec.get("id") or "?"), check=str(spec.get("check") or ""),
               claims=str(spec.get("claims") or ""),
               derived_from=str((spec.get("population") or {}).get("derived_from") or "?"),
@@ -2143,6 +2157,10 @@ def judge(spec: dict, root: Path, today: dt.date, *, run=read_members, surfaces=
     # sweep of AnatEmpty calls and a ratchet on hand-rolled markup, both sound,
     # and a list dropping a sentence into a plain table cell was neither.
     if detectors:
+        if not isinstance(detectors, list) or any(not isinstance(d, dict) for d in detectors):
+            row.problems.append("`subject.detectors` is a list of mappings, each with a `name` and a `cmd`")
+            row.unrunnable = True
+            return row
         named = [(str(d.get("name") or f"#{i}"), d.get("cmd")) for i, d in enumerate(detectors)]
         if any(not c for _, c in named):
             row.problems.append("every detector names a `cmd`")
@@ -2346,10 +2364,13 @@ def judge(spec: dict, root: Path, today: dt.date, *, run=read_members, surfaces=
         row.note = (f"reach {row.subject}/{row.population}; of the {row.population - row.subject} that bypass it, "
                     + ", ".join(f"{n} covers {c}" for n, c in layers.items())
                     + f" — leaving {len(residue)} covered by NOTHING, which is the actionable number")
+        # No filter of earlier problems here. Two lines used to strip any
+        # "never examined" problem at this point; at this point none has been
+        # added yet, so they did nothing — and a refactor that moved that append
+        # earlier would have had them silently swallow it, the inert-remedy
+        # shape found by an independent review.
         if not residue:
-            row.problems = [p for p in row.problems if "never examined" not in p]
             return row
-        row.problems = [p for p in row.problems if "never examined" not in p]
         row.problems.append(f"{len(residue)} of {row.population} are covered by neither the helper nor any "
                             f"declared layer: " + ", ".join(residue[:8]))
     if by_detector and row.missing:

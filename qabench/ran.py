@@ -462,7 +462,16 @@ DONE = (r"\b\d+\s+(passed|failed|error|errors|skipped|deselected|xfailed|xpassed
 #: Used only when the command declares no `failed:`. A run judged on completion
 #: alone makes the WEAKER claim, and `run_one` writes that into the artefact
 #: rather than letting it read like the strong one.
-FAILED_DEFAULT = r"^FAILED |^ERROR |\b\d+ (?:failed|errors?)\b"
+FAILED_DEFAULT = r"^FAILED |^ERROR |\b[1-9]\d* (?:failed|errors?)\b"
+#: What counts as EXECUTED in a default-marker summary. Skipped and deselected
+#: mark that the run reached the end and are not execution: "0 passed, 3 skipped"
+#: finished and ran nothing. Found by an independent review — the first version
+#: read the executed count out of DONE's capture group, which captured the
+#: STATUS WORD rather than the digit, so under the kit's own default markers the
+#: "executed NOTHING" check could never fire and an empty run read as PASS.
+#: And a clean summary printing "0 failed" read as FAIL, since the failure
+#: pattern accepted a zero: `[1-9]` above is that fix.
+EXECUTED = r"\b(\d+)\s+(?:passed|failed|errors?|xfailed|xpassed)\b"
 
 
 def verdict(exit_code: int, output: str, spec: dict) -> tuple[str, str]:
@@ -478,7 +487,19 @@ def verdict(exit_code: int, output: str, spec: dict) -> tuple[str, str]:
     refused, decided = spec.get("refused"), spec.get("decided")
     gates = spec.get("gates") or []
     hits = list(re.finditer(completed, output, re.M))
-    counts = [int(g) for m in hits for g in m.groups() if g and g.isdigit()]
+    if spec.get("completed"):
+        # A declared marker: its own capture groups carry the count.
+        counts = [int(g) for m in hits for g in m.groups() if g and g.isdigit()]
+        executed_nothing = bool(counts) and not any(counts)
+    else:
+        # The default markers: count only EXECUTED categories. A bare "[100%]"
+        # proves the run finished and says nothing about how many ran, so an
+        # empty count is only a finding when a summary line or "no tests ran"
+        # actually says so.
+        counts = [int(m.group(1)) for m in re.finditer(EXECUTED, output, re.M)]
+        executed_nothing = (re.search(r"no tests ran", output) is not None
+                            or (bool(re.search(r"\b\d+\s+(?:passed|failed|errors?|skipped|deselected|xfailed|xpassed)\b",
+                                               output)) and sum(counts) == 0))
     failures = list(re.finditer(failed, output, re.M))
 
     if not hits:
@@ -486,9 +507,9 @@ def verdict(exit_code: int, output: str, spec: dict) -> tuple[str, str]:
                          f"FINISH, whatever it exited ({exit_code}). It also printed "
                          f"{'no' if not failures else str(len(failures))} failure line(s), so anything grepping "
                          "for failures would call this green")
-    if counts and not any(counts):
-        return INVALID, (f"the run reached the end and executed NOTHING ({completed!r} matched a count of 0) — "
-                         "an empty run is not a clean one")
+    if executed_nothing:
+        return INVALID, ("the run reached the end and EXECUTED NOTHING — an empty run is not a clean one, and a "
+                         "run whose every test was skipped or deselected is empty")
     if refused and re.search(refused, output, re.M):
         return REFUSED, (f"the command REFUSED and said so ({refused!r} matched), whatever it exited "
                          f"({exit_code}) — a refusal and a success must never be the same observation, and "

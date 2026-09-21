@@ -1076,3 +1076,22 @@ def test_a_detector_that_is_not_defined_where_it_is_named_is_refused(repo):
 
 def test_a_named_callable_detector_is_accepted(repo):
     assert judged(repo, capability=cap())["problems"] == []
+
+
+def test_a_malformed_register_entry_is_a_finding_not_a_traceback(repo):
+    """Found by an independent review: a string in the guards list crashed with
+    AttributeError, which reads as a tool fault and hides that the register is
+    wrong."""
+    root = repo([guard(), "just-a-typo-string"])
+    rows = population.run_population(root, {"register": "qa/guards.yml"}, today=TODAY)["rows"]
+    assert rows[1]["unrunnable"] and "is not a mapping" in rows[1]["problems"][0]
+
+
+def test_a_block_that_is_not_a_mapping_is_named(repo):
+    row = judged(repo, subject=["not", "a", "mapping"])
+    assert row["unrunnable"] and "`subject:` is a list, not a mapping" in row["problems"][0]
+
+
+def test_malformed_detectors_are_named(repo):
+    row = judged(repo, subject={"cmd": None, "detectors": ["a-string"]})
+    assert row["unrunnable"] and "list of mappings" in row["problems"][0]
