@@ -812,6 +812,23 @@ became wrong in the new terms — it judges a screen by whichever emphasised
 button sits HIGHEST rather than by its best one — so the selection rule had to
 change with the metric. A threshold change is rarely only a threshold change.)
 
+AND THE EXEMPTION NOBODY WROTE DOWN AS ONE: THE HARNESS IS ON THE ALLOW-LIST. A
+management host redirects any customer path to the customer domain — and every
+unit and e2e test runs as `testserver`, which the host check EXEMPTS. So the
+middleware NEVER RAN in any test, and staff links to `/order/{code}` from the
+customer card and the audit page went live 307-ing cross-host to a coming-soon
+page (and, after go-live, to a customer verification gate, SIGNED OUT, because
+the session cookie is host-only). Measured read-only in production. No tier saw
+it, because THE TEST ENVIRONMENT'S OWN IDENTITY WAS EXCLUDED FROM THE PROPERTY
+UNDER TEST: a corpus defined by the property, one level up — not the population
+that cannot contain a failing member, but THE ENVIRONMENT that cannot. An
+explicit exemption with a reason can be shown able to bite; a harness identity
+that happens to be on an allow-list is an exemption with no entry, no reason and
+no review, and it covered the whole middleware. The population that finds it:
+every same-origin href on a page reachable on the management host, rendered
+under that host's real base URL and resolved through the middleware WITHOUT
+following redirects — anything that 307s cross-host is a dead end.
+
 THE FOUR REQUIREMENTS ARE ONE REQUIREMENT — SHOW THE THING CAPABLE OF THE
 OUTCOME IT CLAIMS: a guard must be shown able to fail, a near-miss must be a
 real near-miss, an exemption must be shown able to bite, and a metric must be
