@@ -730,6 +730,10 @@ class HeavyLock:
             holder = self.fh.read().strip() or "another heavy run"
             self.echo(f"ran: waiting for the machine's heavy-run lock, held by: {holder}")
             fcntl.flock(self.fh, fcntl.LOCK_EX)
+        else:
+            # REPORT WHAT IT SAW, not only a verdict: a lock that goes quiet when it is free is the same shape
+            # as the watcher that said FREE with no listing (five of those on 2026-09-21).
+            self.echo(f"ran: heavy-run lock taken at once — no other holder ({self.path})")
         self.waited = round(time.monotonic() - t0, 1)
         self.fh.seek(0)
         self.fh.truncate()

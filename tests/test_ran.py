@@ -381,3 +381,12 @@ def test_the_lock_names_the_session_that_holds_it(tmp_path, monkeypatch):
     lock = tmp_path / "heavy.lock"
     with ran.HeavyLock("unit", path=str(lock), echo=lambda *_: None):
         assert "for ana-qa" in lock.read_text()
+
+
+def test_an_uncontended_lock_says_so(tmp_path, monkeypatch):
+    from qabench import ran
+    monkeypatch.delenv("QABENCH_HEAVY_HELD", raising=False)
+    said = []
+    with ran.HeavyLock("x", path=str(tmp_path / "l"), echo=said.append):
+        pass
+    assert any("no other holder" in s for s in said)
