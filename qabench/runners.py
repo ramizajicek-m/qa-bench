@@ -111,7 +111,9 @@ def served(projects: list[dict], *, fetch=report.gh_json, health=report.health_c
             pushes = (rr.get("workflow_runs") or []) if isinstance(rr, dict) else []
             if pushes and all(r.get("conclusion") == "success" for r in pushes):
                 newest = max(pushes, key=lambda r: str(r.get("updated_at") or ""))
-                green = {"head_sha": sha, "updated_at": newest.get("updated_at")}
+                first = min(pushes, key=lambda r: str(r.get("created_at") or "~"))
+                green = {"head_sha": sha, "updated_at": newest.get("updated_at"),
+                         "created_at": first.get("created_at")}
                 break
         serves = health(url)
         row = {"repo": repo, "branch": branch, "serves": (serves or "")[:9],
@@ -132,29 +134,42 @@ def served(projects: list[dict], *, fetch=report.gh_json, health=report.health_c
             row["state"] = {"ahead": "BEHIND", "behind": "ahead of green", "diverged": "DIVERGED",
                             "identical": "ok"}.get(status, "UNREADABLE")
         if row.get("state") == "BEHIND":
-            row["why"] = _why(repo, str(green["head_sha"]), fetch)
+            row["why"] = _why(repo, str(green["head_sha"]), fetch, green)
         out.append(row)
     return out
 
 
-def _why(repo: str, sha: str, fetch) -> str:
+def _why(repo: str, sha: str, fetch, green: dict | None = None) -> str:
     """Which of the three mechanisms of 2026-09-21 holds the green commit back, where it can tell.
 
     Three causes that day needed three responses: a check that FAILS on the same commit (tharros's and
     iga's scheduled `drift`, which Railway's Wait-for-CI counts); the platform's own status stuck PENDING
     (ana-log: "Railway is deploying" for 2.5 h); or neither, which leaves a timeout or a platform refusal.
     """
+    # EVERY mechanism that holds, not the first. tharros's ff8d68e had a failed `drift` check AND went green
+    # 2 h 15 m after its push, past Railway's fixed 2 h Wait-for-CI limit; the first cause found looked
+    # sufficient and ended the search, and a fix for it alone would have left the skip in place.
+    why = []
     checks = fetch(f"repos/{repo}/commits/{sha}/check-runs?per_page=100")
     failed = sorted({c.get("name", "?") for c in (checks.get("check_runs") or [])
                      if c.get("conclusion") in ("failure", "timed_out", "cancelled")}) if isinstance(checks, dict) else []
     if failed:
-        return f"a check that gates the deploy FAILED on this commit: {', '.join(failed)}"
+        why.append(f"a check that gates the deploy FAILED on this commit: {', '.join(failed)}")
     status = fetch(f"repos/{repo}/commits/{sha}/status")
     pending = [f"{x.get('context')}: {x.get('description')}" for x in (status.get("statuses") or [])
                if x.get("state") == "pending"] if isinstance(status, dict) else []
     if pending:
-        return "the platform's own status is PENDING: " + "; ".join(pending)[:120]
-    return "no failed check and no pending status — a Wait-for-CI timeout or a platform refusal; read the platform"
+        why.append("the platform's own status is PENDING: " + "; ".join(pending)[:120])
+    try:
+        t0 = dt.datetime.fromisoformat(str((green or {}).get("created_at")).replace("Z", "+00:00"))
+        t1 = dt.datetime.fromisoformat(str((green or {}).get("updated_at")).replace("Z", "+00:00"))
+        if t1 - t0 > dt.timedelta(hours=2):
+            why.append(f"CI finished {_age(green['created_at'], t1)} after the push — past Railway's fixed 2 h "
+                       "Wait-for-CI limit, which skips the deploy")
+    except (TypeError, ValueError):
+        pass
+    return " · AND ".join(why) or ("no failed check, no pending status, CI within 2 h — a platform refusal; "
+                                   "read the platform")
 
 
 def run(argv: list[str], *, echo=print, fetch=report.gh_json, health=report.health_commit) -> int:

@@ -105,7 +105,7 @@ def test_behind_names_the_mechanism_it_can_see():
     assert "PENDING" in runners.served(proj, fetch=fake(stuck), health=lambda u: "b74ae81", now=NOW)[0]["why"]
     neither = {**base, "repos/t/tha/commits/ff8d68e0e1/check-runs": {"check_runs": []},
                "repos/t/tha/commits/ff8d68e0e1/status": {"statuses": []}}
-    assert "timeout" in runners.served(proj, fetch=fake(neither), health=lambda u: "b74ae81", now=NOW)[0]["why"]
+    assert "platform refusal" in runners.served(proj, fetch=fake(neither), health=lambda u: "b74ae81", now=NOW)[0]["why"]
 
 
 def test_the_newest_green_is_the_first_commit_in_history_whose_pushes_all_passed():
@@ -131,3 +131,16 @@ def test_a_commit_with_one_red_push_run_is_not_green_and_the_first_green_wins():
     rows = runners.served([{"repo": "t/tha", "staging": "https://s/health", "main": "main"}],
                           fetch=fake(table), health=lambda u: "ccccccc000", now=NOW)
     assert rows[0]["newest_green"] == "ccccccc00" and rows[0]["state"] == "ok"
+
+
+def test_every_mechanism_is_named_not_the_first():
+    """tharros ff8d68e: a failed drift check AND green 2 h 15 m after the push — past Railway's 2 h limit."""
+    table = {"repos/t/tha/commits?sha=main": [{"sha": "ff8d68e0e1"}],
+             "repos/t/tha/actions/runs?head_sha=ff8d68e0e1": {"workflow_runs": [
+                 {"conclusion": "success", "created_at": "2026-09-21T09:49:00Z", "updated_at": "2026-09-21T12:04:00Z"}]},
+             "repos/t/tha/compare/b74ae81...ff8d68e0e1": {"status": "ahead"},
+             "repos/t/tha/commits/ff8d68e0e1/check-runs": {"check_runs": [{"name": "drift", "conclusion": "failure"}]},
+             "repos/t/tha/commits/ff8d68e0e1/status": {"statuses": []}}
+    why = runners.served([{"repo": "t/tha", "staging": "https://s/health", "main": "main"}],
+                         fetch=fake(table), health=lambda u: "b74ae81", now=NOW)[0]["why"]
+    assert "drift" in why and "2 h" in why and "AND" in why
