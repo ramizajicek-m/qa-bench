@@ -658,16 +658,101 @@ def execute(argv: list[str], log: Path, *, cwd: Path, echo=print) -> int:
         return p.wait()
 
 
-def run_one(root: Path, cfg: dict, name: str, argv: list[str], *, now=None, echo=print) -> dict:
+#: TESTING IS THE LOAD THAT BREAKS THE THING BEING TESTED (ana-log, 2026-09-21). The estate's Mac reached
+#: load 75, then 105, on fourteen cores: the Actions runner VM plus several sessions' full suites, two
+#: launched a minute apart, each running unit and e2e in parallel. On ana that produced three red CI runs
+#: of HTTP timeouts, a CI Postgres dropped into recovery mid-run, and a 2 h 30 m queue that tripped
+#: Railway's 2 h limit. "A different test fails each run and each passes alone" is the signature of
+#: order-dependence AND of a saturated machine; a fix that coincides with a quiet machine is
+#: indistinguishable from a fix that worked. So every run records the load it was measured under, and a
+#: run above LOADED x cores says so in its verdict line.
+LOADED = 1.5
+
+
+def _load(getloadavg=os.getloadavg) -> float | None:
+    try:
+        return round(getloadavg()[0], 1)
+    except (OSError, AttributeError):
+        return None
+
+
+class HeavyLock:
+    """One heavy suite per machine, as a LOCK rather than a courtesy. "Be considerate" is not a scheduler:
+    each session reasoned correctly from what it could see, and none could see the others. `--heavy` takes
+    an exclusive lock at ~/.qabench/heavy.lock (QABENCH_HEAVY_LOCK), waits for it, and says who held it."""
+
+    def __init__(self, name: str, echo=print, path: str | None = None):
+        self.path = Path(path or os.environ.get("QABENCH_HEAVY_LOCK") or Path.home() / ".qabench" / "heavy.lock")
+        self.name, self.echo, self.fh, self.waited = name, echo, None, 0.0
+
+    def __enter__(self):
+        import fcntl
+        import time
+        # RE-ENTRANT ACROSS THE PROCESS TREE. A heavy run whose command itself calls `ran --heavy` (a land.py
+        # check wrapping `./dev test unit`, which one day wraps another) would block forever on a lock its own
+        # ancestor holds — the one way a kernel lock deadlocks a single job (ana-qa). The holder exports
+        # QABENCH_HEAVY_HELD with the lock's path; a descendant that sees it proceeds and says so.
+        if os.environ.get("QABENCH_HEAVY_HELD") == str(self.path):
+            self.echo("ran: heavy-run lock already held by this run's own ancestor — proceeding inside it")
+            self.fh, self.nested = None, True
+            return self
+        self.nested = False
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.fh = open(self.path, "a+")
+        t0 = time.monotonic()
+        try:
+            fcntl.flock(self.fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            self.fh.seek(0)
+            holder = self.fh.read().strip() or "another heavy run"
+            self.echo(f"ran: waiting for the machine's heavy-run lock, held by: {holder}")
+            fcntl.flock(self.fh, fcntl.LOCK_EX)
+        self.waited = round(time.monotonic() - t0, 1)
+        self.fh.seek(0)
+        self.fh.truncate()
+        self.fh.write(f"{self.name} pid {os.getpid()} in {os.getcwd()} since "
+                      f"{dt.datetime.now(dt.timezone.utc).isoformat(timespec='seconds')}")
+        self.fh.flush()
+        self._prev = os.environ.get("QABENCH_HEAVY_HELD")
+        os.environ["QABENCH_HEAVY_HELD"] = str(self.path)      # inherited by the command this lock wraps
+        return self
+
+    def __exit__(self, *exc):
+        import fcntl
+        if self.nested:
+            return False
+        if self._prev is None:
+            os.environ.pop("QABENCH_HEAVY_HELD", None)
+        else:
+            os.environ["QABENCH_HEAVY_HELD"] = self._prev
+        try:
+            self.fh.seek(0)
+            self.fh.truncate()
+            fcntl.flock(self.fh, fcntl.LOCK_UN)
+        finally:
+            self.fh.close()
+        return False
+
+
+def run_one(root: Path, cfg: dict, name: str, argv: list[str], *, now=None, echo=print,
+            getloadavg=os.getloadavg) -> dict:
     """Preflight, run, judge, and write the artefact. The artefact IS the result."""
     now = now or dt.datetime.now(dt.timezone.utc)
+    load_start = _load(getloadavg)
     declared = cfg.get("record") or {}
     spec = (cfg.get("commands") or {}).get(name) or {}
     art_dir = root / (cfg.get("artefacts") or "qa/runs")
     host = snapshot(declared)
     log = art_dir / f"{name}.log"
     code = execute(argv, log, cwd=root, echo=echo)
+    load_end = _load(getloadavg)
     v, why = verdict(code, log.read_text(encoding="utf-8", errors="replace"), spec)
+    cores = os.cpu_count() or 1
+    peak = max([x for x in (load_start, load_end) if x is not None], default=None)
+    under_load = peak is not None and peak / cores > LOADED
+    if under_load:
+        why += (f" — measured UNDER LOAD (load {peak} on {cores} cores): a failure here is not yet evidence about "
+                "the code, and a later green is not evidence of a fix, until it is re-run on a quiet machine")
     record = {
         "name": name, "argv": argv, "started": now.isoformat(), "cwd": str(root),
         "host": host.__dict__, "host_busy": host.busy(declared),
@@ -685,6 +770,7 @@ def run_one(root: Path, cfg: dict, name: str, argv: list[str], *, now=None, echo
                           if not re.search(g.get("evidence") or r"(?!x)x",
                                            log.read_text(encoding="utf-8", errors="replace"), re.M)],
         "log": str(log.relative_to(root)), "finished": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "load": {"start": load_start, "end": load_end, "cores": cores, "under_load": under_load},
     }
     if not spec:
         record["why"] += (f" — judged on the kit's default markers; `ran.commands.{name}` declares none, so this "
@@ -719,7 +805,12 @@ def run(argv: list[str], *, echo=print) -> int:
         print(f"no `ran:` block in {mpath} — nothing declares what completion looks like for this project, "
               "so no run here can be told from one that died in its fixtures (exit 3)", file=sys.stderr)
         return 3
-    record = run_one(root, cfg, name, cmd, echo=echo)
+    if "--heavy" in opts:
+        with HeavyLock(name, echo=echo) as lock:
+            record = run_one(root, cfg, name, cmd, echo=echo)
+            record["heavy_lock_waited_s"] = lock.waited
+    else:
+        record = run_one(root, cfg, name, cmd, echo=echo)
     if "--json" in opts:
         print(json.dumps(record, indent=1, ensure_ascii=False))
     else:

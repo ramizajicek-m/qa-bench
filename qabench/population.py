@@ -2169,6 +2169,7 @@ def judge(spec: dict, root: Path, today: dt.date, *, run=read_members, surfaces=
             row.problems.append(f"population.cmd_from: {pop_spec['cmd_from']!r} names no command in the manifest")
             return row
         pop_spec = {**pop_spec, "cmd": node}
+    _inherited_prompt(row, pop_spec, root)
     pop = run(root, pop_spec["cmd"])
     # ONE REQUIREMENT, SEVERAL DETECTORS: the population is the REQUIREMENT'S,
     # and what has to be asserted is that the detectors' corpora COVER it. Two
@@ -2437,6 +2438,131 @@ def judge(spec: dict, root: Path, today: dt.date, *, run=read_members, surfaces=
     return row
 
 
+def _inherited_prompt(row: Row, pop_spec: dict, root: Path) -> None:
+    """A GUARD BUILT FROM AN INSTANCE INHERITS THE INSTANCE'S PARAMETERS — reported, not judged.
+
+    Four guards on 2026-09-21 were correct and were guards for the CASE: keyed on
+    `batch|bulk` (the routes that prompted it), on the denominator `146`, on the
+    prop `onDone`, on `.modal-overlay`. The parameter is never stated, so the
+    scope is a fact about the implementation that nobody claimed. So a population
+    states its PROPERTY in words, and every word in its selector (the command and
+    the script it runs) that the property does not contain is listed: add it to
+    the property (it IS the scope — say so) or declare it under `literals:` with
+    why it names the property.
+
+    Measured before it was written, which is why it is a NOTE: over whole guard
+    files the tell flagged 18-34 words each, almost all harmless; over the
+    population selector alone it is short enough to read. The METHOD half (a
+    character window, a whole-file containment) is not a literal and is not seen
+    here; its discriminator is a per-subject mutation (`qabench mutate`).
+    """
+    from . import inherit
+    prop = str(pop_spec.get("property") or "").strip()
+    if not prop:
+        row.note = ((row.note + " · ") if row.note else "") + (
+            "population.property is unstated — say in words what makes a thing a member, so a selector literal "
+            "the property does not contain can be seen for what it is: the case's parameter, or the class's")
+        return
+    cmd = str(pop_spec.get("cmd") or "")
+    declared = pop_spec.get("literals") or {}
+    found = list(inherit.unexplained(cmd, prop, declared, python=False))
+    for tok in cmd.split():
+        tok = tok.strip("'\"")
+        if tok.endswith((".py", ".js", ".mjs", ".ts", ".sh")) and (root / tok).is_file():
+            try:
+                found += inherit.unexplained((root / tok).read_text(encoding="utf-8"), prop, declared,
+                                             python=tok.endswith(".py"))
+            except OSError:
+                pass
+    words = sorted({w for w, _ in found})
+    if words:
+        row.note = ((row.note + " · ") if row.note else "") + (
+            f"selector words the property does not contain: {', '.join(words[:12])}"
+            + (f" (+{len(words) - 12})" if len(words) > 12 else "")
+            + " — each is the CASE's parameter (add it to the property: it is the scope) or names the class "
+              "(declare it under population.literals with why)")
+
+
+#: What a guard MEASURES AGAINST. Only `product` sees the thing a person uses.
+CORPORA = ("product", "fixture", "source")
+
+
+# ANY `.goto(`, not `page.goto(`: the first version keyed on the fixture NAME `page` and classified 58 of
+# anat's 177 e2e files as nothing, because they navigate with `logged_in_page.goto(` and `public_page.goto(` —
+# the inherited-parameter class again, in the classifier built for it.
+_PRODUCT = re.compile(r"\.goto\(|\bclient\.(?:get|post|put|patch|delete)\(|\bhttpx\.(?:get|post)\(|"
+                      r"\brequests\.(?:get|post)\(|\bTestClient\(")
+_FIXTURE = re.compile(r"\bset_content\(")
+# "OBSERVED" MEANS TWO THINGS: by a seeded test, and by someone opening the page. anat's UI-LST-08 counted
+# four tables asserted in a browser; two exist only after the e2e SEEDS subcontractor and gift rows — on a
+# real org they are empty states, and the page's own renderers throw. A product test that creates its
+# subject first is `seeded`: it proves the mechanism when the data exists, not that a person can reach it.
+# MEASURED, not guessed: anat's e2e "seeds" by INTERCEPTING the page's own API calls — `page.route(...)`
+# answering with `route.fulfill` / a `_route_json` helper — not by writing rows. The first pattern here
+# (create_/add_/insert) matched Playwright's own `add_init_script`/`add_script_tag` in most of its 24 hits.
+_SEEDS = re.compile(r"\.route\(|\.fulfill\(|\bseed(?:_\w+)?\(")
+_SOURCE = re.compile(r"\.read_text\(|\bopen\(")
+
+
+def corpus_of(source: str) -> set[str]:
+    """What a test file MEASURES AGAINST, read from what it calls — never declared.
+
+    DECLARE THE ROW, DERIVE THE CORPUS (anat-qa). A corpus declared per guard is adoption-gated, so the
+    rows nobody annotates are exactly the rows nobody is thinking about, and "1 seam" over three
+    registered guards reads as an estate verdict. What a file calls is a fact about the code: measured on
+    anat, 156 of 183 e2e files call page.goto (product), 25 call set_content (fixture), and 10 do BOTH —
+    the pattern that closes the seam inside one file, and the one that would have saved UI-LST-08.
+    A file that only reads files is `source`. The regexes are the stated proxy; a project with another
+    driver adds its own calls.
+    """
+    out = set()
+    if _PRODUCT.search(source):
+        out.add("product")
+    if _FIXTURE.search(source):
+        out.add("fixture")
+    if "product" in out and _SEEDS.search(source):
+        out.add("seeded")
+    if not out and _SOURCE.search(source):
+        out.add("source")
+    return out
+
+
+def seams_of_corpus(guards: list) -> list[dict]:
+    """Rows whose guards, together, read as coverage and, singly, never measure the product.
+
+    THE RIGHT CHECK ON THE WRONG CORPUS, BESIDE THE WRONG CHECK ON THE RIGHT CORPUS, BOTH GREEN. anat's
+    UI-LST-08 ("table headers stay visible while scrolling") had three green guards: one walked the REAL pages
+    and checked that a heading does not OVERLAP its row (never scrolls); one scrolled and asserted the heading
+    stays on screen, on a hand-written `page.set_content` fixture; one asserted the class and the CSS rule
+    exist. The union reads as coverage; the intersection is empty — /admin/settings/alerts scrolled its heading
+    to top -195 with four checkbox columns unlabelled. Neither instrument is wrong; the failure is in the seam,
+    and nothing in a suite computes seams, because nothing records, per property, which guard measures it on
+    which corpus. So a guard names the row it `answers:` and its `corpus:` (product | fixture | source), and a
+    row every one of whose guards is fixture or source is listed: nobody has measured it on the product. A
+    fixture cannot contain the case its author did not imagine — which is the case that bites.
+    """
+    by_row: dict[str, list[str]] = {}
+    unseeded: dict[str, bool] = {}
+    for g in guards:
+        if not isinstance(g, dict):
+            continue
+        rows_ = g.get("answers")
+        corpora = [str(g["corpus"])] if g.get("corpus") else sorted(g.get("_derived_corpus") or []) or [""]
+        for rid in ([rows_] if isinstance(rows_, str) else rows_ or []):
+            by_row.setdefault(str(rid), []).extend(corpora)
+            if "product" in corpora and "seeded" not in corpora:
+                unseeded[str(rid)] = True
+    out = []
+    for rid, cs in sorted(by_row.items()):
+        if "product" not in cs:
+            out.append({"row": rid, "corpora": sorted(set(c or "undeclared" for c in cs))})
+        elif not unseeded.get(rid):
+            # Measured on the product, but only in a state the test manufactured: reported as its own kind,
+            # because "still partial" should say WHICH blocker holds (page-load, method, or data).
+            out.append({"row": rid, "corpora": sorted(set(cs)), "kind": "seeded-only"})
+    return out
+
+
 def run_population(root: Path, cfg: dict, *, today: dt.date | None = None, run=read_members) -> dict:
     today = today or dt.date.today()
     reg_path = root / cfg["register"]
@@ -2454,6 +2580,11 @@ def run_population(root: Path, cfg: dict, *, today: dt.date | None = None, run=r
                          if isinstance(spec, dict) and spec.get("status") == "implemented")
     covered = {r.check for r in rows}
     return {
+        "unmet": seams_of_corpus(guards),
+        # The seam count is only as wide as the rows the register SAW; printed beside it, so "1 seam" over
+        # three registered guards is never read as "1 seam in the repo".
+        "rows_seen": len({str(r) for g in guards if isinstance(g, dict)
+                          for r in ([g["answers"]] if isinstance(g.get("answers"), str) else g.get("answers") or [])}),
         "register": str(reg_path),
         "guards": len(rows),
         "rows": [r.__dict__ for r in rows],
@@ -2503,6 +2634,16 @@ def run(argv: list[str], *, today: dt.date | None = None) -> int:
                 print(f"       {r['note']}")
             for p in r["problems"]:
                 print(f"       {p}")
+        if out["unmet"] or out["rows_seen"]:
+            print(f"  seams: {len(out['unmet'])} of {out['rows_seen']} row(s) the register names — rows it does not "
+                  "name are not in this count")
+        for u in out["unmet"]:
+            if u.get("kind") == "seeded-only":
+                print(f"  SEEDED {u['row']}: observed on the product only in a state its tests CREATE — proves the "
+                      "mechanism when the data exists, not that a person can reach it")
+                continue
+            print(f"  SEAM {u['row']}: every guard that answers it measures {', '.join(u['corpora'])} — none measures "
+                  "the product (reported; a fixture cannot contain the case its author did not imagine)")
         for c in out["unregistered"]:
             print(f"  RED  {c} is `implemented` in the manifest and no guard says what population it covers")
     if not out["guards"]:

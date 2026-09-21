@@ -1095,3 +1095,102 @@ def test_a_block_that_is_not_a_mapping_is_named(repo):
 def test_malformed_detectors_are_named(repo):
     row = judged(repo, subject={"cmd": None, "detectors": ["a-string"]})
     assert row["unrunnable"] and "list of mappings" in row["problems"][0]
+
+
+def test_a_selector_literal_the_property_does_not_contain_is_named(tmp_path):
+    """anat's route sweep keyed on batch|bulk, the names of the routes that prompted it."""
+    from qabench import population
+    row = population.Row(id="g", check="C10", claims="x")
+    population._inherited_prompt(row, {"cmd": "python3 -c 'import re; re.compile(\"/api/.*(batch|bulk)\")'",
+                                       "property": "routes that iterate a collection and report a count"}, tmp_path)
+    assert "batch" in row.note and "bulk" in row.note
+
+
+def test_an_unstated_property_is_named_and_a_declared_literal_is_answered(tmp_path):
+    from qabench import population
+    row = population.Row(id="g", check="C10", claims="x")
+    population._inherited_prompt(row, {"cmd": "echo '(batch|bulk)'"}, tmp_path)
+    assert "property is unstated" in row.note
+    row2 = population.Row(id="g", check="C10", claims="x")
+    population._inherited_prompt(row2, {"cmd": "echo '(batch|bulk)'", "property": "bulk routes",
+                                        "literals": {"batch": "the codebase's other word for a bulk route"}}, tmp_path)
+    assert row2.note == ""
+
+
+def test_the_script_a_selector_runs_is_read_too(tmp_path):
+    from qabench import population
+    (tmp_path / "scripts").mkdir()
+    (tmp_path / "scripts" / "sel.py").write_text('import re\nPAT = re.compile(r"(\\d+) of 146")\n')
+    row = population.Row(id="g", check="C3", claims="x")
+    population._inherited_prompt(row, {"cmd": "python3 scripts/sel.py",
+                                       "property": "a count copied into the tracker equals its source"}, tmp_path)
+    assert "146" in row.note
+
+
+def test_the_inherited_prompt_runs_inside_the_judge(repo):
+    row = judged(repo, population={"property": "routes that iterate a collection and report a count",
+                                   "literals": {}})
+    assert "selector words the property does not contain" in (row["note"] if isinstance(row, dict) else row.note) \
+        or "property is unstated" not in (row["note"] if isinstance(row, dict) else row.note)
+    bare = judged(repo)
+    assert "property is unstated" in (bare["note"] if isinstance(bare, dict) else bare.note)
+
+
+def test_a_row_whose_guards_never_measure_the_product_is_a_seam():
+    """anat UI-LST-08: real pages without scrolling, scrolling on a fixture, and the CSS rule's presence — all green."""
+    guards = [
+        {"id": "overlap", "answers": "UI-LST-08", "corpus": "product"},
+        {"id": "scroll", "answers": ["UI-LST-08", "UI-LST-09"], "corpus": "fixture"},
+        {"id": "css", "answers": "UI-LST-09", "corpus": "source"},
+        {"id": "other", "answers": "UI-X-01"},
+    ]
+    seams = {u["row"]: u["corpora"] for u in population.seams_of_corpus(guards)}
+    assert "UI-LST-08" not in seams                       # one guard measures the product
+    assert seams["UI-LST-09"] == ["fixture", "source"]     # the union reads as coverage; nothing measures the product
+    assert seams["UI-X-01"] == ["undeclared"]
+
+
+def test_the_register_reports_seams(repo):
+    root = repo([{**guard(), "answers": "ACT-11", "corpus": "fixture"}])
+    out = population.run_population(root, {"register": "qa/guards.yml"}, today=TODAY)
+    assert out["unmet"] == [{"row": "ACT-11", "corpora": ["fixture"]}]
+
+
+def test_the_corpus_is_read_from_what_a_file_calls():
+    assert population.corpus_of("def test(page):\n    page.goto('/admin')\n") == {"product"}
+    assert population.corpus_of("def test(page):\n    page.set_content(HTML)\n") == {"fixture"}
+    assert population.corpus_of("def test(page):\n    page.set_content(H)\n    page.goto('/x')\n") == {"product", "fixture"}
+    assert population.corpus_of("def test():\n    assert 'x' in (ROOT / 'static/a.css').read_text()\n") == {"source"}
+    assert population.corpus_of("def test():\n    assert 1\n") == set()
+    assert population.corpus_of("def test(logged_in_page):\n    logged_in_page.goto('/x')\n") == {"product"}
+    # a product test that also reads a file is still product, not product+source
+    assert population.corpus_of("def test(page):\n    page.goto('/x')\n    (ROOT / 'a.json').read_text()\n") == {"product"}
+
+
+def test_a_derived_corpus_counts_and_the_report_says_how_many_rows_it_saw(repo):
+    root = repo([{**guard(), "answers": "ACT-11", "_derived_corpus": ["product", "fixture"]}])
+    out = population.run_population(root, {"register": "qa/guards.yml"}, today=TODAY)
+    assert out["unmet"] == [] and out["rows_seen"] == 1
+
+
+def test_a_product_test_that_seeds_its_subject_first_is_seeded():
+    """anat UI-LST-08: two of four tables exist only after the e2e seeds rows; on a real org they are empty."""
+    src = "def test(logged_in_page, db):\n    seed_subcontractors(db)\n    logged_in_page.goto('/my-day')\n"
+    assert population.corpus_of(src) == {"product", "seeded"}
+    routed = "def test(page):\n    page.route('**/api/my-day', lambda r: r.fulfill(json=ROWS))\n    page.goto('/my-day')\n"
+    assert population.corpus_of(routed) == {"product", "seeded"}
+    setup = "def test(page):\n    page.add_init_script('x')\n    page.goto('/a')\n"
+    assert population.corpus_of(setup) == {"product"}
+    # seeding a FIXTURE page is still a fixture; `seeded` qualifies product evidence only
+    fx = "def test(page):\n    page.route('**', lambda r: r.fulfill(body=''))\n    page.set_content(H)\n"
+    assert population.corpus_of(fx) == {"fixture"}
+    assert population.corpus_of("def test(page):\n    page.goto('/a')\n") == {"product"}
+
+
+def test_a_row_observed_only_on_manufactured_state_is_its_own_kind():
+    guards = [{"answers": "LST-08", "_derived_corpus": ["product", "seeded"]},
+              {"answers": "LST-09", "_derived_corpus": ["product", "seeded"]},
+              {"answers": "LST-09", "_derived_corpus": ["product"]}]
+    seams = {u["row"]: u for u in population.seams_of_corpus(guards)}
+    assert seams["LST-08"]["kind"] == "seeded-only"
+    assert "LST-09" not in seams
