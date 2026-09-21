@@ -59,7 +59,59 @@ def count(text: str, cls: str) -> tuple[int, int]:
     return elements, mentions
 
 
+_COMMENT = re.compile(r"/\*.*?\*/", re.S)
+_MEDIA = re.compile(r"@media[^{]*\{(?:[^{}]*\{[^{}]*\})*[^{}]*\}")
+_OPACITY0 = re.compile(r"(?<![\w-])opacity\s*:\s*0(?:\.0+)?\s*(?:;|!|$)")
+
+
+def hidden_until_script(css: str) -> set[str]:
+    """Classes whose BASE rule sets opacity 0 — invisible until something un-hides them.
+
+    tharros: `.rv { opacity: 0 }` is unconditional and only JS adds `.in`; 49 sections on six customer
+    templates, including the door handover card on /track, are chrome plus invisible content with
+    scripts off or failed. The STA-07 evidence measured text PRESENCE (source, and Playwright inner_text,
+    which counts opacity-0 text) — what is in the DOM, not what is painted. Only the base rule counts:
+    a rule inside @media (reduced motion) or scoped by a parent selector is a condition, not the default.
+    Comments are stripped first: the first version kept the comment above `.rv` in its selector and
+    found nothing on the very case it was built for. opacity only — `display:none` is the ordinary,
+    legitimate default of a modal, and flagging it would bury the finding."""
+    css = _MEDIA.sub("", _COMMENT.sub("", css))
+    out = set()
+    for sel, body in re.findall(r"([^{}@]+)\{([^{}]*)\}", css):
+        if _OPACITY0.search(body):
+            for one in sel.split(","):
+                one = one.strip()
+                if re.fullmatch(r"\.[\w-]+", one):
+                    out.add(one[1:])
+    return out
+
+
 def run(argv: list[str], *, echo=print) -> int:
+    if "--hidden-by-default" in argv:
+        root = Path(argv[argv.index("--repo") + 1] if "--repo" in argv else ".").resolve()
+        css_files = [f for f in list(root.glob("static/**/*.css")) + list(root.glob("web/src/**/*.css"))
+                     if "node_modules" not in f.parts]
+        tpl = [f for f in root.glob("templates/**/*.html") if f.is_file()]
+        css = "\n".join(f.read_text(encoding="utf-8", errors="replace") for f in css_files)
+        css += "\n".join(m for f in tpl for m in re.findall(r"<style[^>]*>(.*?)</style>",
+                                                             f.read_text(encoding="utf-8", errors="replace"), re.S))
+        if not css_files and not tpl:
+            print("elements: no stylesheet or template found — nothing read (exit 3)", file=sys.stderr)
+            return 3
+        found = []
+        for cls in sorted(hidden_until_script(css)):
+            per = [(str(f.relative_to(root)), count(f.read_text(encoding="utf-8", errors="replace"), cls)[0]) for f in tpl]
+            per = [x for x in per if x[1]]
+            if per:
+                found.append((cls, sum(n for _, n in per), per))
+        echo(f"elements: {len(found)} class(es) whose base rule is opacity 0 and that sit on elements — invisible "
+             "until a script reveals them; measure each page with JS off by COMPUTED visibility, not by text presence")
+        for cls, n, per in found:
+            echo(f"  .{cls}: {n} element(s) in {len(per)} template(s): " + ", ".join(f"{f} ({k})" for f, k in per[:6]))
+        # Report-only: measured across the estate, tharros's .rv (49 elements, 6 templates) is the finding and
+        # the rest are single hover/state reveals (a save badge, a submenu, keyboard hints). --strict to gate.
+        return 1 if found and "--strict" in argv else 0
+
     if not argv or argv[0].startswith("-"):
         print("usage: python -m qabench elements CLASS [--repo DIR] [--glob PATTERN]", file=sys.stderr)
         return 3

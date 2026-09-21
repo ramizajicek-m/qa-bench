@@ -46,3 +46,29 @@ def test_three_numbers_for_one_question_are_all_named():
           '<table class="sticky-head"></table><style>.sticky-head{}</style>\n'
     assert elements.count(src, "sticky-head") == (1, 2)
     assert elements.greps(src, "sticky-head") == (4, 3)
+
+
+THARROS_CSS = """
+/* Shared reveal: sections fade in when scrolled into view. */
+.rv { opacity: 0; transform: translateY(22px); }
+.rv.in { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) { .fade { opacity: 0; } }
+html.js .later { opacity: 0 }
+.modal { display: none; }
+"""
+
+
+def test_a_base_rule_of_opacity_zero_is_hidden_until_script_and_conditions_are_not():
+    """tharros `.rv { opacity: 0 }`: 49 sections invisible with scripts off; the first version missed it."""
+    assert elements.hidden_until_script(THARROS_CSS) == {"rv"}
+
+
+def test_the_cli_names_the_classes_and_their_templates(tmp_path):
+    (tmp_path / "static").mkdir()
+    (tmp_path / "static" / "site.css").write_text(THARROS_CSS)
+    (tmp_path / "templates").mkdir()
+    (tmp_path / "templates" / "track.html").write_text('<section class="rv">handover</section><div class="modal"></div>')
+    out = []
+    assert elements.run(["--hidden-by-default", "--repo", str(tmp_path)], echo=out.append) == 0
+    assert elements.run(["--hidden-by-default", "--repo", str(tmp_path), "--strict"], echo=out.append) == 1
+    assert any(".rv: 1 element" in o and "track.html" in o for o in out)
