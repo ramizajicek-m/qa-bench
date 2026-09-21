@@ -89,9 +89,9 @@ def test_batching_that_protects_the_running_verdict_is_clean(tmp_path):
 
 
 def test_a_sha_keyed_or_scheduled_workflow_is_clean(tmp_path):
-    ok = "on:\n  push: {}\nconcurrency:\n  group: ci-${{ github.ref }}-${{ github.sha }}\njobs: {}\n"
+    ok = "on:\n  push: {}\nconcurrency:\n  group: ci-${{ github.ref }}-${{ github.sha }}\n  cancel-in-progress: true\njobs: {}\n"
     assert scan(tmp_path, ok, name=".github/workflows/ci.yml")[0] == 0
-    nightly = "on:\n  schedule: [{cron: '1 1 * * *'}]\nconcurrency:\n  group: n-${{ github.ref }}\njobs: {}\n"
+    nightly = "on:\n  schedule: [{cron: '1 1 * * *'}]\nconcurrency:\n  group: n-${{ github.ref }}\n  cancel-in-progress: true\njobs: {}\n"
     assert scan(tmp_path / "b", nightly, name=".github/workflows/n.yml")[0] == 0
 
 
