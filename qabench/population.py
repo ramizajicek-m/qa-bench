@@ -1404,6 +1404,50 @@ THE ONLY METHOD THAT HAS WORKED EVERY TIME IS READING WHAT A TEST ASSERTS NEXT
 TO WHAT THE ROW SAYS, and its slowness is not incidental to it — IT IS THE
 METHOD. A HEURISTIC THAT HAS NOT MET A LABELLED SET IS A HYPOTHESIS.
 
+WHAT THAT READING LOOKS LIKE WHEN SOMEBODY DOES IT WELL, since "read what each
+test asserts" is easy to endorse and hard to do. One audit of another project
+applied FOUR HEADINGS to every test cited as evidence, and the headings are the
+method:
+
+    ASSERTS            the clauses it actually asserts, by requirement id
+    NAME-ONLY          the clauses its name, or the brief, suggests and it does
+                       NOT assert
+    POPULATION         customer, admin or both, with the size DERIVED A SECOND
+                       WAY
+    STILL PASSES AGAINST  what could break tomorrow without it going red
+
+NAME-ONLY is the heading that finds the class above, and it found it at once: a
+sideways-scroll test cited for 200% TEXT zoom asserts 390 px reflow — "the exact
+trap" another project had hit the same week, now in a THIRD codebase with no
+shared code. The row's wording produces the same wrong test wherever it is
+read. STILL PASSES AGAINST is the heading that finds vacuity; the two together
+cover both halves of the split drawn above, which is why a four-heading audit
+beats any single check.
+
+AND ONE CLASS THE READING FOUND THAT NOTHING ELSE HERE NAMES: A TEST WHOSE
+ORACLE IS THE DEFECT. A test asserts that the English detail "MMSI must be 9
+digits" reaches an operator — pinning, as the DESIRED behaviour, a violation of
+the requirement that system output be translated. Ninety of the 101 literal
+400-details in that tree have no Hebrew. This is not a guard measuring the wrong
+thing; it is a guard DEFENDING the wrong thing, and it is the most perverse
+direction in the set: THE SUITE WILL GO RED WHEN SOMEBODY FIXES IT, so the fix
+has to argue with a green test that looks like evidence — and the natural
+reaction to a red test on a fix is to back the fix out.
+
+A GUARD THAT ENFORCES THE DEFECT IS DIFFERENT FROM ONE THAT IS BLIND TO IT, and
+the anatomy is worth keeping: THE PREMISE WAS RIGHT — an operator must see the
+SPECIFIC reason, not "something went wrong" — and the test PINNED THE REASON'S
+LITERAL WORDING, which is itself the violation. A review's premise can be right
+while its fix is wrong, and here that is frozen into a test. The mechanical form
+is ANY ASSERTION WHOSE EXPECTED LITERAL IS OUTPUT A REQUIREMENT FORBIDS: every
+string a test asserts is present in a rendered response, read against the rows
+that constrain that string. And the repair KEEPS BOTH HALVES rather than
+deleting the test: assert the route's own specific detail is shown, WHATEVER
+ITS LANGUAGE, and separately that what is shown satisfies the constraint. PIN
+THE PROPERTY THE PREMISE NEEDS, NOT THE LITERAL THAT HAPPENS TO EXHIBIT IT —
+which is the marker-keyed rule arriving in an assertion's expected value: a test
+keyed on the literal is keyed on the current implementation of the fix.
+
 So nothing in this file should be read as covering the criterion question, and
 the decision not to add a `criterion:` field is now supported rather than merely
 prudent: a guard able to state its own criterion correctly would not have had
