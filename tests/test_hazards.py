@@ -110,3 +110,9 @@ def test_a_self_hosted_docker_job_running_tests_must_trust_its_workspace(tmp_pat
     assert scan(tmp_path / "b", fixed, name=".github/workflows/ci.yml")[0] == 0
     macos = bare.replace("[self-hosted, linux, iga]", "[self-hosted, macOS]")
     assert scan(tmp_path / "c", macos, name=".github/workflows/ci.yml")[0] == 0
+
+
+def test_a_character_tail_of_command_output_is_refused_and_a_line_tail_is_not(tmp_path):
+    """anat land.py: `r.stdout[-800:]` printed `irect-use-of-jinja2...: 0 -> 2` — the path cut from the head."""
+    assert scan(tmp_path, "say(r.stdout[-800:])\n", name="scripts/land.py")[0] == 1
+    assert scan(tmp_path / "b", "say('\\n'.join(r.stdout.splitlines()[-15:]))\n", name="scripts/land.py")[0] == 0

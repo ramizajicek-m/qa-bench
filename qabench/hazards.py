@@ -49,6 +49,15 @@ for two shapes, each of which reported a false outcome in this estate on
   `[self-hosted, linux…]` that runs pytest or git without that env, at workflow
   or job level, is refused.
 
+  A REPORT THAT TRUNCATES FROM THE LEFT DROPS THE IDENTIFIER AND KEEPS THE
+  PREDICATE. anat's land.py printed a refusal's output as `r.stdout[-800:]`: the
+  last 800 CHARACTERS, which begin mid-line, so the one line that mattered read
+  `irect-use-of-jinja2.direct-use-of-jinja2: 0 -> 2` — the path and rule
+  namespace gone, the delta kept. The count is the part you cannot act on; the
+  filename is the part you can. A character tail of a command's output in a
+  Python script (`.stdout[-N:]`, `.stderr[-N:]`) is refused: keep whole lines
+  (`splitlines()[-N:]`), and elide the middle of a key, never its head.
+
 A line can be excused with a trailing `# hazard-ok: <reason>`; the reason is
 printed every run. What this does NOT read, stated: two steps joined by a
 newline where the second publishes what the first produced (ana-log's ledger
@@ -66,7 +75,8 @@ from pathlib import Path
 
 import yaml
 
-DEFAULT_PATHS = ["Makefile", "*.mk", "**/*.sh", ".github/workflows/*.yml", ".github/workflows/*.yaml"]
+DEFAULT_PATHS = ["Makefile", "*.mk", "**/*.sh", ".github/workflows/*.yml", ".github/workflows/*.yaml",
+                 "scripts/**/*.py", ".github/delivery-kit/*.py"]
 SKIP = {".git", "node_modules", ".venv", "venv", "__pycache__"}
 LIVENESS = re.compile(r"""\bpgrep\s+(?:-\w+\s+)*-\w*f\w*\s+(?:-\w+\s+)*(["']?)([^"'\s|;&)]+[^"'|;&)]*)\1"""
                       r"""|\bps\b[^|\n]*\|\s*grep\s+(?:-\w+\s+)*(["']?)([^"'\s|;&)]+)\3""")
@@ -75,6 +85,7 @@ RUNNER = re.compile(r"\b(?:pytest|playwright\s+test|vitest|jest|npm\s+(?:run\s+)
 TRUNC = re.compile(r"\|\s*(?:tail|head)\b")
 INLINE = re.compile(r"\b(?:sh|bash|zsh)\s+(?:-\w+\s+)*-\w*c\b")
 PS_PID = re.compile(r"\bps\b[^|]*\s-\w*p\b")
+CHAR_TAIL = re.compile(r"\.(?:stdout|stderr|output)\s*\[\s*-\s*\d+\s*:\s*\]")
 OK = re.compile(r"#\s*hazard-ok:\s*(\S.*)$")
 
 
@@ -151,6 +162,13 @@ def scan(root: Path, pats: list[str]) -> dict:
             (out["excused"] if "hazard-ok:" in text else out["red"]).append(f"{f.relative_to(root)}: {why}")
         recipe = f.name == "Makefile" or f.suffix == ".mk"
         rel = f.relative_to(root)
+        if f.suffix == ".py":
+            for n, line in enumerate(text.splitlines(), 1):
+                m = CHAR_TAIL.search(line)
+                if m and not OK.search(line):
+                    out["red"].append(f"{rel}:{n}: `{m.group(0)}` keeps the last characters of an output, so its "
+                                      "first line starts mid-way and loses the path at its head — keep whole lines")
+            continue
         for n, line in enumerate(text.splitlines(), 1):
             code = line.split(" #", 1)[0] if not line.lstrip().startswith("#") else ""
             if not code.strip():
