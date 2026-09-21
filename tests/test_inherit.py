@@ -102,3 +102,31 @@ def test_x(field):
     assert "final_price_agreed" in str(e.value)
 '''
     assert inherit.methods(src) == []
+
+
+def test_a_span_ending_at_the_same_match_is_the_element_not_a_window():
+    src = 'def f(s, ms, i):\n    return "x" in s[ms[i].start():ms[i].end()]\n'
+    assert inherit.methods(src) == []
+
+
+def test_a_fixed_case_test_whose_assertions_are_all_invariant_is_a_different_shape():
+    src = '''
+import pytest
+@pytest.mark.parametrize("name", ["A", "B"])
+def test_x(name):
+    assert "publish" in CORPUS
+'''
+    assert inherit.methods(src) == []
+
+
+def test_a_fixture_navigated_with_the_parameter_carries_it():
+    """Without this the estate run flagged 973 assertions, nearly all browser tests asserting on `page`."""
+    src = '''
+import pytest
+@pytest.mark.parametrize("path", ["/a", "/b"])
+def test_x(page, path):
+    page.goto(path)
+    assert path
+    assert "Saved" in page.content()
+'''
+    assert inherit.methods(src) == []
