@@ -94,6 +94,33 @@ def judge(manifest: dict, root: Path | None = None) -> list[dict]:
                 elif isinstance(missing, list) and set(missing) - allowed:
                     out.append(_finding(cid, "partial_unnamed",
                                         f"{cid}: `missing` names {sorted(set(missing) - allowed)}, which the contract does not know; use {sorted(allowed)}"))
+    # ANY COMMAND A DOCUMENT HANDS YOU IS UNTESTED UNLESS SOMETHING RUNS IT.
+    # tharros's `enumerate_routes` printed 4 routes out of 216 under its pinned
+    # framework, with no error, while the project's own code walked the router
+    # correctly: the manifest held a stale copy and nothing executed it. A
+    # presence check on the KEY is the only thing that was checking it. So a
+    # manifest declaring an enumeration command must register it as a
+    # `population` guard — run, compared by member against a second derivation,
+    # and holding at least one named witness. Advisory first, per the estate's
+    # adoption rule; it becomes fatal per repo once that repo is clean.
+    command = str(manifest.get("enumerate_routes") or "").strip()
+    if command and root is not None:
+        reg = (manifest.get("population") or {}).get("register")
+        guards = []
+        if reg and (Path(root) / reg).exists():
+            guards = (yaml.safe_load((Path(root) / reg).read_text(encoding="utf-8")) or {}).get("guards") or []
+        runs_it = [g for g in guards if isinstance(g, dict)
+                   and str(((g.get("population") or {}).get("cmd") or "")).strip() == command]
+        if not runs_it:
+            out.append(_finding("C10", "enumeration_unrun",
+                                "enumerate_routes is declared and NOTHING RUNS IT — any command a document hands you "
+                                "is untested unless something runs it. tharros's printed 4 routes of 216 with no "
+                                "error while its own code walked the router correctly. Register it as a population "
+                                "guard with a second-derivation superset and a named witness"))
+        elif not any((g.get("population") or {}).get("witness") for g in runs_it):
+            out.append(_finding("C10", "enumeration_unwitnessed",
+                                "enumerate_routes runs as a population guard with no named witness — a near-empty "
+                                "result reads as a small, clean project, and only a named route can see that"))
     extra = sorted(set(checks) - set(c["checks"]))
     if extra:
         out.append(_finding("*", "missing", f"checks beyond the twelve: {extra} — a thirteenth needs three ledger rows that fit none of the twelve"))
