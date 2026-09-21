@@ -247,8 +247,11 @@ before the surveillance tier does. The same repository had learned this once
 already — its gates sat queued behind a 60-minute browser leg for three runs
 running and production stayed 25 commits behind a green main, fixed by ordering
 the browser tier after the gates — and the guard was the piece not included in
-that reordering. Any estate with one shared runner and a post-deploy guard has
-the question, and it is per-project scheduling, so it is carried here as a
+that reordering. Across one estate the MECHANISM was present in five of five projects and the
+EXPOSURE verified in one: whether a project is exposed turns on one question —
+DOES ITS POST-DEPLOY PATH START A LONG JOB ON THE SAME RUNNER BEFORE OR WITH THE
+GUARD? If the guard is the only thing queued, design and schedule agree and there
+is nothing to fix. It is per-project scheduling, so it is carried here as a
 question rather than a check.
 
 AFTER ANY MUTATING STEP, READ BACK THE VALUE THAT MUST HAVE MOVED, AND ASSERT IT
