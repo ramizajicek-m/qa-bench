@@ -71,3 +71,16 @@ def test_a_staging_serving_a_descendant_of_green_is_not_behind():
     rows = runners.served([{"repo": "t/tha", "staging": "https://s/health", "main": "main"}],
                           fetch=fake(table), health=lambda url: "1234567", now=NOW)
     assert rows[0]["state"] == "ahead of green"
+
+
+def test_served_exits_one_when_a_staging_is_behind(tmp_path):
+    est = tmp_path / "e.yml"
+    est.write_text("projects:\n  - repo: t/tha\n    staging: https://s/health\n    main: main\n")
+    table = {"repos/t/tha/actions/runs?status": {"workflow_runs": []},
+             "repos/t/tha/actions/runs?branch=main&event=push&status=success": {"workflow_runs": [
+                 {"head_sha": "ff8d68e0e1", "updated_at": "2026-09-21T09:00:00Z"}]},
+             "repos/t/tha/compare/b74ae81...ff8d68e0e1": {"status": "ahead"}}
+    assert runners.run(["--estate", str(est), "--served"], echo=lambda *_: None, fetch=fake(table),
+                       health=lambda url: "b74ae81") == 1
+    assert runners.run(["--estate", str(est)], echo=lambda *_: None, fetch=fake(table),
+                       health=lambda url: "b74ae81") == 0

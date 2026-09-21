@@ -122,7 +122,7 @@ def served(projects: list[dict], *, fetch=report.gh_json, health=report.health_c
     return out
 
 
-def run(argv: list[str], *, echo=print, fetch=report.gh_json) -> int:
+def run(argv: list[str], *, echo=print, fetch=report.gh_json, health=report.health_commit) -> int:
     path = Path(argv[argv.index("--estate") + 1]) if "--estate" in argv else report.DEFAULT_ESTATE
     try:
         projects = (yaml.safe_load(path.read_text(encoding="utf-8")) or {}).get("projects") or []
@@ -145,7 +145,7 @@ def run(argv: list[str], *, echo=print, fetch=report.gh_json) -> int:
     if not readable:
         return 3
     if "--served" in argv:
-        rows = served(projects, fetch=fetch)
+        rows = served(projects, fetch=fetch, health=health)
         for r in rows:
             echo(f"  {r['state']:10} {r['repo']:32} staging serves {r['serves'] or '?':9}  newest green on "
                  f"{r['branch']}: {r['newest_green'] or '?':9} (green for {r['green_for']})")

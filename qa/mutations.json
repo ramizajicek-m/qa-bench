@@ -2157,6 +2157,63 @@
    "verdict": "caught",
    "exit": 1,
    "recorded": "2026-09-21"
+  },
+  {
+   "file": "qabench/runners.py",
+   "expr": "s.replace('            row[\"state\"] = {\"ahead\": \"BEHIND\", \"behind\": \"ahead of green\", \"diverged\": \"DIVERGED\",', '            row[\"state\"] = {\"ahead\": \"ok\", \"behind\": \"ahead of green\", \"diverged\": \"DIVERGED\",', 1)",
+   "command": [
+    "env",
+    "PYTHONPATH=.",
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_runners.py",
+    "-q",
+    "-p",
+    "no:randomly",
+    "-x"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-21"
+  },
+  {
+   "file": "qabench/runners.py",
+   "expr": "s.replace('        if any(r[\"state\"] == \"BEHIND\" for r in rows):\\n            return 1', '        if False:\\n            return 1', 1)",
+   "command": [
+    "env",
+    "PYTHONPATH=.",
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_runners.py",
+    "-q",
+    "-p",
+    "no:randomly",
+    "-x"
+   ],
+   "verdict": "survived",
+   "exit": 0,
+   "recorded": "2026-09-21"
+  },
+  {
+   "file": "qabench/runners.py",
+   "expr": "s.replace('        elif str(green[\"head_sha\"]).startswith(serves) or', '        elif True or', 1)",
+   "command": [
+    "env",
+    "PYTHONPATH=.",
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_runners.py",
+    "-q",
+    "-p",
+    "no:randomly",
+    "-x"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-21"
   }
  ]
 }
