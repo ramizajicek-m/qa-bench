@@ -16,6 +16,7 @@
     python -m qabench hazards [--repo DIR]   # self-matching liveness checks; test runs piped into tail
     python -m qabench inherited FILE --property "<words>" [--declared LIT=why]   # selector literals the property does not contain: a guard for the case, not the class
     python -m qabench decisions [--repo DIR] [--strict]   # every ruling says what observation would prove it wrong
+    python -m qabench runners [--estate FILE]   # what every shared runner is running, from which repo, for how long
     python -m qabench escapes [--ledger PATH] [--benchmark PATH] [--days N] [--json]   # escape rate + ODC trigger histogram; red on an unclassified finder
     python -m qabench gap [--repo DIR] [--slug OWNER/NAME] [--workflow F] [--since "1 day ago"] [--json]
 """
@@ -24,7 +25,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from . import __version__, anchors, decisions, inherit, delta, fixpop, hazards, scans, census, core, distinct, escapes, gap, manifest, nightly, population, ran as _ran, report, requirements, shapes
+from . import __version__, anchors, decisions, inherit, runners, delta, fixpop, hazards, scans, census, core, distinct, escapes, gap, manifest, nightly, population, ran as _ran, report, requirements, shapes
 from .stages import endpoints_by_role, explore, pages_by_role, smoke
 
 STAGES = {"smoke": smoke.main, "pages_by_role": pages_by_role.main, "endpoints_by_role": endpoints_by_role.main,
@@ -56,6 +57,8 @@ def main(argv: list[str] | None = None) -> int:
         # the state in which `git checkout --` eats your work.
         from qabench import mutate as _mutate
         return _mutate.main(rest)
+    if cmd == "runners":                    # the estate's runners, never one repo
+        return runners.run(rest)
     if cmd == "report":                     # no manifest, no pin: it reads the estate, not one repo
         return report.run(rest)
 
