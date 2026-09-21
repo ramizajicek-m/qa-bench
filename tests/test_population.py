@@ -1181,6 +1181,9 @@ def test_a_product_test_that_seeds_its_subject_first_is_seeded():
     assert population.corpus_of(routed) == {"product", "seeded"}
     setup = "def test(page):\n    page.add_init_script('x')\n    page.goto('/a')\n"
     assert population.corpus_of(setup) == {"product"}
+    # seeding a FIXTURE page is still a fixture; `seeded` qualifies product evidence only
+    fx = "def test(page):\n    page.route('**', lambda r: r.fulfill(body=''))\n    page.set_content(H)\n"
+    assert population.corpus_of(fx) == {"fixture"}
     assert population.corpus_of("def test(page):\n    page.goto('/a')\n") == {"product"}
 
 
