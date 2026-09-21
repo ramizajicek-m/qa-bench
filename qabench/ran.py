@@ -329,6 +329,31 @@ That is four operations with one detector in one night — measurement, commit,
 edit and fetch — and the fourth is the case for it being a habit rather than a
 set of guards: nobody would have written a guard for "the fetch did not finish".
 
+A FIFTH, AND IT INVALIDATES A CATEGORY OF CLAIM: ON THIS MACHINE A LANDING'S
+EXIT STATUS IS NOT EVIDENCE THE LANDING HAPPENED. Twice in one night in anat,
+from different causes with the same symptom. First the harness backgrounded the
+command and reported 0. Then `make land` died with `Terminated: 15`, pushed
+nothing and left staging unchanged, and the background-task notification said
+"completed (exit code 0)". SIGTERM is not an exception, so land.py's in-process
+recovery for a red batch could not fire, because nothing was raised. A killed
+landing and a real one look identical from the notification. So every "landed"
+report rests on the notification unless someone read back the CONTENT: the
+commits present on origin after a fetch, origin's sha equal to the intended tip,
+and the lane lock released. That read-back found three commits stranded under a
+leftover batch merge and staging unchanged, which would otherwise have been
+reported as shipped.
+
+AND ITS COROLLARY FOR THE READER: ESTABLISH WHAT FAILED BEFORE READING THE CODE
+THAT HANDLES FAILURES. In the same incident a peer's remembered instruction
+("re-run with --batch none") was checked by reading land.py, which already does
+exactly that. The reading was CORRECT about the script and IRRELEVANT to the
+situation, because the run was not dying of a red batch; it was being killed. A
+correct reading of an irrelevant mechanism is worse than no reading, because it
+produces confidence. It is the neighbouring-property class one level up: not
+evidence that measures the wrong quantity, but a reader examining the wrong
+mechanism. The discriminator is cheap: the exit signal, the last line of the
+log, or whether the handler's exception was ever raised.
+
 EACH IS ONE EXTRA OBSERVATION, TAKEN FROM THE ARTEFACT RATHER THAN THE PROCESS:
 the report's own `judged`, the new sha, the second file's content. The
 alternative is three guards — for stale reports, for shell quoting, for regex
