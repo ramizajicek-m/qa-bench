@@ -21,7 +21,18 @@ A repository it cannot read is printed as UNREADABLE with the reason, never as
 an empty queue: "could not look" is a third state, and folding it into "nothing
 running" is the defect this kit refuses everywhere else.
 
-Exit: 0 read · 3 no project could be read.
+AND A GREEN RUN IS NOT A DEPLOY (`--served`). tharros's staging served one commit
+from 05:32 UTC to past 12:00 on 2026-09-21 while six pushes landed on main;
+Railway recorded every one as SKIPPED, and nothing reported it — a session found
+it by querying Railway. Three were red (e2e broke on main), three were batched
+into the next run, and the one that went green did so 2h15m after it was pushed,
+behind one self-hosted runner. `--served` asks each staging which commit it
+serves and compares it with the NEWEST commit whose push CI went green on the
+branch that deploys it: a staging behind its newest green commit is red, with
+how long that commit has been green.
+
+Exit: 0 read (and, with --served, every staging serves its newest green commit)
+· 1 --served and a staging is behind · 3 no project could be read.
 """
 from __future__ import annotations
 
@@ -77,6 +88,40 @@ def survey(projects: list[dict], *, fetch=report.gh_json, now: dt.datetime | Non
     return {"running": running, "queued": queued, "unreadable": unreadable}
 
 
+def served(projects: list[dict], *, fetch=report.gh_json, health=report.health_commit,
+           now: dt.datetime | None = None) -> list[dict]:
+    """Per project: the commit staging serves against the newest green push on its deploy branch."""
+    now = now or dt.datetime.now(dt.timezone.utc)
+    out = []
+    for p in projects:
+        repo, url = p.get("repo"), p.get("staging")
+        branch = p.get("staging_branch") or p.get("main") or "main"
+        if not repo or not url:
+            continue
+        runs = fetch(f"repos/{repo}/actions/runs?branch={branch}&event=push&status=success&per_page=10")
+        green = (runs.get("workflow_runs") or [None])[0] if isinstance(runs, dict) else None
+        serves = health(url)
+        row = {"repo": repo, "branch": branch, "serves": (serves or "")[:9],
+               "newest_green": str((green or {}).get("head_sha", ""))[:9],
+               "green_for": _age((green or {}).get("updated_at"), now)}
+        if not isinstance(runs, dict) or not serves:
+            row["state"] = "UNREADABLE"
+        elif not green:
+            row["state"] = "no green push run"
+        elif str(green["head_sha"]).startswith(serves) or serves.startswith(str(green["head_sha"])[: len(serves)]):
+            row["state"] = "ok"
+        else:
+            # By HISTORY, not by string: staging may serve a commit NEWER than the newest green one (a deploy
+            # that did not wait for CI), which is not "behind". The first version compared strings and
+            # called ana-log's staging behind while it served a descendant.
+            cmp = fetch(f"repos/{repo}/compare/{serves}...{green['head_sha']}")
+            status = cmp.get("status") if isinstance(cmp, dict) else None
+            row["state"] = {"ahead": "BEHIND", "behind": "ahead of green", "diverged": "DIVERGED",
+                            "identical": "ok"}.get(status, "UNREADABLE")
+        out.append(row)
+    return out
+
+
 def run(argv: list[str], *, echo=print, fetch=report.gh_json) -> int:
     path = Path(argv[argv.index("--estate") + 1]) if "--estate" in argv else report.DEFAULT_ESTATE
     try:
@@ -97,4 +142,13 @@ def run(argv: list[str], *, echo=print, fetch=report.gh_json) -> int:
         for u in out["unreadable"]:
             echo(f"  UNREADABLE {u['repo']} ({u['status']}): {u['why']} — could not look, which is not 'nothing'")
     readable = {p.get("repo") for p in projects} - {u["repo"] for u in out["unreadable"]}
-    return 0 if readable else 3
+    if not readable:
+        return 3
+    if "--served" in argv:
+        rows = served(projects, fetch=fetch)
+        for r in rows:
+            echo(f"  {r['state']:10} {r['repo']:32} staging serves {r['serves'] or '?':9}  newest green on "
+                 f"{r['branch']}: {r['newest_green'] or '?':9} (green for {r['green_for']})")
+        if any(r["state"] == "BEHIND" for r in rows):
+            return 1
+    return 0
