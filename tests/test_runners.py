@@ -118,3 +118,16 @@ def test_the_newest_green_is_the_first_commit_in_history_whose_pushes_all_passed
     rows = runners.served([{"repo": "t/tha", "staging": "https://s/health", "main": "main"}],
                           fetch=fake(table), health=lambda u: "ff8d68e0e1", now=NOW)
     assert rows[0]["newest_green"] == "ff8d68e0e" and rows[0]["state"] == "ok"
+
+
+def test_a_commit_with_one_red_push_run_is_not_green_and_the_first_green_wins():
+    table = {"repos/t/tha/commits?sha=main": [{"sha": "aaaaaaa000"}, {"sha": "ccccccc000"}, {"sha": "ff8d68e0e1"}],
+             "repos/t/tha/actions/runs?head_sha=aaaaaaa000": {"workflow_runs": [
+                 {"conclusion": "success"}, {"conclusion": "failure"}]},
+             "repos/t/tha/actions/runs?head_sha=ccccccc000": {"workflow_runs": [
+                 {"conclusion": "success", "updated_at": "2026-09-21T09:55:00Z"}]},
+             "repos/t/tha/actions/runs?head_sha=ff8d68e0e1": {"workflow_runs": [
+                 {"conclusion": "success", "updated_at": "2026-09-21T09:50:00Z"}]}}
+    rows = runners.served([{"repo": "t/tha", "staging": "https://s/health", "main": "main"}],
+                          fetch=fake(table), health=lambda u: "ccccccc000", now=NOW)
+    assert rows[0]["newest_green"] == "ccccccc00" and rows[0]["state"] == "ok"
