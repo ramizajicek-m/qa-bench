@@ -404,3 +404,20 @@ def test_heavy_wraps_any_command_passes_its_exit_and_says_what_it_does_not_cover
     assert any("no other holder" in o for o in out)
     assert any("not covered: GitHub Actions runners" in o for o in out)
     assert ran.heavy(["no-separator"], echo=out.append) == 3
+
+
+def test_heavy_caps_xdist_auto_and_writes_the_cap_into_the_holder_line(tmp_path, monkeypatch):
+    """One `-n auto` holder took ~22 workers on 14 cores; a queued session could not tell it from a collision."""
+    import os
+    import sys
+    from qabench import ran
+    monkeypatch.delenv("QABENCH_HEAVY_HELD", raising=False)
+    monkeypatch.delenv("PYTEST_XDIST_AUTO_NUM_WORKERS", raising=False)
+    lock = tmp_path / "l"
+    monkeypatch.setenv("QABENCH_HEAVY_LOCK", str(lock))
+    probe = ("import os,pathlib; pathlib.Path(%r).write_text(os.environ['PYTEST_XDIST_AUTO_NUM_WORKERS'] + '|' + "
+             "pathlib.Path(%r).read_text())") % (str(tmp_path / "seen"), str(lock))
+    assert ran.heavy(["--name", "tier1", "--", sys.executable, "-c", probe], echo=lambda *_: None) == 0
+    seen, holder = (tmp_path / "seen").read_text().split("|", 1)
+    assert seen == str(max(1, (os.cpu_count() or 1) - 2))
+    assert f"capped at {seen} of" in holder

@@ -841,7 +841,15 @@ def heavy(argv: list[str], *, echo=print, getloadavg=os.getloadavg) -> int:
         return 3
     name = _arg(opts, "--name") or Path(cmd[0]).name
     cores = os.cpu_count() or 1
-    with HeavyLock(name, echo=echo) as lock:
+    # THE LOCK NAMES A HOLDER AND MUST ALSO BOUND WHAT IT TAKES. anat's tier1 runs `pytest -n auto`: on
+    # fourteen cores one obedient holder spawned ~22 workers and saturated the box, and a queued session
+    # cannot tell one legitimate holder from several colliding — both are a machine at 14 of 14. A box at
+    # 12 of 14 says "held by one run"; at 14 of 14 it says nothing. So `-n auto` is capped at cores - 2
+    # (pytest-xdist reads PYTEST_XDIST_AUTO_NUM_WORKERS), unless the caller set it, and the cap is written
+    # into the holder line so a waiting session READS what the holder takes instead of inferring it.
+    workers = os.environ.get("PYTEST_XDIST_AUTO_NUM_WORKERS") or str(max(1, cores - 2))
+    os.environ["PYTEST_XDIST_AUTO_NUM_WORKERS"] = workers
+    with HeavyLock(f"{name} (pytest -n auto capped at {workers} of {cores} cores)", echo=echo) as lock:
         start = _load(getloadavg)
         try:
             rc = subprocess.call(cmd)
