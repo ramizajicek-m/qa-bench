@@ -125,7 +125,46 @@ different code. So every artefact stamps the commit it decided about, and
 distinguish "this run passed" from "some earlier run passed", and the second
 reads exactly like the first.
 
-RECORDING AN INCIDENT IS NOT FREE — THE ACT OF RECORDING IT CAN DESTROY THE
+THE ACT OF OBSERVING IS NOT FREE. An investigation can consume, trigger or
+destroy the thing it is investigating, and it does so through the steps that
+look LEAST like intervention — recording, preparing, checking. The harmlessness
+is not incidental to the hazard, it is the mechanism: a step that announced
+itself as consequential would have been examined first. Three instances follow,
+from one project in one day, sharing NO mechanism — a git remote's side effect,
+an automation trigger, resource contention. What they share is the reasoning
+that walks into them: "this is only a read", "this is only preparation", "this
+is only writing it down". EACH OF THOSE IS A CLAIM ABOUT INTENT, AND SYSTEMS
+RESPOND TO ACTIONS — which is why a list of known triggers will not cover it:
+the next one will be a mechanism nobody listed.
+
+THE PRACTICAL TEST, which is worth more than the instances: FOR ANY STEP TAKEN
+BECAUSE IT SEEMS FREE, ASK WHAT IS DOWNSTREAM OF ITS SUCCESS, AND WHAT IT
+CONSUMES WHILE IT RUNS. Three sub-questions cover every instance here and
+generalise past them:
+
+    does it WRITE anywhere the system under investigation READS?
+        (a push, a branch, a file something watches)
+    does anything FIRE on its completion?
+        (auto-promote, auto-merge, a webhook, a job triggered by an artefact)
+    does it CONSUME the scarce thing whose scarcity is the subject?
+        (a runner, a lock, a rate limit, a connection pool)
+
+AND ITS LIMIT, because this could easily become a rule that stops anybody
+recording anything: THE ANSWER IS ALMOST ALWAYS "YES, AND IT IS FINE" — nothing
+pending, nothing fires, nothing scarce — so write it down and land it now. It is
+a QUESTION ASKED AT THE MOMENT, never a practice. And it has to be a prompted
+question rather than a remembered rule: two of the three instances were about to
+be committed by people who had ALREADY READ THE FIRST. UNDERSTANDING THE SHAPE
+DID NOT DEFEND AGAINST IT.
+
+  THIRD INSTANCE — WATCHING EXTENDS THE WAIT. A post-deploy guard is queued
+  behind a six-shard browser tier on a single self-hosted runner. Polling for
+  it means running jobs — or at minimum API calls in a loop — against the very
+  machine whose scarcity is the reason it is queued. OBSERVING THE CONTENTION
+  PARTICIPATES IN IT. (This was very nearly the next move of the session that
+  found the first two.)
+
+FIRST INSTANCE — RECORDING AN INCIDENT IS NOT FREE — THE ACT OF RECORDING IT CAN DESTROY THE
 EVIDENCE THAT WOULD HAVE EXPLAINED IT. This is a different category from every
 other failure in this kit: the rest are instruments that MEASURE THE WRONG
 THING, and this is an instrument that CHANGES THE THING.
