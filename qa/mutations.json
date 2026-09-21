@@ -2746,6 +2746,25 @@
    "verdict": "caught",
    "exit": 1,
    "recorded": "2026-09-21"
+  },
+  {
+   "file": "qabench/elements.py",
+   "expr": "s.replace('    return text.count(cls), sum(1 for ln in text.splitlines() if cls in ln)', '    return text.count(cls), text.count(cls)', 1)",
+   "command": [
+    "env",
+    "PYTHONPATH=.",
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_elements.py",
+    "-q",
+    "-p",
+    "no:randomly",
+    "-x"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-21"
   }
  ]
 }
