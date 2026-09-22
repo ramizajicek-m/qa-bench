@@ -11,11 +11,16 @@ column compares VERSIONS. A release is therefore: bump `__version__`,
 `pyproject.toml` and the fixture manifest together, commit, and tag `vX.Y.Z` on
 that commit. This script refuses to do fewer than all four.
 
+It refuses while `mutate --replay qa/mutations.json` is not clean. A STALE record is
+a guarantee nobody is checking any more: on 2026-09-22 one of three stale records,
+re-anchored, survived — `ran --heavy` could drop its lock with the suite green.
+
 It does not push. `git push origin main --tags` is the release; do it once the
 kit's own suite is green on the bumped tree.
 """
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 import sys
@@ -33,6 +38,13 @@ def sh(*args: str) -> str:
     return subprocess.run(args, cwd=ROOT, capture_output=True, text=True, check=True).stdout.strip()
 
 
+def replay_clean() -> bool:
+    """Every recorded mutation still applies and is still caught (mutate --replay exits 0)."""
+    rc = subprocess.run([sys.executable, "-m", "qabench", "mutate", "--replay", "qa/mutations.json"],
+                        cwd=ROOT, env={**os.environ, "PYTHONPATH": str(ROOT)}).returncode
+    return rc == 0
+
+
 def main(argv: list[str]) -> int:
     if len(argv) != 2 or not re.fullmatch(r"\d+\.\d+\.\d+", argv[0]):
         print(__doc__, file=sys.stderr)
@@ -43,6 +55,10 @@ def main(argv: list[str]) -> int:
         return 1
     if f"v{version}" in sh("git", "tag").split():
         print(f"refusing: v{version} already exists", file=sys.stderr)
+        return 1
+    if not replay_clean():
+        print("refusing: mutate --replay is not clean — re-anchor every STALE record and make every survivor "
+              "caught before releasing", file=sys.stderr)
         return 1
     current = None
     for path, pattern in FILES.items():

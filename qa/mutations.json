@@ -2993,6 +2993,44 @@
    "verdict": "caught",
    "exit": 1,
    "recorded": "2026-09-22"
+  },
+  {
+   "file": "scripts/release.py",
+   "expr": "s.replace(\"    if not replay_clean():\", \"    if False:\", 1)",
+   "command": [
+    "env",
+    "PYTHONPATH=.",
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_release_refuses_a_dirty_replay.py",
+    "-q",
+    "-p",
+    "no:randomly",
+    "-x"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-22"
+  },
+  {
+   "file": "scripts/release.py",
+   "expr": "s.replace(\"    return rc == 0\", \"    return True\", 1)",
+   "command": [
+    "env",
+    "PYTHONPATH=.",
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_release_refuses_a_dirty_replay.py",
+    "-q",
+    "-p",
+    "no:randomly",
+    "-x"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-22"
   }
  ]
 }
