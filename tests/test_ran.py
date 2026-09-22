@@ -421,3 +421,17 @@ def test_heavy_caps_xdist_auto_and_writes_the_cap_into_the_holder_line(tmp_path,
     seen, holder = (tmp_path / "seen").read_text().split("|", 1)
     assert seen == str(max(1, (os.cpu_count() or 1) - 2))
     assert f"capped at {seen} of" in holder
+
+
+def test_ran_heavy_holds_the_lock_while_its_command_runs(repo, tmp_path, monkeypatch):
+    """The lock tests above drive HeavyLock directly; this one drives `ran --heavy`, the path a Makefile uses.
+    Replay found the old mutation for it stale on 2026-09-22, and its re-anchored successor SURVIVED:
+    `ran --heavy` could stop taking the lock and every test stayed green."""
+    lock = tmp_path / "heavy.lock"
+    monkeypatch.setenv("QABENCH_HEAVY_LOCK", str(lock))
+    monkeypatch.delenv("QABENCH_HEAVY_HELD", raising=False)
+    root = repo()
+    probe = ["/bin/sh", "-c", "echo held=${QABENCH_HEAVY_HELD:-none}; echo 4 passed"]
+    assert ran.run(["--repo", str(root), "--name", "suite", "--heavy", "--"] + probe, echo=lambda *_: None) == 0
+    assert f"held={lock}" in (root / "qa" / "runs" / "suite.log").read_text(), \
+        "the command ran without the heavy lock held"
