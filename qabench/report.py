@@ -14,6 +14,7 @@ red row that says "could not read", never a green one.
 """
 from __future__ import annotations
 
+import base64
 import json
 import os
 import re
@@ -186,6 +187,20 @@ def latest_scheduled_run(repo: str, workflow: str) -> dict | None:
     return runs[0] if runs else None
 
 
+def declares_schedule(repo: str, workflow: str) -> bool | _Unreadable:
+    """Whether the workflow file carries a `schedule:` trigger at all. tharros
+    removed its cron on 2026-09-11 (GitHub delivered it hours late, or not at
+    all) and is dispatched by the local night driver instead; judging it on
+    "when did the cron last fire" read RED every morning for a cron that does
+    not exist. Read from the file, not recalled in estate.yml, so putting the
+    cron back restores the check with no second edit."""
+    d = gh_json(f"repos/{repo}/contents/.github/workflows/{workflow}")
+    if d is UNREADABLE or not isinstance(d, dict) or "content" not in d:
+        return UNREADABLE
+    text = base64.b64decode(d["content"]).decode("utf-8", "replace")
+    return re.search(r"^\s*schedule\s*:", text, re.M) is not None
+
+
 def main_tip(repo: str, branch: str) -> str | None:
     d = gh_json(f"repos/{repo}/commits/{branch}")
     return d.get("sha") if isinstance(d, dict) else None
@@ -198,7 +213,7 @@ def compare(repo: str, base: str, head: str) -> str | None:
 
 
 def row_for(p: dict, now: datetime, *, fetch_run=latest_run, fetch_tip=main_tip, fetch_health=health_commit, fetch_compare=compare,
-            fetch_scheduled=latest_scheduled_run, fetch_pin=kit_pin, floor: str | None = None) -> dict:
+            fetch_scheduled=latest_scheduled_run, fetch_declares=declares_schedule, fetch_pin=kit_pin, floor: str | None = None) -> dict:
     """One project's row. `red` carries the reasons; an empty list is green.
 
     `floor` is the estate's `kit_floor`: when given, the repo's pinned kit is
@@ -235,7 +250,13 @@ def row_for(p: dict, now: datetime, *, fetch_run=latest_run, fetch_tip=main_tip,
     sched_age_h = None
     if sched is not None and sched is not UNREADABLE:
         sched_age_h = round((now - datetime.fromisoformat(sched["created_at"].replace("Z", "+00:00"))).total_seconds() / 3600, 1)
-    if expected:
+    # No cron in the file: nothing to accuse. The night is still judged on the
+    # age of its latest run below, so a driver that stopped dispatching is red.
+    # An unreadable file falls through to the schedule claim — never to silence.
+    unscheduled = fetch_declares(p["repo"], p["night_workflow"]) is False
+    if unscheduled:
+        notes.append("no cron in the night workflow — dispatched by the night driver; judged on the run's age alone")
+    if expected and not unscheduled:
         # A READ THAT FAILED IS NOT EVIDENCE ABOUT THE CRON. Still red — a
         # morning nobody can see is not a morning that is fine — but the
         # sentence must name the INSTRUMENT rather than accuse the schedule, so

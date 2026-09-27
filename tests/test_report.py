@@ -27,8 +27,9 @@ def _row(**kw):
     now = kw.pop("now", MON)
     rel = kw.pop("rel", "diverged")
     sched = kw.pop("sched", lambda repo, wf: _run())          # by default the cron fired tonight
+    declares = kw.pop("declares", lambda repo, wf: True)       # and the workflow carries one
     return report.row_for(P, now, fetch_run=fetch_run, fetch_tip=lambda r, b: tip, fetch_health=lambda u: health.get(u),
-                          fetch_compare=lambda repo, base, head: rel, fetch_scheduled=sched)
+                          fetch_compare=lambda repo, base, head: rel, fetch_scheduled=sched, fetch_declares=declares)
 
 
 def test_a_healthy_estate_is_green():
@@ -136,7 +137,7 @@ def test_a_fresh_running_night_is_not_reported_as_stuck():
 def test_staging_is_compared_with_its_own_branch():
     p = P | {"staging_branch": "staging"}
     r = report.row_for(p, MON, fetch_run=lambda *args: _run(),
-        fetch_scheduled=lambda *args: _run(),
+        fetch_scheduled=lambda *args: _run(), fetch_declares=lambda *a: True,
         fetch_tip=lambda repo, branch: ("b" if branch == "staging" else "a") * 40,
         fetch_health=lambda url: ("b" if url == p["staging"] else "a") * 12,
         fetch_compare=lambda *args: "identical")
@@ -240,10 +241,10 @@ def test_the_table_says_question_mark_for_unreadable_and_never_for_absent():
     to survive into the column, not live only in the verdict sentence."""
     unreadable = report.row_for(P, MON, fetch_run=lambda r, w: _run(), fetch_tip=lambda r, b: "a" * 40,
                                 fetch_health=lambda u: "a" * 12, fetch_compare=lambda r, b, h: "identical",
-                                fetch_scheduled=lambda r, w: report.UNREADABLE)
+                                fetch_scheduled=lambda r, w: report.UNREADABLE, fetch_declares=lambda *a: True)
     absent = report.row_for(P, MON, fetch_run=lambda r, w: _run(), fetch_tip=lambda r, b: "a" * 40,
                             fetch_health=lambda u: "a" * 12, fetch_compare=lambda r, b, h: "identical",
-                            fetch_scheduled=lambda r, w: None)
+                            fetch_scheduled=lambda r, w: None, fetch_declares=lambda *a: True)
     assert "| ? |" in report.render([unreadable]), report.render([unreadable])
     assert "| never |" in report.render([absent]), report.render([absent])
 
@@ -283,7 +284,7 @@ def _row_with_pin(pin, floor="0.1.40", **kw):
     fetch_run = kw.pop("run", lambda repo, wf: _run())
     return report.row_for(P, MON, fetch_run=fetch_run, fetch_tip=lambda r, b: "a" * 40,
                           fetch_health=lambda u: "a" * 12, fetch_compare=lambda repo, base, head: "identical",
-                          fetch_scheduled=lambda repo, wf: _run(), fetch_pin=fetch_pin, floor=floor)
+                          fetch_scheduled=lambda repo, wf: _run(), fetch_declares=lambda *a: True, fetch_pin=fetch_pin, floor=floor)
 
 
 def test_a_kit_pinned_below_the_floor_is_red():
@@ -373,3 +374,29 @@ def test_kit_pin_reads_bench_version_off_the_manifest_contents(monkeypatch):
     assert report.kit_pin("o/r", "main") is None
     monkeypatch.setattr(report, "gh_json", lambda path: {"content": base64.b64encode(b"project: x\n").decode()})
     assert report.kit_pin("o/r", "main") is None
+
+
+# ---------------------------------------------------------------------------
+# A night with no cron. tharros removed its `schedule:` on 2026-09-11 and is
+# dispatched by the local night driver; the report still asked when the cron
+# last fired and read RED every morning — "last fired 381h ago" — for a cron
+# that does not exist.
+# ---------------------------------------------------------------------------
+
+def test_a_workflow_with_no_cron_is_not_accused_of_a_stale_schedule():
+    """Mutation: drop the `unscheduled` guard — the 381h sentence returns."""
+    r = _row(sched=lambda repo, wf: _run(hours_ago=381), declares=lambda repo, wf: False)
+    assert r["red"] == [], r["red"]
+    assert any("no cron" in x for x in r["notes"]), r["notes"]
+
+
+def test_a_workflow_with_no_cron_is_still_red_when_nothing_dispatched_it():
+    """The claim the fix must NOT swallow: no cron and no fresh run is a dead driver."""
+    r = _row(run=lambda repo, wf: _run(hours_ago=50), sched=lambda repo, wf: None, declares=lambda repo, wf: False)
+    assert r["red"], r
+
+
+def test_an_unreadable_workflow_file_keeps_the_schedule_claim():
+    """Mutation: treat UNREADABLE as 'no cron' — the stale schedule goes silent."""
+    r = _row(sched=lambda repo, wf: _run(hours_ago=60), declares=lambda repo, wf: report.UNREADABLE)
+    assert any("last fired 60.0h ago" in x for x in r["red"]), r["red"]
