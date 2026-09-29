@@ -195,6 +195,16 @@ def xff_spoof(c, base, cfg):
     rl = cfg.get("rate_limited") or {}
     path, n = rl.get("path") or cfg.get("_login_path") or "/login", int(rl.get("requests", 30))
     data = {"email": "qabench-probe@invalid.example", "username": "qabench-probe", "password": "not-a-password"}
+    login = cfg.get("_login") or {}
+    # A CSRF-protected form answers 403 before any limiter counts the attempt
+    # (tharros, 2026-09-29: 60 × 403, so the check measured the CSRF guard).
+    # Fill it the way core.login does: GET the form, echo the cookie in the field.
+    if login.get("csrf_field") and path == login.get("path"):
+        c.get(base + path)
+        token = c.cookies.get(login.get("csrf_cookie") or "")
+        if not token:
+            raise _NotRun(f"{path} set no {login.get('csrf_cookie')!r} cookie, so the CSRF field cannot be filled")
+        data[login["csrf_field"]] = token
 
     def burst(spoof: bool) -> list[int]:
         codes = []
@@ -303,7 +313,8 @@ def load(root: Path) -> tuple[dict, dict]:
     """(the security block with login path folded in, {env: url})."""
     doc = yaml.safe_load((root / "qa" / "manifest.yml").read_text(encoding="utf-8")) or {}
     sec = dict(doc.get("security") or {})
-    sec["_login_path"] = ((doc.get("bench") or {}).get("login") or {}).get("path")
+    sec["_login"] = ((doc.get("bench") or {}).get("login") or {})
+    sec["_login_path"] = sec["_login"].get("path")
     envs = {k: (v or {}).get("url") for k, v in (doc.get("environments") or {}).items() if (v or {}).get("url")}
     wanted = sec.get("environments") or list(envs)
     return sec, {k: envs[k] for k in wanted if k in envs}

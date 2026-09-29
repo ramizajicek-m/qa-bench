@@ -21,7 +21,7 @@ SAFE_HEADERS = {
 
 
 def app(*, docs=False, headers=SAFE_HEADERS, cookie=None, cors_reflect=False, admin_open=False, spa=False,
-        limiter="real", hook_ok=False, body_413=True):
+        limiter="real", hook_ok=False, body_413=True, csrf=False):
     """A fake deployment; each keyword opens one gap."""
     hits = {"n": 0}
 
@@ -39,7 +39,11 @@ def app(*, docs=False, headers=SAFE_HEADERS, cookie=None, cors_reflect=False, ad
             if admin_open:
                 return httpx.Response(200, text="<h1>all customers</h1>", headers=h)
             return httpx.Response(200, text="<div id=root></div>", headers=h) if spa else httpx.Response(302, headers={"location": "/login"})
+        if path == "/login" and req.method == "GET" and csrf:
+            return httpx.Response(200, text="<form>", headers={**h, "set-cookie": "app_csrf=tok123; Secure; SameSite=Lax"})
         if path == "/login" and req.method == "POST":
+            if csrf and ("_csrf=tok123" not in req.content.decode() or "app_csrf=tok123" not in req.headers.get("cookie", "")):
+                return httpx.Response(403)
             hits["n"] += 1
             key = req.headers.get("x-forwarded-for") if limiter == "leftmost-xff" else "client"
             hits.setdefault(key, 0)
@@ -89,6 +93,12 @@ def test_a_spa_shell_on_admin_is_not_an_exposure(monkeypatch):
 def test_a_limiter_keyed_on_a_forged_header_is_red(monkeypatch):
     res = run_checks(monkeypatch, app(limiter="leftmost-xff"), active=True)
     assert "forged X-Forwarded-For" in res["xff_spoof"].findings[0]
+
+
+def test_a_csrf_protected_login_is_filled_so_the_limiter_is_what_is_measured(monkeypatch):
+    login = {"path": "/login", "csrf_field": "_csrf", "csrf_cookie": "app_csrf"}
+    res = run_checks(monkeypatch, app(limiter="leftmost-xff", csrf=True), {"_login": login}, active=True)
+    assert res["xff_spoof"].ran and res["xff_spoof"].findings
 
 
 def test_no_limit_at_all_did_not_run_rather_than_passed(monkeypatch):
