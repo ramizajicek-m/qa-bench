@@ -50,6 +50,11 @@ SENSITIVE = {"/.git/HEAD": ("ref:",), "/.git/config": ("[core]",), "/.env": ("="
 REQUIRED_HEADERS = ("strict-transport-security", "content-security-policy", "x-content-type-options", "referrer-policy")
 SESSIONISH = ("session", "auth", "token", "refresh", "sid")
 EVIL_ORIGIN = "https://qabench-probe.invalid"
+# Every header an app has been seen to read a client IP from. eliad keyed its
+# login lockout on CF-Connecting-IP (2026-09-29): forging only X-Forwarded-For
+# left that limiter intact, and the check said ok while a forged CF header per
+# attempt walked past it.
+CLIENT_IP_HEADERS = ("X-Forwarded-For", "CF-Connecting-IP", "X-Real-IP", "True-Client-IP", "Forwarded-For")
 CATALOGUE = Path(__file__).resolve().parent / "security" / "catalogue.yml"
 TRANSPORT: httpx.BaseTransport | None = None   # tests swap in a MockTransport
 
@@ -212,7 +217,8 @@ def xff_spoof(c, base, cfg):
         # 2026-09-29 — the probe said ok while uvicorn handed the app hosts[0]).
         codes = []
         for i in range(n):
-            h = {"X-Forwarded-For": f"203.0.113.{random.randint(1, 254)}"} if spoof else {}
+            forged = f"203.0.113.{random.randint(1, 254)}"
+            h = {name: forged for name in CLIENT_IP_HEADERS} if spoof else {}
             who = f"qabench-probe-{random.randint(10**8, 10**9)}"
             body = {**data, "email": f"{who}@invalid.example", "username": who}
             codes.append(c.post(base + path, data=body, headers=h).status_code)
@@ -223,7 +229,8 @@ def xff_spoof(c, base, cfg):
         return []                      # limited despite a new forged IP on every request
     plain = burst(False)
     if 429 in plain:
-        return [f"{path}: {n} requests with a forged X-Forwarded-For were never limited; the same {n} without it were — the limiter trusts a client-written header"]
+        return [f"{path}: {n} requests with forged client-IP headers ({', '.join(CLIENT_IP_HEADERS)}) were never limited; "
+                f"the same {n} without them were — the limiter trusts a header the client writes"]
     raise _NotRun(f"{path}: no 429 in {2 * n} requests with or without forged IPs (status {sorted(set(plain))}) — "
                   "no limit observable here; set security.rate_limited to a limited path")
 

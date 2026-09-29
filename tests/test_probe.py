@@ -48,6 +48,8 @@ def app(*, docs=False, headers=SAFE_HEADERS, cookie=None, cors_reflect=False, ad
             hits["n"] += 1
             if limiter == "per-account":
                 key = parse_qs(req.content.decode()).get("email", [""])[0]
+            elif limiter == "cf-connecting-ip":
+                key = req.headers.get("cf-connecting-ip") or "client"
             else:
                 key = req.headers.get("x-forwarded-for") if limiter == "leftmost-xff" else "client"
             hits.setdefault(key, 0)
@@ -96,13 +98,18 @@ def test_a_spa_shell_on_admin_is_not_an_exposure(monkeypatch):
 
 def test_a_limiter_keyed_on_a_forged_header_is_red(monkeypatch):
     res = run_checks(monkeypatch, app(limiter="leftmost-xff"), active=True)
-    assert "forged X-Forwarded-For" in res["xff_spoof"].findings[0]
+    assert "forged client-IP headers" in res["xff_spoof"].findings[0]
 
 
 def test_a_csrf_protected_login_is_filled_so_the_limiter_is_what_is_measured(monkeypatch):
     login = {"path": "/login", "csrf_field": "_csrf", "csrf_cookie": "app_csrf"}
     res = run_checks(monkeypatch, app(limiter="leftmost-xff", csrf=True), {"_login": login}, active=True)
     assert res["xff_spoof"].ran and res["xff_spoof"].findings
+
+
+def test_a_limiter_keyed_on_cf_connecting_ip_is_red(monkeypatch):
+    res = run_checks(monkeypatch, app(limiter="cf-connecting-ip"), active=True)
+    assert res["xff_spoof"].findings
 
 
 def test_a_per_account_throttle_is_not_mistaken_for_an_ip_limit(monkeypatch):
