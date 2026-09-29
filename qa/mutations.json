@@ -3031,6 +3031,60 @@
    "verdict": "caught",
    "exit": 1,
    "recorded": "2026-09-22"
+  },
+  {
+   "file": "qabench/probe.py",
+   "expr": "s.replace('        if r.status_code == 200 and r.text != shell:', '        if False:', 1)",
+   "command": [
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_probe.py",
+    "-q",
+    "-p",
+    "no:randomly",
+    "-p",
+    "no:cacheprovider"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-29"
+  },
+  {
+   "file": "qabench/probe.py",
+   "expr": "s.replace('    if 429 in plain:', '    if False:', 1)",
+   "command": [
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_probe.py",
+    "-q",
+    "-p",
+    "no:randomly",
+    "-p",
+    "no:cacheprovider"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-29"
+  },
+  {
+   "file": "qabench/probe.py",
+   "expr": "s.replace('        return None, f\"exemption for {check} expired', '        return ex, f\"', 1)",
+   "command": [
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_probe.py",
+    "-q",
+    "-p",
+    "no:randomly",
+    "-p",
+    "no:cacheprovider"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-29"
   }
  ]
 }
