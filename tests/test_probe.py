@@ -42,6 +42,15 @@ def app(*, docs=False, headers=SAFE_HEADERS, cookie=None, cors_reflect=False, ad
             return httpx.Response(200, text="<div id=root></div>", headers=h) if spa else httpx.Response(302, headers={"location": "/login"})
         if path == "/login" and req.method == "GET" and csrf:
             return httpx.Response(200, text="<form>", headers={**h, "set-cookie": "app_csrf=tok123; Secure; SameSite=Lax"})
+        if path == "/api/auth/login" and req.method == "POST":
+            if req.headers.get("content-type", "").startswith("application/json") is False:
+                return httpx.Response(422)
+            hits.setdefault("json", 0)
+            hits["json"] += 1
+            key = req.headers.get("x-forwarded-for") if limiter == "leftmost-xff" else "client"
+            hits.setdefault(key, 0)
+            hits[key] += 1
+            return httpx.Response(429) if hits[key] > 10 else httpx.Response(401)
         if path == "/login" and req.method == "POST":
             if csrf and ("_csrf=tok123" not in req.content.decode() or "app_csrf=tok123" not in req.headers.get("cookie", "")):
                 return httpx.Response(403)
@@ -110,6 +119,18 @@ def test_a_csrf_protected_login_is_filled_so_the_limiter_is_what_is_measured(mon
 def test_a_limiter_keyed_on_cf_connecting_ip_is_red(monkeypatch):
     res = run_checks(monkeypatch, app(limiter="cf-connecting-ip"), active=True)
     assert res["xff_spoof"].findings
+
+
+def test_a_json_login_is_driven_with_json(monkeypatch):
+    login = {"kind": "json", "path": "/api/auth/login", "body": {"email": "email", "password": "password"}}
+    res = run_checks(monkeypatch, app(limiter="leftmost-xff"), {"_login": login, "_login_path": "/api/auth/login"}, active=True)
+    assert res["xff_spoof"].ran and res["xff_spoof"].findings
+
+
+def test_an_owned_exemption_holds_a_check_that_cannot_run(monkeypatch):
+    ex = {"exempt": {"xff_spoof": {"why": "limit above burst, owner deciding", "owner": "rami", "until": "2026-10-31"}}}
+    r = run_checks(monkeypatch, app(limiter="none"), ex, active=True, today=dt.date(2026, 9, 29))["xff_spoof"]
+    assert not r.ran and r.exempt
 
 
 def test_a_per_account_throttle_is_not_mistaken_for_an_ip_limit(monkeypatch):

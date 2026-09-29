@@ -221,7 +221,15 @@ def xff_spoof(c, base, cfg):
             h = {name: forged for name in CLIENT_IP_HEADERS} if spoof else {}
             who = f"qabench-probe-{random.randint(10**8, 10**9)}"
             body = {**data, "email": f"{who}@invalid.example", "username": who}
-            codes.append(c.post(base + path, data=body, headers=h).status_code)
+            if login.get("kind") == "json" and path == login.get("path"):
+                # A JSON login answers 422 to a form post; the limiter may still
+                # count it, but the check must send what the login accepts
+                # (ana-log, 2026-09-29). Field names from bench.login.body.
+                names = login.get("body") or {"email": "email", "password": "password"}
+                payload = {names.get("email", "email"): body["email"], names.get("password", "password"): body["password"]}
+                codes.append(c.post(base + path, json=payload, headers=h).status_code)
+            else:
+                codes.append(c.post(base + path, data=body, headers=h).status_code)
         return codes
 
     spoofed = burst(True)
@@ -315,7 +323,10 @@ def probe_env(env: str, base: str, cfg: dict, active: bool, today: _dt.date | No
             ex, problem = _exemption(cfg, name, today)
             if problem:
                 res.findings.append(problem)
-            elif ex and res.findings:
+            elif ex and (res.findings or not res.ran):
+                # A check that cannot run here for a reason a person owns (a
+                # limit set above what a burst can reach, pending their call)
+                # is held the same way as a known gap: owned, dated, expiring.
                 res.exempt = ex
             results.append(res)
     return results
@@ -346,7 +357,7 @@ def run(argv: list[str]) -> int:
     active = "--active" in argv
     results = [r for env, url in envs.items() for r in probe_env(env, url, sec, active and env != "production")]
     failing = [r for r in results if r.ran and r.findings and not r.exempt]
-    not_run = [r for r in results if not r.ran]
+    not_run = [r for r in results if not r.ran and not r.exempt]
     if "--json" in argv:
         print(json.dumps([r.__dict__ for r in results], indent=1, default=str))
     else:
