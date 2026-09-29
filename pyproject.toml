@@ -27,7 +27,7 @@ qabench = "qabench.__main__:main"
 include = ["qabench*"]
 
 [tool.setuptools.package-data]
-qabench = ["estate.yml", "contract.yml", "packs/*"]
+qabench = ["estate.yml", "contract.yml", "packs/*", "security/*.yml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

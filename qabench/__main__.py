@@ -3,6 +3,7 @@
     python -m qabench show          # the resolved config, credentials as presence only
     python -m qabench report [--estate FILE] [--json]   # every project, every morning: did the night run, is production the swept build
     python -m qabench scans [--advisory] [--json]   # gitleaks, pip-audit, squawk at one pinned version
+    python -m qabench probe [--env E] [--active] [--url U] [--json]   # the security baseline, observed from outside on the deployed build
     python -m qabench shapes [--dsn DSN] [--json]   # real records of each risky shape, with the URL to open
     python -m qabench questions <kind...>   # the questions to put to the requester before building
     python -m qabench asked [--changed-since "7 days ago"] [--json]   # every surface's questions answered or owned
@@ -27,7 +28,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from . import __version__, anchors, decisions, elements, inherit, runners, delta, fixpop, hazards, scans, census, core, distinct, escapes, gap, manifest, nightly, population, ran as _ran, report, requirements, shapes
+from . import __version__, anchors, decisions, elements, inherit, runners, delta, fixpop, hazards, probe, scans, census, core, distinct, escapes, gap, manifest, nightly, population, ran as _ran, report, requirements, shapes
 from .stages import endpoints_by_role, explore, pages_by_role, smoke
 
 STAGES = {"smoke": smoke.main, "pages_by_role": pages_by_role.main, "endpoints_by_role": endpoints_by_role.main,
@@ -71,6 +72,8 @@ def main(argv: list[str] | None = None) -> int:
         return gap.run(rest)
     if cmd == "scans":                      # gitleaks, pip-audit, squawk — pinned and verified
         return scans.run(rest)
+    if cmd == "probe":                      # the deployed build, from outside: headers, docs, forged IPs
+        return probe.run(rest)
     if cmd == "shapes":                     # real records with the shapes defects hide in
         return shapes.run(rest)
     if cmd == "questions":                  # what to ask the requester, per kind of surface

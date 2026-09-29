@@ -1,4 +1,4 @@
-"""One judge for six manifests — the contract behind C1–C12, and the kit pin.
+"""One judge for six manifests — the contract behind C1–C13, and the kit pin.
 
 WHY. `tests/test_qa_conformance.py` was a TEMPLATE copied into six repos, and it
 checked that a manifest was HONEST (paths exist, ● has evidence, ◐/○ has a
@@ -190,7 +190,7 @@ def judge(manifest: dict, root: Path | None = None) -> list[dict]:
                                     "map of what landing causes that points at nothing is the stale copy again"))
     extra = sorted(set(checks) - set(c["checks"]))
     if extra:
-        out.append(_finding("*", "missing", f"checks beyond the twelve: {extra} — a thirteenth needs three ledger rows that fit none of the twelve"))
+        out.append(_finding("*", "missing", f"checks beyond the contract: {extra} — a new check needs three ledger rows that fit none of the existing ones"))
     return out
 
 

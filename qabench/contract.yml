@@ -127,3 +127,18 @@ checks:
       - a pin check that the interpreter runs the pinned packages
     partial_may_lack: [real_engine_tier, socket_block, dsn_identity, pin_check]
     ran_proof: the tier's run and the negative control's test id
+  C13:
+    # Added 2026-09-29. The Electra audit of anat found public API docs, a rate
+    # limit keyed on a client-written header, an unauthenticated Stripe refresh
+    # and jobs that run twice on two replicas — none owned by C1–C12, none
+    # visible in a diff, all visible from outside the deployed build. The
+    # standard is published, not ours: qabench/security/catalogue.yml (ASVS 5.0
+    # L1+L2, API Top 10 2023, Secure Headers, Twelve-Factor hosting).
+    name: security baseline
+    implemented_requires:
+      - "`qabench probe` in a scheduled workflow: passive checks on production, --active on staging"
+      - blocking `qabench scans` (gitleaks, pip-audit, squawk) with inherited findings baselined, owned and dated
+      - qa/security/findings.yml — every catalogue row the whole-codebase audit read, with status and the guard that proves a fix
+      - every probe exemption owned and dated in the manifest's security.exempt
+    partial_may_lack: [probe_schedule, active_probe, blocking_scans, audit, sast]
+    ran_proof: the scheduled probe run and the audit's findings file

@@ -31,10 +31,10 @@ def test_a_manifest_that_meets_the_contract_has_no_findings():
     assert conformance.judge(_manifest()) == []
 
 
-def test_every_check_must_be_present_and_nothing_beyond_the_twelve():
+def test_every_check_must_be_present_and_nothing_beyond_the_contract():
     m = _manifest()
     del m["checks"]["C7"]
-    m["checks"]["C13"] = {"name": "x", "status": "absent", "reason": "y"}
+    m["checks"]["C14"] = {"name": "x", "status": "absent", "reason": "y"}
     kinds = {(f["check"], f["kind"]) for f in conformance.judge(m)}
     assert ("C7", "missing") in kinds and ("*", "missing") in kinds
     assert all(f["fatal"] for f in conformance.judge(m))
