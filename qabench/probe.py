@@ -207,10 +207,15 @@ def xff_spoof(c, base, cfg):
         data[login["csrf_field"]] = token
 
     def burst(spoof: bool) -> list[int]:
+        # A new identity on every attempt: a per-ACCOUNT throttle trips on the
+        # same email whatever the IP, and read as «the IP limit held» (tharros,
+        # 2026-09-29 — the probe said ok while uvicorn handed the app hosts[0]).
         codes = []
-        for _ in range(n):
+        for i in range(n):
             h = {"X-Forwarded-For": f"203.0.113.{random.randint(1, 254)}"} if spoof else {}
-            codes.append(c.post(base + path, data=data, headers=h).status_code)
+            who = f"qabench-probe-{random.randint(10**8, 10**9)}"
+            body = {**data, "email": f"{who}@invalid.example", "username": who}
+            codes.append(c.post(base + path, data=body, headers=h).status_code)
         return codes
 
     spoofed = burst(True)

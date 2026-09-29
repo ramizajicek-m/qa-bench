@@ -9,6 +9,7 @@ import datetime as dt
 
 import httpx
 import pytest
+from urllib.parse import parse_qs
 
 from qabench import probe
 
@@ -45,7 +46,10 @@ def app(*, docs=False, headers=SAFE_HEADERS, cookie=None, cors_reflect=False, ad
             if csrf and ("_csrf=tok123" not in req.content.decode() or "app_csrf=tok123" not in req.headers.get("cookie", "")):
                 return httpx.Response(403)
             hits["n"] += 1
-            key = req.headers.get("x-forwarded-for") if limiter == "leftmost-xff" else "client"
+            if limiter == "per-account":
+                key = parse_qs(req.content.decode()).get("email", [""])[0]
+            else:
+                key = req.headers.get("x-forwarded-for") if limiter == "leftmost-xff" else "client"
             hits.setdefault(key, 0)
             hits[key] += 1
             if limiter != "none" and hits[key] > 10:
@@ -99,6 +103,11 @@ def test_a_csrf_protected_login_is_filled_so_the_limiter_is_what_is_measured(mon
     login = {"path": "/login", "csrf_field": "_csrf", "csrf_cookie": "app_csrf"}
     res = run_checks(monkeypatch, app(limiter="leftmost-xff", csrf=True), {"_login": login}, active=True)
     assert res["xff_spoof"].ran and res["xff_spoof"].findings
+
+
+def test_a_per_account_throttle_is_not_mistaken_for_an_ip_limit(monkeypatch):
+    r = run_checks(monkeypatch, app(limiter="per-account"), active=True)["xff_spoof"]
+    assert not r.ran and "no 429" in r.why
 
 
 def test_no_limit_at_all_did_not_run_rather_than_passed(monkeypatch):
