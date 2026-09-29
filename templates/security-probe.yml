@@ -13,7 +13,7 @@ permissions:
   contents: read
 jobs:
   probe:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest   # use the repo's self-hosted label where it has one (Actions quota)
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
