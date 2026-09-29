@@ -3103,6 +3103,24 @@
    "verdict": "caught",
    "exit": 1,
    "recorded": "2026-09-29"
+  },
+  {
+   "file": "qabench/probe.py",
+   "expr": "s.replace('            h = {name: forged for name in CLIENT_IP_HEADERS} if spoof else {}', '            h = {\"X-Forwarded-For\": forged} if spoof else {}', 1)",
+   "command": [
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_probe.py",
+    "-q",
+    "-p",
+    "no:randomly",
+    "-p",
+    "no:cacheprovider"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-29"
   }
  ]
 }
