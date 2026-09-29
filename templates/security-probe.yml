@@ -1,0 +1,32 @@
+# C13 security baseline — the deployed build, observed from outside, every day.
+# Copy to .github/workflows/security-probe.yml and set the qa-bench pin to the
+# same commit as the rest of the repo's qabench refs (conformance.pin_agrees).
+#
+# cron is UTC: 04:30 UTC is 07:30 Israel in summer, after the 22:00 night lane
+# has promoted. A red run is swept by estate_nightly.py like any scheduled run.
+name: security-probe
+on:
+  schedule:
+    - cron: "30 4 * * *"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -q "qabench @ git+https://github.com/ramizajicek-m/qa-bench@QABENCH_COMMIT"
+      - name: production, passive
+        run: |
+          set -o pipefail
+          python -m qabench probe --env production | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: staging, active (forged X-Forwarded-For, unsigned webhooks, oversized body)
+        if: always()
+        run: |
+          set -o pipefail
+          python -m qabench probe --env staging --active | tee -a "$GITHUB_STEP_SUMMARY"

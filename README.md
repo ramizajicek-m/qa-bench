@@ -110,6 +110,15 @@ python -m qabench stage pages_by_role --roles owner --only /admin
 python -m qabench show
 ```
 
+## Security baseline (C13)
+
+```
+python -m qabench probe                          # every environment in qa/manifest.yml, passive
+python -m qabench probe --env staging --active   # plus forged X-Forwarded-For, unsigned webhooks, oversized body
+```
+
+What to look for is published, not ours: `qabench/security/catalogue.yml` holds OWASP ASVS 5.0.0 L1+L2 verbatim, API Security Top 10 2023, the Secure Headers set and Twelve-Factor hosting rows, each marked `probe` (seen from outside by this command), `static` (a scanner) or `review` (the `security-reviewer` agent in audit mode, writing `qa/security/findings.yml`). A red check prints the catalogue ids it verifies. `templates/security-probe.yml` is the daily workflow each repo copies. Known gaps go in the manifest's `security.exempt` with `why`, `owner` and `until`; an expired exemption is red.
+
 ## Release evidence
 
 Push CI for an unchanged full SHA may use `--immutable-push-evidence`: its
