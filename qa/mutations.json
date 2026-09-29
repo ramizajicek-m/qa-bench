@@ -3121,6 +3121,42 @@
    "verdict": "caught",
    "exit": 1,
    "recorded": "2026-09-29"
+  },
+  {
+   "file": "qabench/probe.py",
+   "expr": "s.replace('            if login.get(\"kind\") == \"json\" and path == login.get(\"path\"):', '            if False:', 1)",
+   "command": [
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_probe.py",
+    "-q",
+    "-p",
+    "no:randomly",
+    "-p",
+    "no:cacheprovider"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-29"
+  },
+  {
+   "file": "qabench/probe.py",
+   "expr": "s.replace('            elif ex and (res.findings or not res.ran):', '            elif ex and res.findings:', 1)",
+   "command": [
+    "/Users/ramizajicek/Projects/qa-bench/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_probe.py",
+    "-q",
+    "-p",
+    "no:randomly",
+    "-p",
+    "no:cacheprovider"
+   ],
+   "verdict": "caught",
+   "exit": 1,
+   "recorded": "2026-09-29"
   }
  ]
 }
