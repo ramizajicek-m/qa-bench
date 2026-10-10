@@ -50,21 +50,24 @@ projects:
     staging: https://ana-log-production.up.railway.app/health
     cron_days: "1-5"
     window_h: 30
-  - name: eliad
-    repo: ramizajicek-m/renewal-engine
-    night_workflow: qa-nightly.yml
-    promote_workflow: deploy-production.yml
-    main: main
-    production: https://web-production-cb8894.up.railway.app/health
-    staging: https://web-staging-418a.up.railway.app/health
-    cron_days: "0-4"
-    window_h: 30
-  - name: my8200
-    repo: my8200/8200-platform
-    night_workflow: qa-nightly.yml
-    promote_workflow: deploy-production.yml
-    main: main
-    production: https://app.my8200.com/health
-    staging: https://web-staging-7945.up.railway.app/health
-    cron_days: "0-4"
-    window_h: 30
+  # eliad ON HOLD 2026-09-29 (Rami) — not reported. Uncomment to resume, together with
+  # ~/.github-runners/estate_nightly.py PROJECTS and the estate-status skill's repos.yml.
+  # - name: eliad
+  #   repo: ramizajicek-m/renewal-engine
+  #   night_workflow: qa-nightly.yml
+  #   promote_workflow: deploy-production.yml
+  #   main: main
+  #   production: https://web-production-cb8894.up.railway.app/health
+  #   staging: https://web-staging-418a.up.railway.app/health
+  #   cron_days: "0-4"
+  #   window_h: 30
+  # my8200 ON HOLD 2026-09-25 (Rami) — not reported. Uncomment to resume, same three places.
+  # - name: my8200
+  #   repo: my8200/8200-platform
+  #   night_workflow: qa-nightly.yml
+  #   promote_workflow: deploy-production.yml
+  #   main: main
+  #   production: https://app.my8200.com/health
+  #   staging: https://web-staging-7945.up.railway.app/health
+  #   cron_days: "0-4"
+  #   window_h: 30

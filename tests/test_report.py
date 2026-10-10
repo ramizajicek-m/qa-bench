@@ -400,3 +400,34 @@ def test_an_unreadable_workflow_file_keeps_the_schedule_claim():
     """Mutation: treat UNREADABLE as 'no cron' — the stale schedule goes silent."""
     r = _row(sched=lambda repo, wf: _run(hours_ago=60), declares=lambda repo, wf: report.UNREADABLE)
     assert any("last fired 60.0h ago" in x for x in r["red"]), r["red"]
+
+
+def test_a_dead_login_is_named_instead_of_not_found(monkeypatch):
+    """anat's morning report, 100 runs: gh on the Actions runner could not read
+    the keychain, GitHub answered 404 to every private repo, and the report said
+    "wrong repo or workflow name". The stderr below is the runner's, verbatim
+    (run 38057554412, 2026-10-10)."""
+    import subprocess as sp
+
+    not_found = {"path": "repos/o/r", "reason": report.gh_reason("gh: Not Found (HTTP 404)", sp.CalledProcessError(1, "gh"))}
+    assert not_found["reason"].startswith("not found")
+
+    class Refused:
+        returncode = 1
+        stdout = ""
+        stderr = ("github.com\n  X Failed to log in to github.com account someone (default)\n"
+                  "  - Active account: true\n  - The token in default is invalid.\n")
+
+    monkeypatch.setattr(report.subprocess, "run", lambda *a, **k: Refused())
+    why = report.gh_login_refused()
+    assert why and "invalid" in why, why
+    lines = report.gh_failure_lines([not_found, not_found], None, why)
+    assert "login is refused" in lines[1] and "GH_TOKEN" in lines[1] and "not found" not in lines[1], lines
+
+    class Fine:
+        returncode = 0
+        stdout = stderr = ""
+
+    monkeypatch.setattr(report.subprocess, "run", lambda *a, **k: Fine())
+    assert report.gh_login_refused() is None
+    assert "not found" in report.gh_failure_lines([not_found], None, report.gh_login_refused())[1]

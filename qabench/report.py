@@ -359,11 +359,34 @@ def render(rows: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def gh_failure_lines(failures: list[dict], quota: dict | None) -> list[str]:
+def gh_login_refused() -> str | None:
+    """Why `gh auth status` refuses this login, or None when it accepts it (or
+    cannot be asked). GitHub answers 404, not 401, to a token it does not accept
+    when the repo is private — so a dead login reads as "not found" on every
+    row. anat's morning report failed 100 runs running on exactly that: the
+    Actions runner cannot read the keychain the login lives in, and the only
+    word the report had for it was "wrong repo or workflow name"."""
+    try:
+        res = subprocess.run(["gh", "auth", "status"], capture_output=True, text=True, timeout=30)
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return None
+    if res.returncode == 0:
+        return None
+    said = [ln.strip(" -X✗") for ln in (res.stderr + res.stdout).splitlines() if "invalid" in ln.lower() or "not logged" in ln.lower()]
+    return said[0] if said else "gh auth status exited non-zero"
+
+
+def gh_failure_lines(failures: list[dict], quota: dict | None, login_refused: str | None = None) -> list[str]:
     """What to print under the table when gh reads failed: each distinct reason
-    once with its count, and the quota's reset time when that is the reason."""
+    once with its count, and the quota's reset time when that is the reason.
+    `login_refused` (gh_login_refused) replaces the guess "not found" with the
+    cause when the login itself is dead."""
     if not failures:
         return []
+    if login_refused:
+        failures = [{**f, "reason": f"gh's login is refused here ({login_refused}) — GitHub answers 404 to a token it does not accept; "
+                                     "give the job a GH_TOKEN that can read every repo"}
+                    if f["reason"].startswith("not found") else f for f in failures]
     counts: dict[str, int] = {}
     for f in failures:
         counts[f["reason"]] = counts.get(f["reason"], 0) + 1
@@ -391,7 +414,8 @@ def run(argv: list[str]) -> int:
         print(json.dumps(rows, indent=1))
     else:
         text = f"### The estate on {now.strftime('%Y-%m-%d %H:%M')} UTC" + (f" · kit floor {floor}" if floor else "") + "\n\n" + render(rows)
-        tail = gh_failure_lines(GH_FAILURES, quota)
+        refused = gh_login_refused() if any(f["reason"].startswith("not found") for f in GH_FAILURES) else None
+        tail = gh_failure_lines(GH_FAILURES, quota, refused)
         if tail:
             text += "\n\n" + "\n".join(tail)
         print(text)
