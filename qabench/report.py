@@ -360,20 +360,23 @@ def render(rows: list[dict]) -> str:
 
 
 def gh_login_refused() -> str | None:
-    """Why `gh auth status` refuses this login, or None when it accepts it (or
-    cannot be asked). GitHub answers 404, not 401, to a token it does not accept
-    when the repo is private — so a dead login reads as "not found" on every
-    row. anat's morning report failed 100 runs running on exactly that: the
-    Actions runner cannot read the keychain the login lives in, and the only
-    word the report had for it was "wrong repo or workflow name"."""
+    """What gh says when asked who it is, if it cannot say — None when the login
+    works (or gh cannot be asked). GitHub answers 404, not 401, to a request it
+    does not accept when the repo is private, so a dead login reads as "not
+    found" on every row. anat's morning report failed 100 runs running on
+    exactly that: the Actions runner cannot read the keychain the login lives
+    in, and the only word the report had for it was "wrong repo or workflow
+    name". `gh api user` and not `gh auth status`: the status exits non-zero for
+    ANY stored account or host that is stale, including one the working
+    GH_TOKEN never uses, and would blame a healthy login for a genuine 404."""
     try:
-        res = subprocess.run(["gh", "auth", "status"], capture_output=True, text=True, timeout=30)
-    except (FileNotFoundError, subprocess.TimeoutExpired):
+        res = subprocess.run(["gh", "api", "user"], capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired):
         return None
     if res.returncode == 0:
         return None
-    said = [ln.strip(" -X✗") for ln in (res.stderr + res.stdout).splitlines() if "invalid" in ln.lower() or "not logged" in ln.lower()]
-    return said[0] if said else "gh auth status exited non-zero"
+    said = [ln.strip() for ln in (res.stderr or "").splitlines() if ln.strip()]
+    return (said[-1] if said else "gh api user exited non-zero")[:160]
 
 
 def gh_failure_lines(failures: list[dict], quota: dict | None, login_refused: str | None = None) -> list[str]:
