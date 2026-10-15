@@ -287,6 +287,56 @@ def post_login(cfg: Bench, email: str, password: str) -> httpx.Response:
         return r
 
 
+def totp(secret: str, step: int) -> str:
+    """RFC 6238 TOTP (SHA1, 6 digits) — what every authenticator app computes.
+    Stdlib only; tests/test_second_factor.py checks it against the RFC vectors."""
+    import base64
+    import hashlib
+    import hmac
+    import struct
+    s = secret.strip().replace(" ", "").upper()
+    key = base64.b32decode(s + "=" * (-len(s) % 8))
+    mac = hmac.new(key, struct.pack(">Q", step), hashlib.sha1).digest()
+    off = mac[-1] & 0x0F
+    return str((struct.unpack(">I", mac[off:off + 4])[0] & 0x7FFFFFFF) % 10 ** 6).zfill(6)
+
+
+def answer_second_factor(cfg: Bench, role: str, r: httpx.Response) -> httpx.Response:
+    """When a password login redirects to `login.second_factor_path`, post the
+    role's current TOTP code there and return THAT response, cookies merged.
+
+    A code is single-use on the server, so a role logging in twice inside one
+    30-second step is refused the second time: on a refusal the kit waits for
+    the next step and tries once more, and says so. Any other response passes
+    through untouched — `login_accepted` decides on it as before."""
+    L = cfg.login
+    loc = r.headers.get("location", "")
+    if not L.second_factor_path or r.status_code not in (302, 303) \
+            or urlparse(loc).path != L.second_factor_path:
+        return r
+    var = cfg.credentials.totp_env.format(ROLE=role.upper(), role=role.lower())
+    secret = env(var)
+    if not secret:
+        raise SystemExit(f"login as {role}: the app asks for a second factor and {var} is not set "
+                         f"(the role's TOTP secret, base32)")
+    with httpx.Client(base_url=cfg.origin, follow_redirects=False, cookies=r.cookies,
+                      timeout=httpx.Timeout(30.0, connect=45.0)) as h:
+        for attempt in range(2):
+            data = {L.second_factor_field: totp(secret, int(time.time() // 30))}
+            if L.csrf_field and L.csrf_cookie:
+                data[L.csrf_field] = h.cookies.get(L.csrf_cookie) or ""
+            out = h.post(L.second_factor_path, data=data)
+            if out.status_code in (302, 303) or attempt:
+                break
+            wait = 31 - time.time() % 30
+            print(f"  (second factor for {role} refused — a code is single-use; waiting {wait:.0f}s for the next one)", flush=True)
+            time.sleep(wait)
+        for name, value in h.cookies.items():
+            if name not in out.cookies:
+                out.cookies.set(name, value)
+        return out
+
+
 def login_accepted(cfg: Bench, r: httpx.Response) -> bool:
     """Did this login response grant a session? ONE decision for both login
     kinds and both directions: `login()` fails a role on False, and the smoke
@@ -383,6 +433,7 @@ def login(cfg: Bench, role: str, *, fresh: bool = False) -> Session:
         raise SystemExit(f"login as {role}: {cfg.origin} unreachable after 3 tries "
                          f"({type(last).__name__}). This is a network or host failure, NOT a finding about the code.")
     assert r is not None
+    r = answer_second_factor(cfg, role, r)
     if not login_accepted(cfg, r):
         raise SystemExit(f"login as {role} ({email}) failed: {r.status_code} {redact(r.text[:160])}")
     jar = {name: r.cookies.get(name, "") for name in L.cookies}

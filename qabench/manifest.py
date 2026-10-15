@@ -24,6 +24,8 @@ class Credentials:
     emails: dict[str, str] = field(default_factory=dict)   # per-role emails when no template fits (IGA: demo accounts)
     keychain_service: str | None = None        # e.g. "anat-qa-{role}" (laptop only)
     keychain_account: str | None = None
+    #: The role's TOTP secret (base32), for a login with `second_factor_path`.
+    totp_env: str = "QA_{ROLE}_TOTP"
 
 
 @dataclass
@@ -83,6 +85,13 @@ class Login:
     #: failures from exactly this, every context after the first. With `rotates`
     #: each browser context signs in afresh.
     rotates: bool = False
+    #: A login with a SECOND FACTOR (tharros 2026-10-15): a right password
+    #: redirects here instead of issuing a session, and the session comes only
+    #: after a TOTP code is posted to this path (in `second_factor_field`, with
+    #: the CSRF pair when `csrf_field` is set). The kit computes the code from
+    #: the role's `credentials.totp_env` secret. None = password alone signs in.
+    second_factor_path: str | None = None
+    second_factor_field: str = "code"
 
     def __post_init__(self):
         if self.kind not in ("form", "json"):
@@ -97,6 +106,8 @@ class Login:
         if self.bearer and self.bearer_browser not in ("header", "cookie"):
             raise SystemExit("bench.login.bearer_browser must be `header` (install the token on the browser context) or "
                              "`cookie` (the app's own script signs in from the planted cookie) — it is not inferred")
+        if self.second_factor_path and self.kind != "form":
+            raise SystemExit("bench.login.second_factor_path is a form-login setting")
         if self.bearer_browser and not self.bearer:
             raise SystemExit("bench.login.bearer_browser needs bench.login.bearer — there is no token to install")
 
