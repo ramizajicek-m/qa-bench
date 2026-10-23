@@ -465,9 +465,22 @@ def refuse_prod(cfg: Bench, reason: str) -> None:
 
 
 def shot(page, shots: Path, name: str) -> Path:
+    """Evidence for a cell already decided — it must never be what kills the stage.
+
+    A full-page shot over 32767px on either side is refused by the browser (WebKit
+    at phone width hit it on IGA's /admin/trades, 2026-10-23), and that error
+    aborted pages_by_role with 15 cells undecided. Such a page gets the viewport
+    instead, and says so; every other screenshot error still raises.
+    """
     shots.mkdir(parents=True, exist_ok=True)
     p = shots / f"{name}.png"
-    page.screenshot(path=str(p), full_page=True)
+    try:
+        page.screenshot(path=str(p), full_page=True)
+    except Exception as e:
+        if "larger than 32767" not in str(e):
+            raise
+        print(f"    (evidence: {name} is taller than a full-page shot allows — viewport only)", flush=True)
+        page.screenshot(path=str(p), full_page=False)
     return p
 
 
