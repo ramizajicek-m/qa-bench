@@ -25,10 +25,24 @@ kept separate on purpose so neither can stand in for the other. What it does
 kill is the case this exists for: a route that nothing has ever called, sitting
 behind a register row that says "driven" because a comment mentions it.
 
-HOW IT HOOKS IN. `httpx.Client.send` is the one place every request goes,
-including Starlette/FastAPI's TestClient, which subclasses it. One patch rather
-than a fixture each project has to remember to use — a fixture nobody applies is
-the failure this whole program keeps finding.
+HOW IT HOOKS IN. `Client.send` is the one place every request goes,
+including Starlette/FastAPI's TestClient, which subclasses the client. One patch
+rather than a fixture each project has to remember to use — a fixture nobody
+applies is the failure this whole program keeps finding.
+
+WHICH CLIENT. The patch goes on every client module that is importable AND on
+whichever one `starlette.testclient` actually bound. Starlette 1.x builds its
+TestClient on `httpx2` and falls back to `httpx` only when httpx2 is missing.
+Patching `httpx` alone, a project on starlette 1.x recorded about 60 rows instead
+of about 1,290 (2026-10-31) and nothing said so: the rows that remained came from
+tests that build an `httpx.Client` themselves.
+
+A SHRINK IS REFUSED. `write`, `merge_workers` and `fold_raw` compare the new recording with
+the one already at the path, and refuse one smaller than `SHRINK_FLOOR` of it
+(`QABENCH_HITS_FLOOR=<n>` sets an absolute floor instead;
+`QABENCH_HITS_ALLOW_SHRINK=1` accepts a deliberate drop). Under pytest the refusal
+fails the run. The httpx2 defect is a recorder that kept working for a fraction
+of the suite, so refusing an EMPTY file was never going to catch it.
 """
 from __future__ import annotations
 
@@ -55,6 +69,19 @@ BODY_KEYS_ENV = "QABENCH_RECORD_BODY_KEYS"
 #: {"METHOD path", ...} for the current process.
 _seen: set = set()
 _installed = False
+
+#: The client modules a suite might send through. `httpx2` is what starlette 1.x
+#: binds for its TestClient; `httpx` is everything older and every hand-built client.
+CLIENT_MODULES = ("httpx", "httpx2")
+
+#: The fraction of the previous recording a new one must reach.
+SHRINK_FLOOR = 0.5
+FLOOR_ENV = "QABENCH_HITS_FLOOR"
+ALLOW_SHRINK_ENV = "QABENCH_HITS_ALLOW_SHRINK"
+
+
+class ShrinkRefused(RuntimeError):
+    """The recording fell below its floor. Fails the run, unlike an empty worker."""
 
 
 def _body_discriminator(request) -> str:
@@ -105,55 +132,113 @@ def record(method: str, path: str, status: int = 0, location: str = "",
     _seen.add(f"{method.upper()} {path} {int(status)}\t{location}\t{host}")
 
 
-def install() -> bool:
-    """Patch httpx so every request the suite makes is written down.
+def _record_response(request, response) -> None:
+    try:
+        record(request.method, request.url.path + _body_discriminator(request),
+               response.status_code,
+               location=response.headers.get("location", ""),
+               host=request.url.host or "")
+    except Exception:           # never let bookkeeping break a suite
+        pass
 
-    Returns False when httpx is absent or the patch is already in place, so a
-    caller can say DID NOT RUN rather than report an empty recording as a clean
-    result.
+
+def _patch_class(cls, is_async: bool) -> bool:
+    """Wrap `cls.send` once. A subclass that inherits it is covered by its base."""
+    if cls is None or "send" not in vars(cls) or getattr(cls.send, "_qabench", False):
+        return False
+    original = cls.send
+    if is_async:
+        async def send(self, request, *a, **kw):
+            response = await original(self, request, *a, **kw)
+            _record_response(request, response)
+            return response
+    else:
+        def send(self, request, *a, **kw):
+            response = original(self, request, *a, **kw)
+            _record_response(request, response)
+            return response
+    send._qabench = True
+    cls.send = send
+    return True
+
+
+def _testclient_module():
+    """The client module `starlette.testclient` bound, or None without starlette."""
+    try:
+        import starlette.testclient as tc
+    except Exception:
+        return None
+    return getattr(tc, "httpx", None)
+
+
+def client_modules() -> list:
+    """Every importable client module, plus the one TestClient is built on."""
+    import importlib
+    mods = []
+    for name in CLIENT_MODULES:
+        try:
+            mods.append(importlib.import_module(name))
+        except ImportError:
+            pass
+    bound = _testclient_module()
+    if bound is not None and bound not in mods:
+        mods.append(bound)
+    return mods
+
+
+def install() -> bool:
+    """Patch every client so each request the suite makes is written down.
+
+    Returns False when no client module is importable or the patch is already in
+    place, so a caller can say DID NOT RUN rather than report an empty recording
+    as a clean result.
     """
     global _installed
     if _installed:
         return False
-    try:
-        import httpx
-    except ImportError:
+    mods = client_modules()
+    if not mods:
         return False
-
-    original = httpx.Client.send
-
-    def send(self, request, *a, **kw):
-        response = original(self, request, *a, **kw)
-        try:
-            record(request.method, request.url.path + _body_discriminator(request),
-                   response.status_code,
-                   location=response.headers.get("location", ""),
-                   host=request.url.host or "")
-        except Exception:       # never let bookkeeping break a suite
-            pass
-        return response
-
-    httpx.Client.send = send
+    for mod in mods:
+        _patch_class(getattr(mod, "Client", None), is_async=False)
+        _patch_class(getattr(mod, "AsyncClient", None), is_async=True)
     _installed = True
-
-    try:                        # the async client is a separate class
-        original_async = httpx.AsyncClient.send
-
-        async def asend(self, request, *a, **kw):
-            response = await original_async(self, request, *a, **kw)
-            try:
-                record(request.method, request.url.path + _body_discriminator(request),
-                       response.status_code,
-                       location=response.headers.get("location", ""),
-                       host=request.url.host or "")
-            except Exception:
-                pass
-            return response
-
-        httpx.AsyncClient.send = asend
-    except AttributeError:
-        pass
     return True
+
+
+def _previous_count(p: Path) -> int:
+    try:
+        doc = json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        return 0
+    return int(doc.get("count") or len(doc.get("recorded", [])))
+
+
+def check_floor(path, count: int) -> None:
+    """Refuse a recording that shrank below its floor.
+
+    The floor is `QABENCH_HITS_FLOOR` when set, otherwise `SHRINK_FLOOR` of the
+    recording already at `path`. Nothing at `path` and no env floor: no floor, so
+    a first recording is never refused.
+    """
+    if os.environ.get(ALLOW_SHRINK_ENV) == "1":
+        return
+    p = Path(path)
+    env = os.environ.get(FLOOR_ENV, "").strip()
+    if env:
+        floor, why = int(env), f"{FLOOR_ENV}={env}"
+    else:
+        before = _previous_count(p)
+        if not before:
+            return
+        floor = int(before * SHRINK_FLOOR)
+        why = f"{SHRINK_FLOOR:.0%} of the {before} rows already in {p.name}"
+    if count < floor:
+        raise ShrinkRefused(
+            f"recorded {count} distinct requests, below the floor of {floor} "
+            f"({why}). The recorder is most likely missing the client the suite "
+            f"sends through (patched: {', '.join(m.__name__ for m in client_modules()) or 'none'}). "
+            f"Refusing to overwrite {p}; set {ALLOW_SHRINK_ENV}=1 if the drop is real.")
 
 
 #: The recording's own format, because a row's SHAPE decides which questions it
@@ -185,6 +270,7 @@ def write(path) -> dict:
             "or install() ran after the client was imported and bound. Treat "
             "this as DID NOT RUN; refusing to write an empty hits file.")
     p = Path(path)
+    check_floor(p, len(_seen))
     p.parent.mkdir(parents=True, exist_ok=True)
     doc = {"format": FORMAT, "recorded": sorted(_seen), "count": len(_seen)}
     p.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
@@ -454,6 +540,7 @@ def merge_workers(target: str) -> dict:
             f"{len(parts)} per-worker file(s) beside {target} and not one request "
             f"between them. Refusing to write an empty recording.")
 
+    check_floor(p, len(rows))
     doc = {"format": FORMAT, "recorded": sorted(rows), "count": len(rows)}
     p.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
     for f in parts:
@@ -496,6 +583,7 @@ def fold_raw(out_target: str, pattern: str = "*.raw") -> dict:
             f"{len(parts)} raw file(s) beside {out} and not one line between them. "
             f"Refusing to write an empty recording.")
 
+    check_floor(out, len(rows))
     doc = {"format": FORMAT, "recorded": sorted(rows), "count": len(rows)}
     out.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
     for f in parts:
@@ -511,5 +599,8 @@ def pytest_sessionfinish(session, exitstatus):   # pragma: no cover
     try:
         doc = write(target)
         print(f"\nqabench: recorded {doc['count']} distinct requests -> {target}")
+    except ShrinkRefused as e:
+        print(f"\nqabench: REFUSED: {e}")
+        session.exitstatus = 1
     except RuntimeError as e:
         print(f"\nqabench: {e}")
