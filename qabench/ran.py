@@ -699,6 +699,31 @@ def _load(getloadavg=os.getloadavg) -> float | None:
         return None
 
 
+def _ordinal(n: int) -> str:
+    return f"{n}{'th' if 10 <= n % 100 <= 20 else {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th')}"
+
+
+def queue_ahead(queue: Path, mine: Path | None) -> list[str]:
+    """Who waits ahead of `mine` (every live entry when None), oldest first; an entry whose process is gone is
+    removed, or a crashed waiter would be listed ahead of everyone forever."""
+    ahead = []
+    for entry in sorted(queue.iterdir()):
+        if mine is not None and entry.name >= mine.name:
+            break
+        try:
+            os.kill(int(entry.name.rsplit("-", 1)[1]), 0)
+        except (ValueError, ProcessLookupError):
+            entry.unlink(missing_ok=True)
+            continue
+        except PermissionError:
+            pass
+        try:
+            ahead.append(entry.read_text().strip())
+        except OSError:
+            continue
+    return ahead
+
+
 class HeavyLock:
     """One heavy suite per machine, as a LOCK rather than a courtesy. "Be considerate" is not a scheduler:
     each session reasoned correctly from what it could see, and none could see the others. `--heavy` takes
@@ -721,28 +746,43 @@ class HeavyLock:
             return self
         self.nested = False
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.fh = open(self.path, "a+")
-        t0 = time.monotonic()
-        try:
-            fcntl.flock(self.fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            self.fh.seek(0)
-            holder = self.fh.read().strip() or "another heavy run"
-            self.echo(f"ran: waiting for the machine's heavy-run lock, held by: {holder} — no timeout, because the "
-                      "holder is named; a landing can take 40 minutes, so do something that does not need the "
-                      "machine and let this wait")
-            fcntl.flock(self.fh, fcntl.LOCK_EX)
-        else:
-            # REPORT WHAT IT SAW, not only a verdict: a lock that goes quiet when it is free is the same shape
-            # as the watcher that said FREE with no listing (five of those on 2026-09-21).
-            self.echo(f"ran: heavy-run lock taken at once — no other holder ({self.path})")
-        self.waited = round(time.monotonic() - t0, 1)
-        self.fh.seek(0)
-        self.fh.truncate()
         # WHO, not only what: git and ps record no owner, so sessions inferred one from a worktree NAME and
         # were wrong twice on 2026-09-21. The session name comes from the landing conventions already in use.
         who = next((os.environ[k] for k in ("QABENCH_SESSION", "LAND_SESSION", "ANAT_SESSION") if os.environ.get(k)),
                    "an unnamed session")
+        # THE QUEUE IS LISTED, not only the holder (2026-11-02: four runs waited an hour on the gate host, each
+        # seeing only the holder, and the queue read as unfair while flock served it in arrival order). A waiter
+        # lists itself in <lock>.queue/ while it waits; ordering stays the kernel's. delivery-kit's land.py
+        # speaks the same protocol for the gate's stages.
+        queue = Path(f"{self.path}.queue")
+        queue.mkdir(parents=True, exist_ok=True)
+        ticket = queue / f"{time.time_ns():020d}-{os.getpid()}"
+        ticket.write_text(f"{self.name} for {who}")
+        self.fh = open(self.path, "a+")
+        t0 = time.monotonic()
+        try:
+            try:
+                fcntl.flock(self.fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                self.fh.seek(0)
+                holder = self.fh.read().strip() or "another heavy run"
+                ahead = queue_ahead(queue, ticket)
+                self.echo(f"ran: waiting for the machine's heavy-run lock, held by: {holder}; "
+                          f"{_ordinal(len(ahead) + 1)} in the queue"
+                          f"{' behind: ' + '; '.join(ahead) if ahead else ''} — no timeout, because the "
+                          "holder is named; a landing can take 40 minutes, so do something that does not need the "
+                          "machine and let this wait")
+                fcntl.flock(self.fh, fcntl.LOCK_EX)
+            else:
+                # REPORT WHAT IT SAW, not only a verdict: a lock that goes quiet when it is free is the same shape
+                # as the watcher that said FREE with no listing (five of those on 2026-09-21).
+                self.echo(f"ran: heavy-run lock taken at once — no other holder ({self.path})")
+        finally:
+            ticket.unlink(missing_ok=True)
+        queue_ahead(queue, None)                                # sweep what died while this one waited
+        self.waited = round(time.monotonic() - t0, 1)
+        self.fh.seek(0)
+        self.fh.truncate()
         self.fh.write(f"{self.name} for {who}, pid {os.getpid()} in {os.getcwd()} since "
                       f"{dt.datetime.now(dt.timezone.utc).isoformat(timespec='seconds')}")
         self.fh.flush()

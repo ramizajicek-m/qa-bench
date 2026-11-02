@@ -342,6 +342,61 @@ def test_the_heavy_lock_serialises_two_runs(tmp_path, monkeypatch):
     assert l2.waited > 0.6 and any("first" in s for s in said)
 
 
+def _queued(lock: str, name: str, out: str, hold: float = 0.2):
+    """A waiter in its own process: takes the lock, records when, holds it a moment."""
+    import subprocess
+    import sys
+    return subprocess.Popen([sys.executable, "-c",
+                             "import time, sys; sys.path.insert(0, '.'); from qabench import ran\n"
+                             f"with ran.HeavyLock({name!r}, path={lock!r}, echo=lambda *_: None):\n"
+                             f"    open({out!r}, 'a').write({name!r} + '\\n'); time.sleep({hold})"],
+                            env={**__import__('os').environ, "PYTHONPATH": "."})
+
+
+def test_a_waiter_that_died_does_not_hold_up_the_queue(tmp_path, monkeypatch):
+    """A queue entry whose process is gone is swept, or a crashed waiter would be listed ahead of everyone forever."""
+    import subprocess
+    import sys
+    from qabench import ran
+    monkeypatch.delenv("QABENCH_HEAVY_HELD", raising=False)
+    lock = tmp_path / "heavy.lock"
+    gone = subprocess.run([sys.executable, "-c", "import os; print(os.getpid())"],
+                          capture_output=True, text=True).stdout.strip()
+    queue = tmp_path / "heavy.lock.queue"
+    queue.mkdir()
+    (queue / f"{1:020d}-{gone}").write_text("crashed for nobody")
+    with ran.HeavyLock("next", path=str(lock), echo=lambda *_: None) as got:
+        assert got.waited < 2, "the dead waiter's entry kept the live one waiting"
+    assert list(queue.iterdir()) == [], "the dead entry is swept and the live one removed"
+
+
+def test_a_waiter_says_its_place_and_who_is_ahead(tmp_path, monkeypatch):
+    """2026-11-02: four runs queued on the gate host for an hour and each saw only the holder, so the queue read as
+    unfair when it was in arrival order (flock serves blocked waiters in order here, measured). Every waiter lists
+    itself in <lock>.queue/ while it waits; the waiting line says its place and who is ahead."""
+    import subprocess
+    import sys
+    import time
+    from qabench import ran
+    monkeypatch.delenv("QABENCH_HEAVY_HELD", raising=False)
+    lock, out = str(tmp_path / "heavy.lock"), str(tmp_path / "order")
+    holder = subprocess.Popen([sys.executable, "-c",
+                               "import time,sys; sys.path.insert(0, '.'); from qabench import ran\n"
+                               f"with ran.HeavyLock('e2e', path={lock!r}, echo=lambda *_: None):\n"
+                               "    print('in', flush=True); time.sleep(1.5)"],
+                              stdout=subprocess.PIPE, text=True, env={**__import__('os').environ, "PYTHONPATH": "."})
+    assert holder.stdout.readline().strip() == "in"
+    ahead = _queued(lock, "land ana-log e2e", out)
+    time.sleep(0.3)
+    said = []
+    with ran.HeavyLock("mine", path=lock, echo=said.append):
+        pass
+    holder.wait(timeout=10); ahead.wait(timeout=10)
+    waiting = next(s for s in said if "waiting" in s)
+    assert "held by: e2e for" in waiting and "2nd in the queue" in waiting, waiting
+    assert "land ana-log e2e" in waiting, "it names who is ahead of it"
+
+
 def test_a_heavy_run_nested_inside_a_heavy_run_does_not_deadlock(tmp_path, monkeypatch):
     """ana-qa: a land.py check wrapping `ran --heavy` inside `ran --heavy` would wait forever on its own ancestor."""
     import os
