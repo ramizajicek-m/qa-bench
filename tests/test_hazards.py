@@ -193,3 +193,40 @@ def test_a_wrapped_suite_on_a_runner_without_the_lock_service_is_red(tmp_path):
     assert hazards.unlocked_suites(tmp_path) == (1, [])
     rc, out = scan(tmp_path, f.read_text(), name=".github/workflows/ci.yml")
     assert rc == 0 and any("EXCUSED: a host runner, its own flock" in o for o in out), out
+
+
+SHARDED = ("      - name: browsers\n        run: python -m playwright install --with-deps chromium\n"
+           "      - name: shard\n        run: python tools/e2e_shards.py run --count 6 --index '${{ matrix.shard }}'\n")
+
+
+def test_a_job_whose_script_runs_the_suite_is_red(tmp_path):
+    """2026-11-02: a six-shard nightly e2e matrix ran outside the lock beside a landing that held it (load 65-72): its
+    suite was started by a project script, which the line rule does not read."""
+    f = tmp_path / ".github/workflows/nightly.yml"
+    f.parent.mkdir(parents=True)
+    f.write_text(WF % ("[self-hosted, linux, proj]", SHARDED))
+    _lockd_hosts(tmp_path, "proj")
+    n, red = hazards.unlocked_suites(tmp_path)
+    assert len(red) == 1 and "job e2e: names playwright" in red[0], red
+    collect = "      - name: count\n        run: COLLECT=$(python -m pytest tests/integration --collect-only -qq)\n"
+    f.write_text(WF % ("[self-hosted, linux, proj]", collect + "      - name: run\n        run: scripts/integration.sh\n"))
+    n, red = hazards.unlocked_suites(tmp_path)
+    assert len(red) == 1 and "job e2e: names pytest" in red[0], red
+
+
+def test_a_job_with_a_wrapped_step_an_excuse_or_only_a_pytest_install_is_clean(tmp_path):
+    f = tmp_path / ".github/workflows/nightly.yml"
+    f.parent.mkdir(parents=True)
+    _lockd_hosts(tmp_path, "proj")
+    wrapped = SHARDED.replace("run: python tools/", "run: python -m qabench heavy --name ci-e2e -- python tools/")
+    f.write_text(WF % ("[self-hosted, linux, proj]", wrapped))
+    assert hazards.unlocked_suites(tmp_path) == (1, [])
+    excused = SHARDED.replace("run: python tools/", "run: |\n          # hazard-ok: staging-only reads, a minute long\n"
+                                                     "          python tools/")
+    f.write_text(WF % ("[self-hosted, linux, proj]", excused))
+    assert hazards.unlocked_suites(tmp_path) == (1, [])
+    lint = "      - name: lint\n        run: |\n          pip install -q ruff pytest\n          ruff check .\n"
+    f.write_text(WF % ("[self-hosted, linux, proj]", lint))
+    assert hazards.unlocked_suites(tmp_path) == (1, [])
+    f.write_text(WF % ("ubuntu-latest", SHARDED))
+    assert hazards.unlocked_suites(tmp_path) == (1, [])
