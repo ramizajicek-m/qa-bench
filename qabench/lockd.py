@@ -68,8 +68,8 @@ class RemoteHeavyLock:
     """HeavyLock's shape over the socket: waits, echoes the host's waiting lines, and sets `lost` when the
     host's lock goes away while held."""
 
-    def __init__(self, name: str, addr: str, echo=print, connect_timeout: float = 10):
-        self.name, self.addr, self.echo, self.connect_timeout = name, addr, echo, connect_timeout
+    def __init__(self, name: str, addr: str, echo=print, connect_timeout: float = 10, cores: int | None = None):
+        self.name, self.addr, self.echo, self.connect_timeout, self.cores = name, addr, echo, connect_timeout, cores
         self.waited, self.lost, self.sock = 0.0, threading.Event(), None
 
     def __enter__(self):
@@ -89,7 +89,7 @@ class RemoteHeavyLock:
         except (OSError, ValueError) as ex:
             raise Unreachable(f"the host's lock service at {self.addr} is unreachable ({ex})") from None
         self.sock.settimeout(None)
-        self.sock.sendall((json.dumps({"name": self.name, "who": who}) + "\n").encode())
+        self.sock.sendall((json.dumps({"name": self.name, "who": who, "cores": self.cores}) + "\n").encode())
         self._stop = threading.Event()
         threading.Thread(target=self._beat, daemon=True).start()
         self.rfile = self.sock.makefile("r", encoding="utf-8", errors="replace")
@@ -162,6 +162,9 @@ def _serve_one(conn: socket.socket, peer, log):
         conn.close()
         return
     name = str(hello.get("name") or "a container's heavy run")[:200]
+    # The container's declared cores; a client from before the budget declares none and takes the whole host.
+    cores = hello.get("cores")
+    cores = ["--cores", str(cores)] if isinstance(cores, int) and not isinstance(cores, bool) and cores > 0 else []
     who = f"{str(hello.get('who') or 'an unnamed session')[:200]}, in a container via the host lock service"
     env = {k: v for k, v in os.environ.items() if k not in ("QABENCH_HEAVY_HELD", "QABENCH_HEAVY_LOCKD", "LAND_SESSION",
                                                             "ANAT_SESSION")}
@@ -169,7 +172,7 @@ def _serve_one(conn: socket.socket, peer, log):
                PYTHONPATH=os.pathsep.join(filter(None, [str(Path(__file__).resolve().parent.parent),
                                                         os.environ.get("PYTHONPATH")])))
     # The waiter IS a host `qabench heavy`: same flock, same queue ticket, same holder line, kernel's order.
-    child = subprocess.Popen([sys.executable, "-m", "qabench", "heavy", "--name", name, "--", sys.executable, "-c", HOLD],
+    child = subprocess.Popen([sys.executable, "-m", "qabench", "heavy", "--name", name, *cores, "--", sys.executable, "-c", HOLD],
                              stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env,
                              text=True, start_new_session=True)
     log(f"lockd: {peer[0]}:{peer[1]} waits: {name} for {who} (host pid {child.pid})")

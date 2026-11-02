@@ -430,7 +430,6 @@ import shutil
 import socket
 import subprocess
 import sys
-import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -723,10 +722,6 @@ def _holder(text: str) -> str:
     return text
 
 
-#: How often a waiter re-reads who holds the lock (QABENCH_HEAVY_WATCH, seconds).
-WATCH_S = 30.0
-
-
 def queue_ahead(queue: Path, mine: Path | None) -> list[str]:
     """Who waits ahead of `mine` (every live entry when None), oldest first; an entry whose process is gone is
     removed, or a crashed waiter would be listed ahead of everyone forever."""
@@ -749,13 +744,59 @@ def queue_ahead(queue: Path, mine: Path | None) -> list[str]:
 
 
 class HeavyLock:
-    """One heavy suite per machine, as a LOCK rather than a courtesy. "Be considerate" is not a scheduler:
-    each session reasoned correctly from what it could see, and none could see the others. `--heavy` takes
-    an exclusive lock at ~/.qabench/heavy.lock (QABENCH_HEAVY_LOCK), waits for it, and says who held it."""
+    """The machine's heavy runs, admitted against a CORE BUDGET rather than one at a time.
 
-    def __init__(self, name: str, echo=print, path: str | None = None):
+    "Be considerate" is not a scheduler: each session reasoned correctly from what it could see, and none could
+    see the others. So a heavy run DECLARES the cores it takes and waits until they fit.
+
+    WHY A BUDGET, NOT A MUTEX (2026-11-02). The exclusive lock made the gate host one lane: it sat at load ~4 on
+    10 cores for 28 minutes while a serial suite held the whole machine and three runs queued behind it, one of
+    them a 2-CPU container. Now each holder registers in <lock>.holders/ with its cores, and the head of the
+    queue is admitted when the sum fits in the machine (QABENCH_HEAVY_CORES, default every core). STRICTLY FIFO:
+    only the head of <lock>.queue/ is ever admitted, so a large run cannot be starved by small ones slipping past.
+    The admission check runs under a short mutex (<lock>.admit); the wait between checks is a poll
+    (QABENCH_HEAVY_POLL seconds), and a waiter says what it sees whenever that changes.
+
+    THE OLD EXCLUSIVE LOCKERS STILL EXCLUDE. A holder also keeps a SHARED flock on <lock> for its whole run. A
+    wrapper from before the budget (an older vendored land.py, an older kit) takes it EXCLUSIVELY, which waits for
+    every budget holder to finish and, while held, keeps every new one out — so the two generations never
+    overlap during a rollout. Its holder line in <lock> is shown as the holder, marked STALE when its pid is gone.
+    """
+
+    def __init__(self, name: str, echo=print, path: str | None = None, cores: int | None = None):
         self.path = Path(path or os.environ.get("QABENCH_HEAVY_LOCK") or Path.home() / ".qabench" / "heavy.lock")
         self.name, self.echo, self.fh, self.waited = name, echo, None, 0.0
+        self.capacity = max(1, int(os.environ.get("QABENCH_HEAVY_CORES") or os.cpu_count() or 1))
+        # Undeclared is the whole machine: the conservative reading, and what the exclusive lock always meant.
+        self.cores = max(1, min(int(cores or self.capacity), self.capacity))
+
+    def _holders(self, holders: Path) -> list[tuple[Path, str, int]]:
+        """Live holders, oldest first; a holder whose process is gone is removed (it was killed outright)."""
+        out = []
+        for entry in sorted(holders.iterdir()):
+            try:
+                os.kill(int(entry.name.rsplit("-", 1)[1]), 0)
+            except (ValueError, ProcessLookupError):
+                entry.unlink(missing_ok=True)
+                continue
+            except PermissionError:
+                pass
+            try:
+                text = entry.read_text().strip()
+            except OSError:
+                continue
+            m = re.search(r"\((\d+) cores\)", text)
+            out.append((entry, text, int(m.group(1)) if m else self.capacity))
+        return out
+
+    def _summary(self, live) -> None:
+        """<lock>'s text, for a waiter of the old exclusive kind: who holds what, now."""
+        used = sum(c for *_, c in live)
+        self.fh.seek(0)
+        self.fh.truncate()
+        if live:
+            self.fh.write(f"{used} of {self.capacity} cores held by: " + "; ".join(t for _, t, _ in live))
+        self.fh.flush()
 
     def __enter__(self):
         import fcntl
@@ -763,7 +804,7 @@ class HeavyLock:
         # RE-ENTRANT ACROSS THE PROCESS TREE. A heavy run whose command itself calls `ran --heavy` (a land.py
         # check wrapping `./dev test unit`, which one day wraps another) would block forever on a lock its own
         # ancestor holds — the one way a kernel lock deadlocks a single job (ana-qa). The holder exports
-        # QABENCH_HEAVY_HELD with the lock's path; a descendant that sees it proceeds and says so.
+        # QABENCH_HEAVY_HELD with the lock's path; a descendant that sees it proceeds inside its ancestor's cores.
         if os.environ.get("QABENCH_HEAVY_HELD") == str(self.path):
             self.echo("ran: heavy-run lock already held by this run's own ancestor — proceeding inside it")
             self.fh, self.nested = None, True
@@ -774,68 +815,72 @@ class HeavyLock:
         # were wrong twice on 2026-09-21. The session name comes from the landing conventions already in use.
         who = next((os.environ[k] for k in ("QABENCH_SESSION", "LAND_SESSION", "ANAT_SESSION") if os.environ.get(k)),
                    "an unnamed session")
-        # THE QUEUE IS LISTED, not only the holder (2026-11-02: four runs waited an hour on the gate host, each
-        # seeing only the holder, and the queue read as unfair while flock served it in arrival order). A waiter
-        # lists itself in <lock>.queue/ while it waits; ordering stays the kernel's. delivery-kit's land.py
-        # speaks the same protocol for the gate's stages.
-        queue = Path(f"{self.path}.queue")
+        # THE QUEUE IS LISTED, not only the holders (2026-11-02: four runs waited an hour on the gate host, each
+        # seeing only the holder). A waiter lists itself in <lock>.queue/; its place is its ticket's name, so the
+        # order is arrival order. delivery-kit's land.py speaks the same protocol for the gate's stages.
+        queue, holders = Path(f"{self.path}.queue"), Path(f"{self.path}.holders")
         queue.mkdir(parents=True, exist_ok=True)
-        ticket = queue / f"{time.time_ns():020d}-{os.getpid()}"
-        ticket.write_text(f"{self.name} for {who}")
+        holders.mkdir(parents=True, exist_ok=True)
+        stamp = f"{time.time_ns():020d}-{os.getpid()}"
+        ticket = queue / stamp
+        ticket.write_text(f"{self.name} for {who} ({self.cores} cores)")
         self.fh = open(self.path, "a+")
-        t0 = time.monotonic()
+        admit = open(f"{self.path}.admit", "a+")
+        poll = float(os.environ.get("QABENCH_HEAVY_POLL") or 1.0)
+        t0, said, first = time.monotonic(), None, True
         try:
-            try:
-                fcntl.flock(self.fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except BlockingIOError:
-                self.fh.seek(0)
-                seen = self.fh.read().strip()
-                ahead = queue_ahead(queue, ticket)
-                self.echo(f"ran: waiting for the machine's heavy-run lock, held by: {_holder(seen)}; "
-                          f"{_ordinal(len(ahead) + 1)} in the queue"
-                          f"{' behind: ' + '; '.join(ahead) if ahead else ''} — no timeout, because the "
-                          "holder is named; a landing can take 40 minutes, so do something that does not need the "
-                          "machine and let this wait")
-                # THE HOLDER IS RE-READ WHILE THIS WAITS. A waiter used to name the holder once, when it started:
-                # on 2026-11-02 a gate's log still said "held by pid 60639" an hour after that run had finished
-                # and another had taken the lock, and the line was read as the lock lying about its holder. The
-                # wait itself stays the kernel's blocking flock (its order is the queue's); a thread only watches.
-                done = threading.Event()
-
-                def watch(seen=seen):
-                    every = float(os.environ.get("QABENCH_HEAVY_WATCH") or WATCH_S)
-                    while not done.wait(every):
-                        try:
-                            now = self.path.read_text().strip()
-                        except OSError:
-                            continue
-                        if now != seen:
-                            seen = now
-                            left = queue_ahead(queue, ticket)
-                            self.echo(f"ran: still waiting — the lock is now held by: {_holder(now)}; "
-                                      f"{_ordinal(len(left) + 1)} in the queue"
-                                      f"{' behind: ' + '; '.join(left) if left else ''}")
-
-                watcher = threading.Thread(target=watch, daemon=True)
-                watcher.start()
+            while True:
+                fcntl.flock(admit, fcntl.LOCK_EX)
                 try:
-                    fcntl.flock(self.fh, fcntl.LOCK_EX)
+                    live = self._holders(holders)
+                    ahead = queue_ahead(queue, ticket)
+                    used = sum(c for *_, c in live)
+                    legacy = ""
+                    go = not ahead and used + self.cores <= self.capacity
+                    if go:
+                        try:
+                            fcntl.flock(self.fh, fcntl.LOCK_SH | fcntl.LOCK_NB)
+                        except BlockingIOError:             # an exclusive holder of the old kind
+                            go = False
+                            self.fh.seek(0)
+                            legacy = _holder(self.fh.read())
+                    if go:
+                        self.held = holders / stamp
+                        self.held.write_text(f"{self.name} for {who} ({self.cores} cores), pid {os.getpid()} in "
+                                             f"{os.getcwd()} since "
+                                             f"{dt.datetime.now(dt.timezone.utc).isoformat(timespec='seconds')}")
+                        ticket.unlink(missing_ok=True)
+                        live = self._holders(holders)
+                        self._summary(live)
+                        break
                 finally:
-                    done.set()
-                    watcher.join()
-            else:
-                # REPORT WHAT IT SAW, not only a verdict: a lock that goes quiet when it is free is the same shape
-                # as the watcher that said FREE with no listing (five of those on 2026-09-21).
-                self.echo(f"ran: heavy-run lock taken at once — no other holder ({self.path})")
+                    fcntl.flock(admit, fcntl.LOCK_UN)
+                held_by = legacy or ("; ".join(t for _, t, _ in live) if live else "nobody — admission is next")
+                state = (held_by, tuple(ahead))
+                if state != said:
+                    place = (f"{_ordinal(len(ahead) + 1)} in the queue"
+                             f"{' behind: ' + '; '.join(ahead) if ahead else ''}")
+                    if first:
+                        self.echo(f"ran: waiting for the machine's heavy-run lock, held by: {held_by} "
+                                  f"({used} of {self.capacity} cores; this run needs {self.cores}); {place} — no "
+                                  "timeout, because the holders are named; a landing can take 40 minutes, so do "
+                                  "something that does not need the machine and let this wait")
+                    else:
+                        self.echo(f"ran: still waiting — the lock is now held by: {held_by} "
+                                  f"({used} of {self.capacity} cores; this run needs {self.cores}); {place}")
+                    said, first = state, False
+                time.sleep(poll)
         finally:
             ticket.unlink(missing_ok=True)
-        queue_ahead(queue, None)                                # sweep what died while this one waited
+            admit.close()
+        if first:
+            # REPORT WHAT IT SAW, not only a verdict: a lock that goes quiet when it is free is the same shape
+            # as the watcher that said FREE with no listing (five of those on 2026-09-21).
+            others = [t for p, t, _ in live if p != self.held]
+            self.echo(f"ran: heavy-run lock taken at once — no other holder ({self.path})" if not others else
+                      f"ran: heavy-run lock taken at once — {self.cores} of {self.capacity} cores, beside: "
+                      + "; ".join(others))
         self.waited = round(time.monotonic() - t0, 1)
-        self.fh.seek(0)
-        self.fh.truncate()
-        self.fh.write(f"{self.name} for {who}, pid {os.getpid()} in {os.getcwd()} since "
-                      f"{dt.datetime.now(dt.timezone.utc).isoformat(timespec='seconds')}")
-        self.fh.flush()
         self._prev = os.environ.get("QABENCH_HEAVY_HELD")
         os.environ["QABENCH_HEAVY_HELD"] = str(self.path)      # inherited by the command this lock wraps
         return self
@@ -848,12 +893,18 @@ class HeavyLock:
             os.environ.pop("QABENCH_HEAVY_HELD", None)
         else:
             os.environ["QABENCH_HEAVY_HELD"] = self._prev
+        admit = open(f"{self.path}.admit", "a+")
         try:
-            self.fh.seek(0)
-            self.fh.truncate()
-            fcntl.flock(self.fh, fcntl.LOCK_UN)
+            fcntl.flock(admit, fcntl.LOCK_EX)
+            self.held.unlink(missing_ok=True)
+            self._summary(self._holders(Path(f"{self.path}.holders")))
         finally:
-            self.fh.close()
+            fcntl.flock(admit, fcntl.LOCK_UN)
+            admit.close()
+            try:
+                fcntl.flock(self.fh, fcntl.LOCK_UN)
+            finally:
+                self.fh.close()
         return False
 
 
@@ -922,7 +973,7 @@ def heavy(argv: list[str], *, echo=print, getloadavg=os.getloadavg) -> int:
     the GitHub Actions runners on this machine, Spotlight, and anything not run through this command. A
     quiet lock is not a quiet machine."""
     if "--" not in argv:
-        print("usage: python -m qabench heavy [--name NAME] -- COMMAND [ARGS...]", file=sys.stderr)
+        print("usage: python -m qabench heavy [--name NAME] [--cores N] -- COMMAND [ARGS...]", file=sys.stderr)
         return 3
     cut = argv.index("--")
     opts, cmd = argv[:cut], argv[cut + 1:]
@@ -938,17 +989,27 @@ def heavy(argv: list[str], *, echo=print, getloadavg=os.getloadavg) -> int:
     # (pytest-xdist reads PYTEST_XDIST_AUTO_NUM_WORKERS), unless the caller set it, and the cap is written
     # into the holder line so a waiting session READS what the holder takes instead of inferring it.
     # A container's share is its cgroup quota, not the host's cores it can see (a 2-CPU runner counted 10).
-    share = lockd.cpu_quota() or cores
-    workers = os.environ.get("PYTEST_XDIST_AUTO_NUM_WORKERS") or str(max(1, int(share) - 2))
+    #
+    # THE CLAIM IS WHAT THE LOCK ADMITS AGAINST (HeavyLock's core budget): --cores, else QABENCH_HEAVY_CLAIM, else
+    # the container's CPUs, else cores - 2 — the -n auto cap, so the default claim is what the run will use. A
+    # serial suite should say --cores 1 and run beside others instead of holding the machine it does not use.
+    claim = _arg(opts, "--cores") or os.environ.get("QABENCH_HEAVY_CLAIM")
+    try:
+        claim = int(claim) if claim else int(lockd.cpu_quota() or max(1, cores - 2))
+    except ValueError:
+        print(f"heavy: --cores must be a whole number, not {claim!r} (exit 3)", file=sys.stderr)
+        return 3
+    claim = max(1, claim)
+    workers = os.environ.get("PYTEST_XDIST_AUTO_NUM_WORKERS") or str(claim)
     os.environ["PYTEST_XDIST_AUTO_NUM_WORKERS"] = workers
     # lockd's host waiter carries the container's own holder line, cap included, rather than adding the host's.
-    holder = os.environ.pop("QABENCH_LOCKD_HOLDER", "") or (
-        f"{name} (pytest -n auto capped at {workers} of {share:g} {'CPUs' if share != cores else 'cores'})")
+    holder = os.environ.pop("QABENCH_LOCKD_HOLDER", "") or f"{name} (pytest -n auto capped at {workers})"
     # IN A CONTAINER THE LOCK IS THE HOST'S (lockd.py): a container's own flock locks a file nothing else sees.
     # Unreachable, or lost mid-run, is DID NOT RUN — never a run that went ahead unlocked.
     addr = lockd.address()
     try:
-        lock_cm = lockd.RemoteHeavyLock(holder, addr, echo=echo) if addr else HeavyLock(holder, echo=echo)
+        lock_cm = (lockd.RemoteHeavyLock(holder, addr, echo=echo, cores=claim) if addr
+                   else HeavyLock(holder, echo=echo, cores=claim))
         with lock_cm as lock:
             start = _load(getloadavg)
             try:

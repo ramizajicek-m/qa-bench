@@ -184,7 +184,8 @@ def test_a_lock_lost_mid_run_stops_the_command_and_says_did_not_run(served, monk
 
 
 def test_a_containers_xdist_cap_is_its_cpu_quota_not_the_hosts_cores(tmp_path, monkeypatch):
-    """gh-runner-my8200 runs at 2 CPUs on a 10-core host and capped -n auto at 8 workers."""
+    """gh-runner-my8200 runs at 2 CPUs on a 10-core host and capped -n auto at 8 workers. Its claim on the budget,
+    and so its -n auto cap, is its quota."""
     cpu_max = tmp_path / "cpu.max"
     cpu_max.write_text("200000 100000\n")
     assert lockd.cpu_quota(str(cpu_max)) == 2
@@ -199,5 +200,31 @@ def test_a_containers_xdist_cap_is_its_cpu_quota_not_the_hosts_cores(tmp_path, m
     monkeypatch.setenv("QABENCH_HEAVY_LOCK", str(tmp_path / "l"))
     out = []
     assert ran.heavy(["--name", "u", "--", sys.executable, "-c",
-                      "import os; raise SystemExit(0 if os.environ['PYTEST_XDIST_AUTO_NUM_WORKERS'] == '1' else 9)"],
+                      "import os; raise SystemExit(0 if os.environ['PYTEST_XDIST_AUTO_NUM_WORKERS'] == '3' else 9)"],
                      echo=out.append) == 0
+
+
+def test_a_containers_declared_cores_reach_the_hosts_budget(served, monkeypatch):
+    """The host's waiter admits the container's claim, not the whole machine: a 2-CPU job runs beside a host run
+    that leaves room for it, and the holders list it with its 2 cores."""
+    monkeypatch.setenv("QABENCH_HEAVY_CORES", "10")
+    monkeypatch.setenv("QABENCH_HEAVY_POLL", "0.1")
+    host = subprocess.Popen([sys.executable, "-c",
+                             "import time\nfrom qabench import ran\n"
+                             f"with ran.HeavyLock('serial suite', path={str(served['lock'])!r}, cores=1, echo=lambda *_: None):\n"
+                             "    print('held', flush=True); time.sleep(4)"],
+                            stdout=subprocess.PIPE, text=True, env=_env(QABENCH_HEAVY_CORES="10"))
+    assert host.stdout.readline().strip() == "held"
+    monkeypatch.setenv("QABENCH_HEAVY_LOCKD", served["addr"])
+    holders = Path(f"{served['lock']}.holders")
+    out = []
+    try:
+        assert ran.heavy(["--name", "ci-unit", "--cores", "2", "--", sys.executable, "-c",
+                          f"import pathlib; open({str(served['lock'])!r} + '.seen', 'w').write("
+                          f"'|'.join(p.read_text() for p in pathlib.Path({str(holders)!r}).iterdir()))"],
+                         echo=out.append) == 0
+    finally:
+        host.wait(10)
+    assert any("taken at once — 2 of 10 cores, beside: serial suite" in o for o in out), out
+    seen = Path(f"{served['lock']}.seen").read_text()
+    assert "ci-unit" in seen and "(2 cores)" in seen and "serial suite" in seen, seen

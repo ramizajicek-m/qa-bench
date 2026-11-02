@@ -475,7 +475,7 @@ def test_heavy_caps_xdist_auto_and_writes_the_cap_into_the_holder_line(tmp_path,
     assert ran.heavy(["--name", "tier1", "--", sys.executable, "-c", probe], echo=lambda *_: None) == 0
     seen, holder = (tmp_path / "seen").read_text().split("|", 1)
     assert seen == str(max(1, (os.cpu_count() or 1) - 2))
-    assert f"capped at {seen} of" in holder
+    assert f"capped at {seen}) for" in holder and f"({seen} cores)" in holder, holder
 
 
 def test_ran_heavy_holds_the_lock_while_its_command_runs(repo, tmp_path, monkeypatch):
@@ -512,7 +512,7 @@ def test_a_waiter_says_so_when_the_holder_changes_under_it(tmp_path, monkeypatch
     import os
     from qabench import ran
     monkeypatch.delenv("QABENCH_HEAVY_HELD", raising=False)
-    monkeypatch.setenv("QABENCH_HEAVY_WATCH", "0.1")
+    monkeypatch.setenv("QABENCH_HEAVY_POLL", "0.1")
     lock, said = str(tmp_path / "heavy.lock"), []
     me = os.getpid()                                     # a live pid, so neither line reads as stale
     holder = _raw_holder(lock, [f"kit tests for ship, pid {me}", f"land make tier1 for anat, pid {me}"], 1.0)
@@ -539,3 +539,121 @@ def test_a_holder_line_naming_a_dead_process_is_marked_stale(tmp_path, monkeypat
     holder.wait(timeout=10)
     assert any(f"STALE: pid {gone.pid} is gone" in s for s in said), said
     assert ran._holder("") == "another heavy run (it wrote no holder line)"
+
+
+def _budget_holder(lock: str, name: str, cores: int, hold: float):
+    """A process holding `cores` of the budget for `hold` seconds, on a 10-core machine."""
+    import os
+    import subprocess
+    import sys
+    return subprocess.Popen([sys.executable, "-c",
+                             "import time, sys; sys.path.insert(0, '.'); from qabench import ran\n"
+                             f"with ran.HeavyLock({name!r}, path={lock!r}, cores={cores}, echo=lambda *_: None):\n"
+                             f"    print('in', flush=True); time.sleep({hold})"],
+                            stdout=subprocess.PIPE, text=True,
+                            env={**os.environ, "PYTHONPATH": ".", "QABENCH_HEAVY_CORES": "10",
+                                 "QABENCH_HEAVY_POLL": "0.1"})
+
+
+@pytest.fixture
+def budget(tmp_path, monkeypatch):
+    monkeypatch.delenv("QABENCH_HEAVY_HELD", raising=False)
+    monkeypatch.setenv("QABENCH_HEAVY_CORES", "10")
+    monkeypatch.setenv("QABENCH_HEAVY_POLL", "0.1")
+    return str(tmp_path / "heavy.lock")
+
+
+def test_runs_whose_cores_fit_the_machine_run_side_by_side(budget):
+    """2026-11-02: the gate host sat at load ~4 of 10 for 28 minutes — a serial suite held the whole machine
+    while a 2-CPU container queued behind it. Declared cores that fit together are admitted together."""
+    from qabench import ran
+    holder, said = _budget_holder(budget, "serial suite", 1, 1.5), []
+    assert holder.stdout.readline().strip() == "in"
+    try:
+        with ran.HeavyLock("ci-unit", path=budget, cores=2, echo=said.append) as lock:
+            pass
+    finally:
+        holder.wait(timeout=10)
+    assert lock.waited < 0.5, said
+    assert any("taken at once — 2 of 10 cores, beside: serial suite" in s for s in said), said
+
+
+def test_a_run_that_does_not_fit_waits_and_names_what_holds_the_cores(budget):
+    from qabench import ran
+    holder, said = _budget_holder(budget, "tier1", 8, 1.0), []
+    assert holder.stdout.readline().strip() == "in"
+    try:
+        with ran.HeavyLock("ci-unit", path=budget, cores=4, echo=said.append) as lock:
+            pass
+    finally:
+        holder.wait(timeout=10)
+    assert lock.waited > 0.6, said
+    assert any("held by: tier1" in s and "8 of 10 cores; this run needs 4" in s for s in said), said
+
+
+def test_the_queue_is_fifo_so_a_small_run_cannot_pass_a_large_one(budget, tmp_path):
+    """A 2-core run that WOULD fit waits behind a 10-core run queued before it — or a stream of small runs
+    starves the large one forever."""
+    import time
+    from qabench import ran
+    first = _budget_holder(budget, "first", 4, 1.0)
+    assert first.stdout.readline().strip() == "in"
+    big = _budget_holder(budget, "big", 10, 0.5)
+    time.sleep(0.3)                                       # big's ticket is in the queue before small's
+    said = []
+    try:
+        with ran.HeavyLock("small", path=budget, cores=2, echo=said.append):
+            pass
+        assert big.stdout.readline().strip() == "in"      # big got in, and before small did
+    finally:
+        first.wait(timeout=10)
+        big.wait(timeout=10)
+    assert any("2nd in the queue behind: big" in s for s in said), said
+    assert any("now held by: big" in s for s in said), said
+
+
+def test_an_exclusive_holder_of_the_old_kind_still_keeps_budget_runs_out(budget):
+    """During a rollout an older land.py or kit takes <lock> exclusively; a 1-core budget run must not run beside it."""
+    from qabench import ran
+    holder, said = _raw_holder(budget, ["make tier1 for proj (an older kit)"], 1.0), []
+    assert holder.stdout.readline().strip() == "in"
+    try:
+        with ran.HeavyLock("ci-unit", path=budget, cores=1, echo=said.append) as lock:
+            pass
+    finally:
+        holder.wait(timeout=10)
+    assert lock.waited > 0.6, said
+    assert any("held by: make tier1 for proj (an older kit)" in s for s in said), said
+
+
+def test_a_holder_killed_outright_gives_its_cores_back(budget):
+    import signal
+    from pathlib import Path
+    from qabench import ran
+    holder = _budget_holder(budget, "killed", 10, 30)
+    assert holder.stdout.readline().strip() == "in"
+    holder.send_signal(signal.SIGKILL)
+    holder.wait(timeout=10)
+    assert len(list(Path(f"{budget}.holders").iterdir())) == 1, "the killed holder's entry is left behind"
+    with ran.HeavyLock("next", path=budget, cores=10, echo=lambda *_: None) as lock:
+        pass
+    assert lock.waited < 0.5
+    assert list(Path(f"{budget}.holders").iterdir()) == []
+
+
+def test_heavy_declares_the_cores_it_is_given(budget, monkeypatch):
+    """`--cores 1` for a serial suite: it holds one core of the budget, and -n auto is capped to match."""
+    import sys
+    from pathlib import Path
+    from qabench import ran
+    monkeypatch.setenv("QABENCH_HEAVY_LOCK", budget)
+    monkeypatch.delenv("PYTEST_XDIST_AUTO_NUM_WORKERS", raising=False)
+    monkeypatch.delenv("QABENCH_HEAVY_LOCKD", raising=False)
+    seen = Path(budget).with_suffix(".seen")
+    probe = (f"import os, pathlib; open({str(seen)!r}, 'w').write(os.environ['PYTEST_XDIST_AUTO_NUM_WORKERS'] + '|' + "
+             f"'|'.join(p.read_text() for p in pathlib.Path({budget + '.holders'!r}).iterdir()))")
+    assert ran.heavy(["--name", "test-unit", "--cores", "1", "--", sys.executable, "-c", probe],
+                     echo=lambda *_: None) == 0
+    workers, holder = seen.read_text().split("|", 1)
+    assert workers == "1" and "test-unit" in holder and "(1 cores)" in holder, (workers, holder)
+    assert ran.heavy(["--name", "x", "--cores", "many", "--", sys.executable, "-c", "pass"], echo=lambda *_: None) == 3
