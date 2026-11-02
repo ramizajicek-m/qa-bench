@@ -846,15 +846,19 @@ class HeavyLock:
                             legacy = _holder(self.fh.read())
                     if go:
                         self.held = holders / stamp
-                        self.held.write_text(f"{self.name} for {who} ({self.cores} cores), pid {os.getpid()} in "
-                                             f"{os.getcwd()} since "
-                                             f"{dt.datetime.now(dt.timezone.utc).isoformat(timespec='seconds')}")
+                        self.held.write_text(f"{self.name} for {who}, pid {os.getpid()} in {os.getcwd()} since "
+                                             f"{dt.datetime.now(dt.timezone.utc).isoformat(timespec='seconds')} "
+                                             f"({self.cores} cores)")
                         ticket.unlink(missing_ok=True)
                         live = self._holders(holders)
                         self._summary(live)
                         break
                 finally:
                     fcntl.flock(admit, fcntl.LOCK_UN)
+                if not live and not legacy:
+                    self.fh.seek(0)     # no budget holder: a line here is an exclusive holder of the old kind
+                    text = self.fh.read().strip()
+                    legacy = _holder(text) if text else ""
                 held_by = legacy or ("; ".join(t for _, t, _ in live) if live else "nobody — admission is next")
                 state = (held_by, tuple(ahead))
                 if state != said:
