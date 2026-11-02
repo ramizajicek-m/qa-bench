@@ -45,6 +45,15 @@ class Unreachable(Exception):
     """The host's lock could not be had: the command must not run."""
 
 
+def cpu_quota(path: str = "/sys/fs/cgroup/cpu.max") -> float | None:
+    """The CPUs a cgroup may use (`quota period`), or None when it is unlimited or there is no cgroup."""
+    try:
+        quota, period = Path(path).read_text().split()[:2]
+        return None if quota == "max" else round(int(quota) / int(period), 2)
+    except (OSError, ValueError):
+        return None
+
+
 def in_container() -> bool:
     return Path("/.dockerenv").exists() or Path("/run/.containerenv").exists()
 
@@ -156,7 +165,7 @@ def _serve_one(conn: socket.socket, peer, log):
     who = f"{str(hello.get('who') or 'an unnamed session')[:200]}, in a container via the host lock service"
     env = {k: v for k, v in os.environ.items() if k not in ("QABENCH_HEAVY_HELD", "QABENCH_HEAVY_LOCKD", "LAND_SESSION",
                                                             "ANAT_SESSION")}
-    env.update(QABENCH_SESSION=who, PYTHONUNBUFFERED="1",
+    env.update(QABENCH_SESSION=who, QABENCH_LOCKD_HOLDER=name, PYTHONUNBUFFERED="1",
                PYTHONPATH=os.pathsep.join(filter(None, [str(Path(__file__).resolve().parent.parent),
                                                         os.environ.get("PYTHONPATH")])))
     # The waiter IS a host `qabench heavy`: same flock, same queue ticket, same holder line, kernel's order.

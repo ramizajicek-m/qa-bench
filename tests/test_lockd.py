@@ -91,8 +91,9 @@ def test_a_host_run_waits_behind_a_container_and_names_it_as_the_holder(served, 
     with ran.HeavyLock("host land", path=str(served["lock"]), echo=said.append):
         assert time.monotonic() - t0 >= 1, "the host run took the lock a container held"
     assert client.wait(20) == 0
-    assert any("held by: ci-e2e" in s and "my-ci e2e, in a container via the host lock service" in s
+    assert any("held by: ci-e2e (pytest -n auto capped at" in s and "my-ci e2e, in a container via the host lock service" in s
                for s in said), said
+    assert not any(s.count("capped at") > 1 for s in said), said      # the container's own line, not the host's added
 
 
 def test_an_unreachable_service_is_did_not_run_and_the_command_never_starts(tmp_path, monkeypatch):
@@ -180,3 +181,23 @@ def test_a_lock_lost_mid_run_stops_the_command_and_says_did_not_run(served, monk
     assert time.monotonic() - t0 < 25
     assert not marker.exists()
     assert any("DID NOT RUN to the end" in o for o in out), out
+
+
+def test_a_containers_xdist_cap_is_its_cpu_quota_not_the_hosts_cores(tmp_path, monkeypatch):
+    """gh-runner-my8200 runs at 2 CPUs on a 10-core host and capped -n auto at 8 workers."""
+    cpu_max = tmp_path / "cpu.max"
+    cpu_max.write_text("200000 100000\n")
+    assert lockd.cpu_quota(str(cpu_max)) == 2
+    cpu_max.write_text("max 100000\n")
+    assert lockd.cpu_quota(str(cpu_max)) is None
+    assert lockd.cpu_quota(str(tmp_path / "absent")) is None
+    monkeypatch.setattr(lockd, "cpu_quota", lambda: 3.0)
+    monkeypatch.delenv("PYTEST_XDIST_AUTO_NUM_WORKERS", raising=False)
+    monkeypatch.delenv("QABENCH_HEAVY_HELD", raising=False)
+    monkeypatch.delenv("QABENCH_HEAVY_LOCKD", raising=False)
+    monkeypatch.setattr(lockd, "in_container", lambda: False)
+    monkeypatch.setenv("QABENCH_HEAVY_LOCK", str(tmp_path / "l"))
+    out = []
+    assert ran.heavy(["--name", "u", "--", sys.executable, "-c",
+                      "import os; raise SystemExit(0 if os.environ['PYTEST_XDIST_AUTO_NUM_WORKERS'] == '1' else 9)"],
+                     echo=out.append) == 0

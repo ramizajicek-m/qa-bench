@@ -889,9 +889,13 @@ def heavy(argv: list[str], *, echo=print, getloadavg=os.getloadavg) -> int:
     # 12 of 14 says "held by one run"; at 14 of 14 it says nothing. So `-n auto` is capped at cores - 2
     # (pytest-xdist reads PYTEST_XDIST_AUTO_NUM_WORKERS), unless the caller set it, and the cap is written
     # into the holder line so a waiting session READS what the holder takes instead of inferring it.
-    workers = os.environ.get("PYTEST_XDIST_AUTO_NUM_WORKERS") or str(max(1, cores - 2))
+    # A container's share is its cgroup quota, not the host's cores it can see (a 2-CPU runner counted 10).
+    share = lockd.cpu_quota() or cores
+    workers = os.environ.get("PYTEST_XDIST_AUTO_NUM_WORKERS") or str(max(1, int(share) - 2))
     os.environ["PYTEST_XDIST_AUTO_NUM_WORKERS"] = workers
-    holder = f"{name} (pytest -n auto capped at {workers} of {cores} cores)"
+    # lockd's host waiter carries the container's own holder line, cap included, rather than adding the host's.
+    holder = os.environ.pop("QABENCH_LOCKD_HOLDER", "") or (
+        f"{name} (pytest -n auto capped at {workers} of {share:g} {'CPUs' if share != cores else 'cores'})")
     # IN A CONTAINER THE LOCK IS THE HOST'S (lockd.py): a container's own flock locks a file nothing else sees.
     # Unreachable, or lost mid-run, is DID NOT RUN — never a run that went ahead unlocked.
     addr = lockd.address()
