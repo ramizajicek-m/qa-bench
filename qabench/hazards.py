@@ -76,6 +76,15 @@ for two shapes, each of which reported a false outcome in this estate on
   the same wrap serves host and Docker runners. A step that must not wait says
   why inside its run: `# hazard-ok: <reason>`.
 
+  A JOB THAT RUNS A TEST RUNNER THROUGH A SCRIPT. The line rule reads commands,
+  and a suite started by a project script (`python tools/e2e_shards.py run`) is
+  not one: on 2026-11-02 ana-log's six-shard nightly e2e matrix ran outside the
+  lock beside a landing that held it (load 65-72) and the rule saw nothing. So a
+  self-hosted job whose steps name pytest or playwright anywhere (an install, a
+  script's arguments) must wrap at least one step in `qabench heavy`, or say why
+  not in a step: `# hazard-ok: <reason>`. A lint job that only installs pytest
+  says so once; that is the price of not missing the next script.
+
   A WRAPPED SUITE ON A RUNNER THAT CANNOT REACH THE LOCK SERVICE. A container's
   `qabench heavy` asks lockd, which runs only on the hosts it was installed on;
   anywhere else it is DID NOT RUN by design. 2026-11-02: ana-log's wrapped steps
@@ -212,6 +221,50 @@ def _unlocked_suites(path: Path, text: str) -> list[tuple[str, bool]]:
     return out
 
 
+TEST_RUNNER = re.compile(r"(?<![\w-])(?:pytest|playwright)(?![\w-])")
+# Installing pytest is not running it (a lint job's `pip install ... pytest`); installing BROWSERS is the sign a job
+# drives them, so `playwright install` still counts.
+PACKAGE_INSTALL = re.compile(r"\b(?:pip3?|uv\s+pip|poetry|npm|yarn|pnpm)\s+(?:install|add|ci)\b")
+
+
+def _names_a_test_runner(code: str) -> list[str]:
+    return [m.group(0) for line in code.splitlines() if not PACKAGE_INSTALL.search(line)
+            for m in TEST_RUNNER.finditer(line)]
+
+
+def _code(run: str) -> str:
+    return "\n".join(l.split(" #", 1)[0] for l in run.splitlines() if not l.lstrip().startswith("#"))
+
+
+def _suite_jobs(path: Path, text: str) -> list[tuple[str, bool]]:
+    """(finding, excused) for each self-hosted job that names pytest or playwright but wraps no step in the lock —
+    the suites the line rule cannot see because a project script starts them. A job the line rule already
+    flagged is left to it."""
+    if ".github/workflows/" not in str(path).replace("\\", "/"):
+        return []
+    try:
+        doc = yaml.safe_load(text) or {}
+    except yaml.YAMLError:
+        return []
+    out = []
+    for name, job in (doc.get("jobs") or {}).items():
+        if not isinstance(job, dict) or "self-hosted" not in _labels(job.get("runs-on")):
+            continue
+        runs = [st["run"] for st in job.get("steps") or [] if isinstance(st, dict) and isinstance(st.get("run"), str)]
+        codes = [_code(r) for r in runs]
+        named = sorted({n for c in codes for n in _names_a_test_runner(c)})
+        if (not named or any(HEAVY.search(c) for c in codes)
+                or any(SUITE_LINE.search(c) for c in codes)):
+            continue
+        ok = next((m for r in runs if (m := re.search(r"#\s*hazard-ok:\s*(\S.*)$", r, re.M))), None)
+        out.append((f"job {name}: names {' and '.join(named)} on a self-hosted runner but wraps no step in the "
+                    "machine's heavy lock — a project script that starts a suite is still a suite: wrap the step "
+                    "that runs it (`python -m qabench heavy --name ci-<job> -- <command>`), or say in a step why "
+                    "this job takes no lock (`# hazard-ok: <reason>`)" + (f" — EXCUSED: {ok.group(1)}" if ok else ""),
+                    bool(ok)))
+    return out
+
+
 def lockd_hosts(root: Path) -> list[str] | None:
     """`lockd_hosts:` from qa/manifest.yml — runner labels that pin a job to a host running `qabench lockd`."""
     try:
@@ -268,7 +321,7 @@ def unlocked_suites(root: Path) -> tuple[int, list[str]]:
     red = []
     for f in files:
         text = f.read_text(encoding="utf-8", errors="replace")
-        red += [f"{f.relative_to(root)}: {why}" for why, ok in _unlocked_suites(f, text) + _off_lock_host(f, text, hosts)
+        red += [f"{f.relative_to(root)}: {why}" for why, ok in _unlocked_suites(f, text) + _suite_jobs(f, text) + _off_lock_host(f, text, hosts)
                 if not ok]
     return len(files), red
 
@@ -285,7 +338,7 @@ def scan(root: Path, pats: list[str]) -> dict:
         pipefail = "pipefail" in text
         for why in _ref_keyed(f, text) + _untrusted_git(f, text):
             (out["excused"] if "hazard-ok:" in text else out["red"]).append(f"{f.relative_to(root)}: {why}")
-        for why, ok in _unlocked_suites(f, text) + _off_lock_host(f, text, hosts):
+        for why, ok in _unlocked_suites(f, text) + _suite_jobs(f, text) + _off_lock_host(f, text, hosts):
             (out["excused"] if ok else out["red"]).append(f"{f.relative_to(root)}: {why}")
         recipe = f.name == "Makefile" or f.suffix == ".mk"
         rel = f.relative_to(root)
