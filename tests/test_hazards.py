@@ -103,7 +103,7 @@ def test_a_job_level_ref_group_is_found_too(tmp_path):
 def test_a_self_hosted_docker_job_running_tests_must_trust_its_workspace(tmp_path):
     """tharros and iga, 2026-09-21: git exited 128 after checkout and git-backed tests read an empty corpus."""
     bare = ("on: [push]\njobs:\n  unit:\n    runs-on: [self-hosted, linux, iga]\n"
-            "    steps:\n      - run: python -m pytest tests -q\n")
+            "    steps:\n      - run: python -m qabench heavy --name ci-unit -- python -m pytest tests -q\n")
     assert scan(tmp_path, bare, name=".github/workflows/ci.yml")[0] == 1
     fixed = ("on: [push]\nenv:\n  GIT_CONFIG_COUNT: '1'\n  GIT_CONFIG_KEY_0: safe.directory\n"
              "  GIT_CONFIG_VALUE_0: ${{ github.workspace }}\n" + bare.split("\n", 1)[1])
@@ -117,3 +117,34 @@ def test_a_character_tail_of_command_output_is_refused_and_a_line_tail_is_not(tm
     assert scan(tmp_path, "say(r.stdout[-800:])\n", name="scripts/land.py")[0] == 1
     assert scan(tmp_path / "e", "print(p.stderr[-1500:])\n", name="scripts/ratchet.py")[0] == 1
     assert scan(tmp_path / "b", "say('\\n'.join(r.stdout.splitlines()[-15:]))\n", name="scripts/land.py")[0] == 0
+
+
+WF = ("on: [push]\nenv:\n  GIT_CONFIG_COUNT: '1'\n  GIT_CONFIG_KEY_0: safe.directory\n"
+      "  GIT_CONFIG_VALUE_0: ${{ github.workspace }}\njobs:\n  e2e:\n    runs-on: %s\n    steps:\n%s")
+
+
+def test_a_suite_on_a_self_hosted_runner_outside_the_heavy_lock_is_red(tmp_path):
+    """2026-11-02: anat's host runners at load 176 beside a landing that held the lock; my8200's container runner
+    timed a walk out at load ~58. One heavy run per machine holds only if every heavy leg takes the lock."""
+    steps = {
+        "pytest": "      - name: e2e\n        run: python -m pytest tests/e2e -q\n",
+        "make": "      - name: tier\n        run: |\n          pip install -e .\n          make test-e2e\n",
+        "nightly": "      - name: bench\n        run: python -m qabench nightly\n",
+    }
+    for i, (what, step) in enumerate(steps.items()):
+        rc, out = scan(tmp_path / str(i), WF % ("[self-hosted, linux, my8200]", step), name=".github/workflows/ci.yml")
+        assert rc == 1 and any("outside the machine's heavy lock" in o for o in out), (what, out)
+
+
+def test_a_wrapped_suite_a_hosted_runner_and_an_excused_step_are_clean(tmp_path):
+    wrapped = "      - name: e2e\n        run: python -m qabench heavy --name ci-e2e -- python -m pytest tests/e2e -q\n"
+    assert scan(tmp_path / "a", WF % ("[self-hosted, linux, my8200]", wrapped), name=".github/workflows/ci.yml")[0] == 0
+    hosted = "      - name: e2e\n        run: python -m pytest tests/e2e -q\n"
+    assert scan(tmp_path / "b", WF % ("ubuntu-latest", hosted), name=".github/workflows/ci.yml")[0] == 0
+    excused = ("      - name: smoke\n        run: |\n          # hazard-ok: read-only checks on staging, minutes long\n"
+               "          python -m pytest tests/smoke -q\n")
+    rc, out = scan(tmp_path / "c", WF % ("[self-hosted, linux, my8200]", excused), name=".github/workflows/ci.yml")
+    assert rc == 0 and any("EXCUSED: read-only checks on staging" in o for o in out), out
+    mention = ("      - name: note\n        run: |\n          pip install -r requirements.txt pytest\n"
+               "          echo done  # after pytest\n          python - <<'PY'\n          # pytest's junit counts\n          PY\n")
+    assert scan(tmp_path / "d", WF % ("[self-hosted, linux, my8200]", mention), name=".github/workflows/ci.yml")[0] == 0

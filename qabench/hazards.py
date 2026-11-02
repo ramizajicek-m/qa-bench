@@ -65,6 +65,17 @@ for two shapes, each of which reported a false outcome in this estate on
   scripts; the rule is "where the sliced output IS the finding, cut on line
   boundaries", and a check that flagged all 96 would be switched off in a week.
 
+  A SUITE ON A SELF-HOSTED RUNNER OUTSIDE THE HEAVY LOCK. The gate host's runners
+  share its CPUs with every landing, and one heavy run per machine holds only if
+  every heavy leg takes the lock. 2026-11-02: anat's two host runners ran 12
+  pytest workers beside a landing that held the lock (load 176), and my8200's
+  container runner timed a walk out at load ~58. A step on a self-hosted job
+  whose run starts a suite (pytest, a test/e2e/tier make target, `qabench
+  nightly|stage`) and does not go through `qabench heavy` is refused. In a
+  container `qabench heavy` asks the host's lock service (`qabench lockd`), so
+  the same wrap serves host and Docker runners. A step that must not wait says
+  why inside its run: `# hazard-ok: <reason>`.
+
 A line can be excused with a trailing `# hazard-ok: <reason>`; the reason is
 printed every run. What this does NOT read, stated: two steps joined by a
 newline where the second publishes what the first produced (ana-log's ledger
@@ -156,6 +167,42 @@ def _untrusted_git(path: Path, text: str) -> list[str]:
     return out
 
 
+HEAVY = re.compile(r"\bqabench\s+heavy\b")
+# A suite COMMAND at the start of a shell line (after VAR=value, `timeout N`, `xvfb-run`): never `pip install pytest`
+# or a heredoc's prose about pytest, both of which an any-word match flagged on the first estate run.
+SUITE_LINE = re.compile(r"^\s*(?:[A-Za-z_]\w*=\S*\s+)*(?:(?:timeout\s+\S+|xvfb-run(?:\s+-\S+)*)\s+)*(?:"
+                        r"python3?\s+-m\s+pytest|pytest|npx\s+playwright\s+test|npm\s+(?:run\s+)?test"
+                        r"|make\s+[\w-]*(?:test|land|full|tier|night|e2e|check)[\w-]*"
+                        r"|python3?\s+-m\s+qabench\s+(?:nightly|stage))(?![\w-])", re.M)
+
+
+def _unlocked_suites(path: Path, text: str) -> list[tuple[str, bool]]:
+    """(finding, excused) for each suite step on a self-hosted runner that does not take the heavy lock."""
+    if ".github/workflows/" not in str(path).replace("\\", "/"):
+        return []
+    try:
+        doc = yaml.safe_load(text) or {}
+    except yaml.YAMLError:
+        return []
+    out = []
+    for name, job in (doc.get("jobs") or {}).items():
+        if not isinstance(job, dict) or "self-hosted" not in str(job.get("runs-on", "")):
+            continue
+        for i, st in enumerate(job.get("steps") or []):
+            run = st.get("run") if isinstance(st, dict) else None
+            if not isinstance(run, str):
+                continue
+            code = "\n".join(l.split(" #", 1)[0] for l in run.splitlines() if not l.lstrip().startswith("#"))
+            if not SUITE_LINE.search(code) or HEAVY.search(code):
+                continue
+            ok = OK.search(run) or re.search(r"#\s*hazard-ok:\s*(\S.*)$", run, re.M)
+            out.append((f"job {name}, step {st.get('name') or i + 1}: runs a suite on a self-hosted runner outside "
+                        "the machine's heavy lock — wrap it: `python -m qabench heavy --name ci-<step> -- <command>` "
+                        "(in a container that asks the host's lock service), and let the job's timeout-minutes "
+                        "cover the wait" + (f" — EXCUSED: {ok.group(1)}" if ok else ""), bool(ok)))
+    return out
+
+
 def scan(root: Path, pats: list[str]) -> dict:
     files = _paths(root, pats)
     out = {"files": len(files), "red": [], "excused": []}
@@ -167,6 +214,8 @@ def scan(root: Path, pats: list[str]) -> dict:
         pipefail = "pipefail" in text
         for why in _ref_keyed(f, text) + _untrusted_git(f, text):
             (out["excused"] if "hazard-ok:" in text else out["red"]).append(f"{f.relative_to(root)}: {why}")
+        for why, ok in _unlocked_suites(f, text):
+            (out["excused"] if ok else out["red"]).append(f"{f.relative_to(root)}: {why}")
         recipe = f.name == "Makefile" or f.suffix == ".mk"
         rel = f.relative_to(root)
         if f.suffix == ".py":
