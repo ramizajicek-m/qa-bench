@@ -435,6 +435,8 @@ from pathlib import Path
 
 import yaml
 
+from . import lockd
+
 PASS, FAIL, REFUSED, INVALID = "PASS", "FAIL", "REFUSED", "INVALID"
 EXIT = {PASS: 0, FAIL: 1, REFUSED: 1, INVALID: 3}
 
@@ -889,19 +891,45 @@ def heavy(argv: list[str], *, echo=print, getloadavg=os.getloadavg) -> int:
     # into the holder line so a waiting session READS what the holder takes instead of inferring it.
     workers = os.environ.get("PYTEST_XDIST_AUTO_NUM_WORKERS") or str(max(1, cores - 2))
     os.environ["PYTEST_XDIST_AUTO_NUM_WORKERS"] = workers
-    with HeavyLock(f"{name} (pytest -n auto capped at {workers} of {cores} cores)", echo=echo) as lock:
-        start = _load(getloadavg)
-        try:
-            rc = subprocess.call(cmd)
-        except OSError as ex:
-            echo(f"heavy: could not run {cmd[0]!r}: {ex} (exit 3)")
-            return 3
-        end = _load(getloadavg)
+    holder = f"{name} (pytest -n auto capped at {workers} of {cores} cores)"
+    # IN A CONTAINER THE LOCK IS THE HOST'S (lockd.py): a container's own flock locks a file nothing else sees.
+    # Unreachable, or lost mid-run, is DID NOT RUN — never a run that went ahead unlocked.
+    addr = lockd.address()
+    try:
+        lock_cm = lockd.RemoteHeavyLock(holder, addr, echo=echo) if addr else HeavyLock(holder, echo=echo)
+        with lock_cm as lock:
+            start = _load(getloadavg)
+            try:
+                proc = subprocess.Popen(cmd)
+            except OSError as ex:
+                echo(f"heavy: could not run {cmd[0]!r}: {ex} (exit 3)")
+                return 3
+            lost = getattr(lock, "lost", None)
+            while (rc := proc.poll()) is None:
+                if lost is not None and lost.wait(1):
+                    proc.terminate()
+                    try:
+                        proc.wait(30)
+                    except subprocess.TimeoutExpired:
+                        proc.kill()
+                        proc.wait()
+                    echo(f"heavy: {name} DID NOT RUN to the end: the host's lock at {addr} was lost while it ran, so "
+                         "it was stopped rather than go on unlocked (exit 3)")
+                    return 3
+                if lost is None:
+                    rc = proc.wait()
+                    break
+            end = _load(getloadavg)
+    except lockd.Unreachable as ex:
+        echo(f"heavy: {name} DID NOT RUN: {ex} — a container never runs a heavy command unlocked (exit 3)")
+        return 3
     peak = max([x for x in (start, end) if x is not None], default=None)
     loaded = peak is not None and peak / cores > LOADED
     echo(f"heavy: {name} exited {rc} · waited {lock.waited}s for the lock · load {start} -> {end} on {cores} cores"
          + (" · UNDER LOAD: a failure here is not yet evidence about the code" if loaded else "")
-         + " · not covered: GitHub Actions runners on this machine, Spotlight, anything not run through qabench heavy")
+         + (f" · lock: the host's, through {addr}" if addr else "")
+         + " · not covered: GitHub Actions runners' steps not wrapped in qabench heavy, Spotlight, anything not run "
+           "through qabench heavy")
     return rc
 
 

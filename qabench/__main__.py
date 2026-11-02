@@ -10,7 +10,8 @@
     python -m qabench distinct [--repo DIR] [--json]   # a table edited programmatically keeps its rows distinct; the threshold is measured, never chosen
     python -m qabench census [--repo DIR] [--json]   # every declared key reaches every consumer layer, or is exempted with evidence
     python -m qabench population [--repo DIR] [--json]   # every guard sweeps the population it claims over, not the example it was written against
-    python -m qabench heavy [--name N] -- COMMAND ...   # machine-wide lock around a Makefile target; exit passed through
+    python -m qabench heavy [--name N] -- COMMAND ...   # machine-wide lock around a Makefile target; exit passed through; in a container, the host's lock
+    python -m qabench lockd [--bind 127.0.0.1] [--port 7461]   # on the host: serves that lock to its containers over TCP
     python -m qabench ran --name NAME [--heavy] [--json] -- COMMAND ...   # --heavy: machine-wide lock, one heavy run at a time; run it without a shell, keep the whole output, and refuse to call a run that did not finish a pass
     python -m qabench delta (--before A.xml | --store DIR --name TIER) --after B.xml   # which failures are NEW on a tier that was already red
     python -m qabench fixpop (--msg FILE | --range A..B) [--advisory]   # a fix commit names the other sites with its shape
@@ -28,11 +29,19 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from . import __version__, anchors, decisions, elements, inherit, runners, delta, fixpop, hazards, probe, scans, census, core, distinct, escapes, gap, manifest, nightly, population, ran as _ran, report, requirements, shapes
-from .stages import endpoints_by_role, explore, pages_by_role, smoke
+from . import __version__
 
-STAGES = {"smoke": smoke.main, "pages_by_role": pages_by_role.main, "endpoints_by_role": endpoints_by_role.main,
-          "explore": explore.main}
+
+def _load_kit():
+    """The whole kit, imported only for the commands that need it. `heavy` and `lockd` wrap CI steps in a
+    container before its dependencies are installed (the gate host's runner image has no httpx), so they must
+    start on the standard library and yaml alone."""
+    global anchors, decisions, elements, inherit, runners, delta, fixpop, hazards, probe, scans, census, core
+    global distinct, escapes, gap, manifest, nightly, population, _ran, report, requirements, shapes, STAGES
+    from . import anchors, decisions, elements, inherit, runners, delta, fixpop, hazards, probe, scans, census, core, distinct, escapes, gap, manifest, nightly, population, ran as _ran, report, requirements, shapes
+    from .stages import endpoints_by_role, explore, pages_by_role, smoke
+    STAGES = {"smoke": smoke.main, "pages_by_role": pages_by_role.main, "endpoints_by_role": endpoints_by_role.main,
+              "explore": explore.main}
 
 
 def _cfg(argv: list[str]) -> manifest.Bench:
@@ -54,6 +63,13 @@ def main(argv: list[str] | None = None) -> int:
     if cmd == "version":
         print(__version__)
         return 0
+    if cmd == "heavy":                      # the machine-wide lock around any command; no manifest, no artefact
+        from . import ran
+        return ran.heavy(rest)
+    if cmd == "lockd":                      # that lock served over TCP to the containers on this machine
+        from . import lockd
+        return lockd.main(rest)
+    _load_kit()
     if cmd == "mutate":
         # No manifest and no version pin: this is a hand tool for watching a
         # guard go red, and it must work in a repo mid-edit — which is exactly
@@ -84,8 +100,6 @@ def main(argv: list[str] | None = None) -> int:
         return distinct.run(rest)
     if cmd == "census":                     # reads source and descriptors, never a deployment
         return census.run(rest)
-    if cmd == "heavy":                      # the machine-wide lock around any command; no manifest, no artefact
-        return _ran.heavy(rest)
     if cmd == "ran":                        # runs a command and judges its completion; no manifest pin
         return _ran.run(rest)
     if cmd == "population":                 # reads the guard register and runs both sides, never a deployment
