@@ -87,7 +87,13 @@ class RemoteHeavyLock:
         try:
             self.sock = socket.create_connection((host, int(port)), timeout=self.connect_timeout)
         except (OSError, ValueError) as ex:
-            raise Unreachable(f"the host's lock service at {self.addr} is unreachable ({ex})") from None
+            # NAME THE RUNNER: 2026-11-02 a project's jobs were DID NOT RUN on a second runner, on another Mac with no
+            # lockd, that carried the same labels as the gate host's — and the message read as a network blink.
+            on = os.environ.get("RUNNER_NAME")
+            raise Unreachable(f"the host's lock service at {self.addr} is unreachable ({ex})"
+                              + (f" from runner {on}" if on else "")
+                              + " — if that runner's host has no lockd, pin the job to a lockd host's runner label "
+                                "(qa/manifest.yml lockd_hosts)") from None
         self.sock.settimeout(None)
         self.sock.sendall((json.dumps({"name": self.name, "who": who, "cores": self.cores}) + "\n").encode())
         self._stop = threading.Event()
@@ -246,7 +252,8 @@ def main(argv: list[str]) -> int:
     bind = argv[argv.index("--bind") + 1] if "--bind" in argv else "127.0.0.1"
     port = int(argv[argv.index("--port") + 1]) if "--port" in argv else PORT
     try:
-        serve(bind, port, log=lambda s: print(s, flush=True))
+        # Every line carries its UTC time: a log with no times could not say what the service saw (2026-11-02).
+        serve(bind, port, log=lambda s: print(f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())} {s}", flush=True))
     except KeyboardInterrupt:
         return 0
     return 0

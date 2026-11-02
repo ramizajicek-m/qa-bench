@@ -108,6 +108,10 @@ def test_an_unreachable_service_is_did_not_run_and_the_command_never_starts(tmp_
     assert rc == 3
     assert not marker.exists(), "the command ran without the lock"
     assert any("DID NOT RUN" in o and "unreachable" in o for o in out), out
+    monkeypatch.setenv("RUNNER_NAME", "mac-docker-elsewhere")
+    out = []
+    assert ran.heavy(["--name", "ci-unit", "--", sys.executable, "-c", "pass"], echo=out.append) == 3
+    assert any("from runner mac-docker-elsewhere" in o and "lockd_hosts" in o for o in out), out
 
 
 def test_a_container_never_takes_a_lock_of_its_own(monkeypatch):
