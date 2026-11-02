@@ -490,3 +490,52 @@ def test_ran_heavy_holds_the_lock_while_its_command_runs(repo, tmp_path, monkeyp
     assert ran.run(["--repo", str(root), "--name", "suite", "--heavy", "--"] + probe, echo=lambda *_: None) == 0
     assert f"held={lock}" in (root / "qa" / "runs" / "suite.log").read_text(), \
         "the command ran without the heavy lock held"
+
+
+def _raw_holder(lock: str, lines: list[str], every: float):
+    """A process holding the lock that writes each of `lines` as its holder line in turn — the file a waiter
+    reads, changing under it the way it does when one holder finishes and the next takes over."""
+    import subprocess
+    import sys
+    return subprocess.Popen([sys.executable, "-c",
+                             "import fcntl, sys, time\n"
+                             f"fh = open({lock!r}, 'a+'); fcntl.flock(fh, fcntl.LOCK_EX); print('in', flush=True)\n"
+                             f"for line in {lines!r}:\n"
+                             "    fh.seek(0); fh.truncate(); fh.write(line); fh.flush()\n"
+                             f"    time.sleep({every})\n"],
+                            stdout=subprocess.PIPE, text=True)
+
+
+def test_a_waiter_says_so_when_the_holder_changes_under_it(tmp_path, monkeypatch):
+    """2026-11-02: a gate's log said "held by pid 60639" long after that run had finished and anat's tier1 had
+    taken the lock — the waiter named the holder once, when it started, and never again."""
+    import os
+    from qabench import ran
+    monkeypatch.delenv("QABENCH_HEAVY_HELD", raising=False)
+    monkeypatch.setenv("QABENCH_HEAVY_WATCH", "0.1")
+    lock, said = str(tmp_path / "heavy.lock"), []
+    me = os.getpid()                                     # a live pid, so neither line reads as stale
+    holder = _raw_holder(lock, [f"kit tests for ship, pid {me}", f"land make tier1 for anat, pid {me}"], 1.0)
+    assert holder.stdout.readline().strip() == "in"
+    with ran.HeavyLock("gate", path=lock, echo=said.append):
+        pass
+    holder.wait(timeout=10)
+    assert any("held by: kit tests for ship" in s for s in said), said
+    assert any("now held by: land make tier1 for anat" in s for s in said), said
+
+
+def test_a_holder_line_naming_a_dead_process_is_marked_stale(tmp_path, monkeypatch):
+    import subprocess
+    import sys
+    from qabench import ran
+    monkeypatch.delenv("QABENCH_HEAVY_HELD", raising=False)
+    gone = subprocess.Popen([sys.executable, "-c", "pass"])
+    gone.wait()
+    lock, said = str(tmp_path / "heavy.lock"), []
+    holder = _raw_holder(lock, [f"a killed run, pid {gone.pid}"], 1.0)
+    assert holder.stdout.readline().strip() == "in"
+    with ran.HeavyLock("gate", path=lock, echo=said.append):
+        pass
+    holder.wait(timeout=10)
+    assert any(f"STALE: pid {gone.pid} is gone" in s for s in said), said
+    assert ran._holder("") == "another heavy run (it wrote no holder line)"

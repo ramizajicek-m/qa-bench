@@ -430,6 +430,7 @@ import shutil
 import socket
 import subprocess
 import sys
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -705,6 +706,27 @@ def _ordinal(n: int) -> str:
     return f"{n}{'th' if 10 <= n % 100 <= 20 else {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th')}"
 
 
+def _holder(text: str) -> str:
+    """The lock file's holder line, marked when the process it names is gone: a holder killed outright never
+    clears its line, and the next one to take the lock has not written its own yet."""
+    text = text.strip()
+    if not text:
+        return "another heavy run (it wrote no holder line)"
+    m = re.search(r"\bpid (\d+)\b", text)
+    if m:
+        try:
+            os.kill(int(m.group(1)), 0)
+        except ProcessLookupError:
+            return f"{text} — STALE: pid {m.group(1)} is gone, and whoever holds the lock now has not named itself"
+        except (PermissionError, ValueError):
+            pass
+    return text
+
+
+#: How often a waiter re-reads who holds the lock (QABENCH_HEAVY_WATCH, seconds).
+WATCH_S = 30.0
+
+
 def queue_ahead(queue: Path, mine: Path | None) -> list[str]:
     """Who waits ahead of `mine` (every live entry when None), oldest first; an entry whose process is gone is
     removed, or a crashed waiter would be listed ahead of everyone forever."""
@@ -767,14 +789,40 @@ class HeavyLock:
                 fcntl.flock(self.fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError:
                 self.fh.seek(0)
-                holder = self.fh.read().strip() or "another heavy run"
+                seen = self.fh.read().strip()
                 ahead = queue_ahead(queue, ticket)
-                self.echo(f"ran: waiting for the machine's heavy-run lock, held by: {holder}; "
+                self.echo(f"ran: waiting for the machine's heavy-run lock, held by: {_holder(seen)}; "
                           f"{_ordinal(len(ahead) + 1)} in the queue"
                           f"{' behind: ' + '; '.join(ahead) if ahead else ''} — no timeout, because the "
                           "holder is named; a landing can take 40 minutes, so do something that does not need the "
                           "machine and let this wait")
-                fcntl.flock(self.fh, fcntl.LOCK_EX)
+                # THE HOLDER IS RE-READ WHILE THIS WAITS. A waiter used to name the holder once, when it started:
+                # on 2026-11-02 a gate's log still said "held by pid 60639" an hour after that run had finished
+                # and another had taken the lock, and the line was read as the lock lying about its holder. The
+                # wait itself stays the kernel's blocking flock (its order is the queue's); a thread only watches.
+                done = threading.Event()
+
+                def watch(seen=seen):
+                    every = float(os.environ.get("QABENCH_HEAVY_WATCH") or WATCH_S)
+                    while not done.wait(every):
+                        try:
+                            now = self.path.read_text().strip()
+                        except OSError:
+                            continue
+                        if now != seen:
+                            seen = now
+                            left = queue_ahead(queue, ticket)
+                            self.echo(f"ran: still waiting — the lock is now held by: {_holder(now)}; "
+                                      f"{_ordinal(len(left) + 1)} in the queue"
+                                      f"{' behind: ' + '; '.join(left) if left else ''}")
+
+                watcher = threading.Thread(target=watch, daemon=True)
+                watcher.start()
+                try:
+                    fcntl.flock(self.fh, fcntl.LOCK_EX)
+                finally:
+                    done.set()
+                    watcher.join()
             else:
                 # REPORT WHAT IT SAW, not only a verdict: a lock that goes quiet when it is free is the same shape
                 # as the watcher that said FREE with no listing (five of those on 2026-09-21).
