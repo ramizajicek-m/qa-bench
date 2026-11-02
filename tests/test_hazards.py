@@ -107,6 +107,8 @@ def test_a_self_hosted_docker_job_running_tests_must_trust_its_workspace(tmp_pat
     assert scan(tmp_path, bare, name=".github/workflows/ci.yml")[0] == 1
     fixed = ("on: [push]\nenv:\n  GIT_CONFIG_COUNT: '1'\n  GIT_CONFIG_KEY_0: safe.directory\n"
              "  GIT_CONFIG_VALUE_0: ${{ github.workspace }}\n" + bare.split("\n", 1)[1])
+    _lockd_hosts(tmp_path / "b", "iga")
+    _lockd_hosts(tmp_path / "c", "macOS")
     assert scan(tmp_path / "b", fixed, name=".github/workflows/ci.yml")[0] == 0
     macos = bare.replace("[self-hosted, linux, iga]", "[self-hosted, macOS]")
     assert scan(tmp_path / "c", macos, name=".github/workflows/ci.yml")[0] == 0
@@ -138,6 +140,7 @@ def test_a_suite_on_a_self_hosted_runner_outside_the_heavy_lock_is_red(tmp_path)
 
 def test_a_wrapped_suite_a_hosted_runner_and_an_excused_step_are_clean(tmp_path):
     wrapped = "      - name: e2e\n        run: python -m qabench heavy --name ci-e2e -- python -m pytest tests/e2e -q\n"
+    _lockd_hosts(tmp_path / "a", "my8200")
     assert scan(tmp_path / "a", WF % ("[self-hosted, linux, my8200]", wrapped), name=".github/workflows/ci.yml")[0] == 0
     hosted = "      - name: e2e\n        run: python -m pytest tests/e2e -q\n"
     assert scan(tmp_path / "b", WF % ("ubuntu-latest", hosted), name=".github/workflows/ci.yml")[0] == 0
@@ -158,4 +161,35 @@ def test_a_project_gate_can_ask_for_the_unlocked_suites_alone(tmp_path):
     n, red = hazards.unlocked_suites(tmp_path)
     assert n == 1 and len(red) == 1 and red[0].startswith(".github/workflows/ci.yml: job e2e, step e2e")
     f.write_text(WF % ("[self-hosted, linux, my8200]", step.replace("run: ", "run: python -m qabench heavy --name ci-e2e -- ")))
+    _lockd_hosts(tmp_path, "my8200")
     assert hazards.unlocked_suites(tmp_path) == (1, [])
+
+
+def _lockd_hosts(root, *labels):
+    (root / "qa").mkdir(parents=True, exist_ok=True)
+    (root / "qa/manifest.yml").write_text("lockd_hosts: [" + ", ".join(labels) + "]\n" if labels else "bench: {}\n")
+
+
+def test_a_wrapped_suite_on_a_runner_without_the_lock_service_is_red(tmp_path):
+    """2026-11-02: a project's wrapped steps ran on a Docker runner on another Mac, where no lockd runs, and every one
+    came back DID NOT RUN. A wrapped job must be pinned to a runner label that only a lockd host carries."""
+    wrapped = "      - name: unit\n        run: python -m qabench heavy --name ci-unit -- python -m pytest -q\n"
+    f = tmp_path / ".github/workflows/ci.yml"
+    f.parent.mkdir(parents=True)
+    f.write_text(WF % ("[self-hosted, mac-docker-other]", wrapped))
+    _lockd_hosts(tmp_path, "gate-host")
+    n, red = hazards.unlocked_suites(tmp_path)
+    assert len(red) == 1 and "names no lockd host label (gate-host)" in red[0], red
+    _lockd_hosts(tmp_path)                                  # nothing declared: red, never a guess
+    n, red = hazards.unlocked_suites(tmp_path)
+    assert len(red) == 1 and "declares no `lockd_hosts:`" in red[0], red
+    _lockd_hosts(tmp_path, "gate-host")
+    f.write_text(WF % ("[self-hosted, gate-host]", wrapped))
+    assert hazards.unlocked_suites(tmp_path) == (1, [])
+    f.write_text(WF % ("{group: runners, labels: [self-hosted, gate-host]}", wrapped))
+    assert hazards.unlocked_suites(tmp_path) == (1, [])
+    f.write_text(WF % ("[self-hosted, mac-docker-other]",
+                       wrapped.replace("run: ", "run: |\n          # hazard-ok: a host runner, its own flock\n          ")))
+    assert hazards.unlocked_suites(tmp_path) == (1, [])
+    rc, out = scan(tmp_path, f.read_text(), name=".github/workflows/ci.yml")
+    assert rc == 0 and any("EXCUSED: a host runner, its own flock" in o for o in out), out

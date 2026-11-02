@@ -76,6 +76,15 @@ for two shapes, each of which reported a false outcome in this estate on
   the same wrap serves host and Docker runners. A step that must not wait says
   why inside its run: `# hazard-ok: <reason>`.
 
+  A WRAPPED SUITE ON A RUNNER THAT CANNOT REACH THE LOCK SERVICE. A container's
+  `qabench heavy` asks lockd, which runs only on the hosts it was installed on;
+  anywhere else it is DID NOT RUN by design. 2026-11-02: ana-log's wrapped steps
+  ran on a Docker runner on another Mac and every one came back DID NOT RUN. So a
+  self-hosted job with a wrapped step must name, in its `runs-on`, one of the
+  labels `qa/manifest.yml` lists under `lockd_hosts:` (labels only a lockd host's
+  runners carry). No `lockd_hosts:` with such a job is itself red: the kit cannot
+  know which labels are pinned, and a guess that passes is the failure.
+
 A line can be excused with a trailing `# hazard-ok: <reason>`; the reason is
 printed every run. What this does NOT read, stated: two steps joined by a
 newline where the second publishes what the first produced (ana-log's ledger
@@ -203,17 +212,70 @@ def _unlocked_suites(path: Path, text: str) -> list[tuple[str, bool]]:
     return out
 
 
+def lockd_hosts(root: Path) -> list[str] | None:
+    """`lockd_hosts:` from qa/manifest.yml — runner labels that pin a job to a host running `qabench lockd`."""
+    try:
+        doc = yaml.safe_load((Path(root) / "qa" / "manifest.yml").read_text()) or {}
+    except (OSError, yaml.YAMLError):
+        return None
+    hosts = doc.get("lockd_hosts") if isinstance(doc, dict) else None
+    return [str(h) for h in hosts] if isinstance(hosts, list) and hosts else None
+
+
+def _labels(runs_on) -> list[str]:
+    if isinstance(runs_on, str):
+        return [runs_on]
+    if isinstance(runs_on, list):
+        return [str(x) for x in runs_on]
+    if isinstance(runs_on, dict):
+        return _labels(runs_on.get("labels")) + ([str(runs_on["group"])] if runs_on.get("group") else [])
+    return []
+
+
+def _off_lock_host(path: Path, text: str, hosts: list[str] | None) -> list[tuple[str, bool]]:
+    """(finding, excused) for each self-hosted job with a wrapped step whose runs-on names no lockd host label."""
+    if ".github/workflows/" not in str(path).replace("\\", "/"):
+        return []
+    try:
+        doc = yaml.safe_load(text) or {}
+    except yaml.YAMLError:
+        return []
+    out = []
+    for name, job in (doc.get("jobs") or {}).items():
+        if not isinstance(job, dict) or "self-hosted" not in _labels(job.get("runs-on")):
+            continue
+        runs = [st["run"] for st in job.get("steps") or [] if isinstance(st, dict) and isinstance(st.get("run"), str)]
+        wrapped = [r for r in runs if HEAVY.search("\n".join(l.split(" #", 1)[0] for l in r.splitlines()
+                                                             if not l.lstrip().startswith("#")))]
+        if not wrapped or (hosts and set(hosts) & set(_labels(job.get("runs-on")))):
+            continue
+        ok = next((m for r in wrapped if (m := re.search(r"#\s*hazard-ok:\s*(\S.*)$", r, re.M))), None)
+        why = (f"job {name}: wraps a suite in `qabench heavy` on runs-on {_labels(job.get('runs-on'))}, which names no "
+               + (f"lockd host label ({', '.join(hosts)})" if hosts else
+                  "lockd host — qa/manifest.yml declares no `lockd_hosts:`")
+               + " — in a container there the lock service is unreachable and every wrapped step is DID NOT RUN; pin "
+                 "the job to a lockd host's runner label, or install lockd on that host and list its label")
+        out.append((why + (f" — EXCUSED: {ok.group(1)}" if ok else ""), bool(ok)))
+    return out
+
+
 def unlocked_suites(root: Path) -> tuple[int, list[str]]:
     """(workflow files read, unexcused findings) — for a project's own gate test, where the advisory nightly run of
-    `hazards` is too late: `n, red = unlocked_suites(ROOT); assert n >= FLOOR and not red, red`."""
+    `hazards` is too late: `n, red = unlocked_suites(ROOT); assert n >= FLOOR and not red, red`. Both lock rules:
+    a suite outside the lock, and a wrapped suite on a runner that cannot reach the lock service."""
     files = _paths(Path(root), [".github/workflows/*.yml", ".github/workflows/*.yaml"])
-    red = [f"{f.relative_to(root)}: {why}" for f in files
-           for why, ok in _unlocked_suites(f, f.read_text(encoding="utf-8", errors="replace")) if not ok]
+    hosts = lockd_hosts(root)
+    red = []
+    for f in files:
+        text = f.read_text(encoding="utf-8", errors="replace")
+        red += [f"{f.relative_to(root)}: {why}" for why, ok in _unlocked_suites(f, text) + _off_lock_host(f, text, hosts)
+                if not ok]
     return len(files), red
 
 
 def scan(root: Path, pats: list[str]) -> dict:
     files = _paths(root, pats)
+    hosts = lockd_hosts(root)
     out = {"files": len(files), "red": [], "excused": []}
     for f in files:
         try:
@@ -223,7 +285,7 @@ def scan(root: Path, pats: list[str]) -> dict:
         pipefail = "pipefail" in text
         for why in _ref_keyed(f, text) + _untrusted_git(f, text):
             (out["excused"] if "hazard-ok:" in text else out["red"]).append(f"{f.relative_to(root)}: {why}")
-        for why, ok in _unlocked_suites(f, text):
+        for why, ok in _unlocked_suites(f, text) + _off_lock_host(f, text, hosts):
             (out["excused"] if ok else out["red"]).append(f"{f.relative_to(root)}: {why}")
         recipe = f.name == "Makefile" or f.suffix == ".mk"
         rel = f.relative_to(root)
