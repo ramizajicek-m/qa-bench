@@ -70,8 +70,9 @@ venv="$HOME/.qabench/kit-venv-$kit"
 "$venv/bin/pip" install -q --disable-pip-version-check ".[dev,print]" "playwright==$pw"
 echo "kit tests: $(git rev-parse --short HEAD) in $dir, playwright $pw, load $(uptime | sed 's/.*load averages*: //')" > "$log"
 # The session name is for the holder line of the lock only: the tests read those variables themselves.
+# Unbuffered, so the lock's waiting line (holder, place in the queue) is in the log while it waits, not after.
 nohup sh -c 'who=$1 venv=$2 kit=$3 status=$4; shift 4
-env PYTHONPATH=. QABENCH_SESSION="$who" "$venv/bin/python" -m qabench heavy --name "kit tests $kit" -- \
+env PYTHONPATH=. PYTHONUNBUFFERED=1 QABENCH_SESSION="$who" "$venv/bin/python" -m qabench heavy --name "kit tests $kit" -- \
     env -u QABENCH_SESSION -u LAND_SESSION "$venv/bin/python" -m pytest tests -rA -q -p no:cacheprovider "$@"
 rc=$?
 if [ "$rc" = 5 ]; then echo "kit tests DID NOT RUN: pytest collected no tests (its exit 5) — not a pass, not a red"; rc=3; fi
