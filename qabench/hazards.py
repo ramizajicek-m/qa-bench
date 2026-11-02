@@ -203,6 +203,15 @@ def _unlocked_suites(path: Path, text: str) -> list[tuple[str, bool]]:
     return out
 
 
+def unlocked_suites(root: Path) -> tuple[int, list[str]]:
+    """(workflow files read, unexcused findings) — for a project's own gate test, where the advisory nightly run of
+    `hazards` is too late: `n, red = unlocked_suites(ROOT); assert n >= FLOOR and not red, red`."""
+    files = _paths(Path(root), [".github/workflows/*.yml", ".github/workflows/*.yaml"])
+    red = [f"{f.relative_to(root)}: {why}" for f in files
+           for why, ok in _unlocked_suites(f, f.read_text(encoding="utf-8", errors="replace")) if not ok]
+    return len(files), red
+
+
 def scan(root: Path, pats: list[str]) -> dict:
     files = _paths(root, pats)
     out = {"files": len(files), "red": [], "excused": []}

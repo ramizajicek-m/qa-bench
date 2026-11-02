@@ -148,3 +148,14 @@ def test_a_wrapped_suite_a_hosted_runner_and_an_excused_step_are_clean(tmp_path)
     mention = ("      - name: note\n        run: |\n          pip install -r requirements.txt pytest\n"
                "          echo done  # after pytest\n          python - <<'PY'\n          # pytest's junit counts\n          PY\n")
     assert scan(tmp_path / "d", WF % ("[self-hosted, linux, my8200]", mention), name=".github/workflows/ci.yml")[0] == 0
+
+
+def test_a_project_gate_can_ask_for_the_unlocked_suites_alone(tmp_path):
+    step = "      - name: e2e\n        run: python -m pytest tests/e2e -q\n"
+    f = tmp_path / ".github/workflows/ci.yml"
+    f.parent.mkdir(parents=True)
+    f.write_text(WF % ("[self-hosted, linux, my8200]", step))
+    n, red = hazards.unlocked_suites(tmp_path)
+    assert n == 1 and len(red) == 1 and red[0].startswith(".github/workflows/ci.yml: job e2e, step e2e")
+    f.write_text(WF % ("[self-hosted, linux, my8200]", step.replace("run: ", "run: python -m qabench heavy --name ci-e2e -- ")))
+    assert hazards.unlocked_suites(tmp_path) == (1, [])
