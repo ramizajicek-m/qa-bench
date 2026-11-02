@@ -27,6 +27,13 @@
 # other, and a release read the other run's exit 5. And a run that collected
 # no tests (pytest's 5) is DID NOT RUN, exit 3 — never a red, never a green.
 set -eu
+# sh reads a script as it runs: on 2026-11-02 an edit to this file under two live runs made both end in a syntax
+# error after their verdicts were in. So it runs from a private copy, and an edit touches only the next run.
+if [ -z "${KIT_TEST_COPY:-}" ]; then
+  copy="$(mktemp)"; cp "$0" "$copy"
+  KIT_TEST_COPY="$copy" exec sh "$copy" "$@"
+fi
+trap 'rm -f "$KIT_TEST_COPY"' EXIT
 HOST="${KIT_TEST_HOST:-new-laptop}"
 TOP="$(git rev-parse --show-toplevel)"
 KIT="$(basename "$(git -C "$TOP" rev-parse --path-format=absolute --git-common-dir | sed 's#/\.git$##')")"
