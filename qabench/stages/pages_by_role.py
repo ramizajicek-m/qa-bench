@@ -13,6 +13,11 @@ For each (role, page, viewport) cell:
   * a screenshot per cell, for the gallery.
 
 Routes come from the project's own `routes:` provider — never a hand-kept list.
+
+`--smoke` is a landing's browser pass: every route as every role, in the FIRST
+engine at the WIDEST viewport, and every cell names its engine. It is the
+gate's fast question — did this build break a page — and leaves the second
+engine, the phone width and the sideways ratchet to the nightly.
 """
 from __future__ import annotations
 
@@ -193,6 +198,9 @@ def main(cfg: Bench, argv: list[str]) -> int:
     core.banner(f"pages × roles × viewports on {cfg.origin}")
     only_roles = argv[argv.index("--roles") + 1].split(",") if "--roles" in argv else None
     only = argv[argv.index("--only") + 1] if "--only" in argv else None
+    smoke = "--smoke" in argv
+    engines = cfg.engines[:1] if smoke else cfg.engines
+    viewports = [max(cfg.viewports)] if smoke else cfg.viewports
     rows = _page_routes(cfg, list(cfg.provider(cfg.routes)()))
     if not rows:
         L.check("the route provider yields pages", False, "zero page routes matched pages.include_prefixes — a sweep over nothing")
@@ -221,6 +229,8 @@ def main(cfg: Bench, argv: list[str]) -> int:
     # a page that scrolls for one role and not another is still an offender, and
     # telling the reader to "remove it" per cell sent 34 wrong hints in one
     # tharros run (2026-09-05) — followed, they would have made the next night red.
+    # The narrowest width of the WHOLE manifest, not of this run: a smoke that
+    # never measured the phone width must not tell the list a page stopped scrolling.
     narrow_w = min(cfg.viewports)[0]
     paid: set[str] = set()          # listed paths measured at the narrowest width
     still: set[str] = set()         # …of which at least one role's cell still scrolled
@@ -236,11 +246,12 @@ def main(cfg: Bench, argv: list[str]) -> int:
                 L.skip(f"{role}: all pages", str(ex)[:200])
                 continue
             relogged: dict[tuple[str, str], bool] = {}
-            for engine in cfg.engines:
-                for (w, h_) in cfg.viewports:
+            for engine in engines:
+                for (w, h_) in viewports:
                     # Chromium keeps its bare label so existing registers and
-                    # allowlists still match; every other engine is named.
-                    label = f"{w}x{h_}" if engine == "chromium" else f"{engine} {w}x{h_}"
+                    # allowlists still match; every other engine is named, and
+                    # in a smoke every engine is: a red landing names it.
+                    label = f"{w}x{h_}" if engine == "chromium" and not smoke else f"{engine} {w}x{h_}"
                     print(f"  → {role} / {label} ({len(rows)} pages)", flush=True)
                     if cfg.login.rotates:
                         try:
@@ -398,7 +409,7 @@ def main(cfg: Bench, argv: list[str]) -> int:
     L.extra["routes"] = len(rows)
     L.extra["spa_cells_not_swept"] = spa_unswept
     L.extra["transport_lost"] = transport_lost
-    print(f"  decided {cells_total} cells over {len(rows)} routes × {len(cfg.viewports)} viewports", flush=True)
+    print(f"  decided {cells_total} cells over {len(rows)} routes × {len(viewports)} viewports × {len(engines)} engines", flush=True)
     if transport_lost:
         # SAY IT, and say how much of the surface it cost. A handful of dropped
         # connections is the wire; a large share means this stage did not

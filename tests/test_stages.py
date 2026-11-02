@@ -724,3 +724,34 @@ def test_a_keychain_item_s_account_supplies_the_email_when_no_variable_does(monk
     monkeypatch.delenv("QA_BOOKKEEPER_EMAIL", raising=False)
     monkeypatch.delenv("QA_BOOKKEEPER_PASSWORD", raising=False)
     assert core.credentials(cfg, "bookkeeper") == ("qa-bookkeeper@example.test", "secret")
+
+
+# ---------------------------------------------------------------- the gate's smoke
+def test_smoke_mode_is_one_engine_at_one_width_and_names_the_engine(bench_env, server_factory, tmp_path):
+    """A landing's browser pass: every route as every role, in the FIRST engine at
+    the WIDEST viewport, the cell naming its engine even for Chromium — a red
+    landing must say route, role and engine without a reader decoding a label.
+    Mutation: drop the --smoke narrowing and the cell count doubles per engine
+    and viewport; drop the engine from the label and the label check fails."""
+    server_factory(FAKE_BROKEN="1")
+    m = _with_engines(tmp_path, "[chromium, webkit]")
+    assert cli.main(["stage", "pages_by_role", "--manifest", str(m), "--smoke"]) == 1
+    led = _ledger(bench_env, "pages_by_role")
+    broken = [label for label, _ in led["failed"] if label.endswith("/admin/broken")]
+    assert sorted(broken) == ["owner chromium 1440x900 /admin/broken", "staff chromium 1440x900 /admin/broken"], broken
+
+
+def test_smoke_mode_does_not_pardon_the_sideways_list(bench_env, server_factory, tmp_path):
+    """The smoke never measures the narrow width, so it must say nothing about
+    bench.pages.sideways_allow — a 'no longer scrolls, remove it' from a run
+    that never looked would empty the ratchet's list. Mutation: take the
+    narrowest width from the smoke's own viewports and the hint appears."""
+    server_factory()
+    m = tmp_path / "qa" / "manifest.yml"
+    m.parent.mkdir()
+    m.write_text(open("qa/manifest.yml").read().replace('pages: { include_prefixes: ["/admin"] }',
+                 'pages: { include_prefixes: ["/admin"], sideways_allow: { "/admin/wide": "a 600px table; fix owed" } }'))
+    assert cli.main(["stage", "pages_by_role", "--manifest", str(m), "--smoke"]) == 0
+    led = _ledger(bench_env, "pages_by_role")
+    assert not any("remove it" in why for _, why in led["not_run"]), led["not_run"]
+    assert led["cells"] == 5 * 2 + 2       # 5 pages × 2 roles × 1 width, plus the .csv per role over HTTP
