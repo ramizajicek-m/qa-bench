@@ -39,6 +39,13 @@ TOP="$(git rev-parse --show-toplevel)"
 KIT="$(basename "$(git -C "$TOP" rev-parse --path-format=absolute --git-common-dir | sed 's#/\.git$##')")"
 SHA="$(git -C "$TOP" rev-parse HEAD)"
 RUN="$KIT-$(date -u +%Y%m%dT%H%M%S)-$$"
+# THE CLAIM IS WHAT THE SUITE USES. The kit's tests run serially (no -n): one pytest, one app server, one browser at
+# a time. On 2026-11-03 this run claimed qabench's default, 8 of 10 cores, at load 2.6, while three runs waited behind
+# it. KIT_TEST_CORES overrides.
+CORES="${KIT_TEST_CORES:-2}"
+# The holder line names the ship and the commit it tests, not the worktree it was started from (a worktree is reused
+# across ships, so its name read as the previous one's).
+WHO="${LAND_SESSION:-kit-test} ($(git -C "$TOP" branch --show-current) at $(git -C "$TOP" rev-parse --short HEAD))"
 BUNDLE="$(mktemp -d)/kit.bundle"
 git -C "$TOP" bundle create -q "$BUNDLE" HEAD
 # The link to the host drops now and then (2026-11-02, twice in an hour): retried, then refused.
@@ -53,13 +60,13 @@ echo "kit tests: $KIT at $SHA on $HOST, run $RUN"
 SSH="ssh -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
 # ssh joins its arguments into one remote command line, so each is quoted here: `-k "a or b"` stays one word.
 q=""
-for a in "$KIT" "$SHA" "${KIT_TEST_PLAYWRIGHT:-1.64.1}" "${LAND_SESSION:-kit-test}" "$RUN" "$@"; do
+for a in "$KIT" "$SHA" "$CORES" "${KIT_TEST_PLAYWRIGHT:-1.64.1}" "$WHO" "$RUN" "$@"; do
   q="$q '$(printf '%s' "$a" | sed "s/'/'\\\\''/g")'"
 done
 $SSH "$HOST" "sh -s --$q" <<'REMOTE'
 set -eu
 export PATH="/opt/homebrew/bin:$PATH"
-kit=$1 sha=$2 pw=$3 who=$4 run=$5; shift 5
+kit=$1 sha=$2 cores=$3 pw=$4 who=$5 run=$6; shift 6
 bundle=/tmp/$run.bundle
 dir="$HOME/Projects/worktrees/kit-test-$run"
 log="$HOME/.qabench/kit-test-$run.log"; status="$log.status"
@@ -78,13 +85,13 @@ venv="$HOME/.qabench/kit-venv-$kit"
 echo "kit tests: $(git rev-parse --short HEAD) in $dir, playwright $pw, load $(uptime | sed 's/.*load averages*: //')" > "$log"
 # The session name is for the holder line of the lock only: the tests read those variables themselves.
 # Unbuffered, so the lock's waiting line (holder, place in the queue) is in the log while it waits, not after.
-nohup sh -c 'who=$1 venv=$2 kit=$3 status=$4; shift 4
-env PYTHONPATH=. PYTHONUNBUFFERED=1 QABENCH_SESSION="$who" "$venv/bin/python" -m qabench heavy --name "kit tests $kit" -- \
+nohup sh -c 'cores=$1 who=$2 venv=$3 kit=$4 status=$5; shift 5
+env PYTHONPATH=. PYTHONUNBUFFERED=1 QABENCH_SESSION="$who" "$venv/bin/python" -m qabench heavy --name "kit tests $kit" --cores "$cores" -- \
     env -u QABENCH_SESSION -u LAND_SESSION "$venv/bin/python" -m pytest tests -rA -q -p no:cacheprovider "$@"
 rc=$?
 if [ "$rc" = 5 ]; then echo "kit tests DID NOT RUN: pytest collected no tests (its exit 5) — not a pass, not a red"; rc=3; fi
 echo "$rc" > "$status"' \
-    kit-test "$who" "$venv" "$kit" "$status" "$@" >> "$log" 2>&1 < /dev/null &
+    kit-test "$cores" "$who" "$venv" "$kit" "$status" "$@" >> "$log" 2>&1 < /dev/null &
 REMOTE
 # Follow the log until the run writes its status. A dropped link reconnects and prints the log again
 # from its start, so nothing is lost between the drop and the reconnect.
