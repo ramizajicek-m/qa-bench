@@ -430,6 +430,7 @@ import shutil
 import socket
 import subprocess
 import sys
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -835,13 +836,13 @@ class HeavyLock:
                     live = self._holders(holders)
                     ahead = queue_ahead(queue, ticket)
                     used = sum(c for *_, c in live)
-                    legacy = ""
+                    legacy, blocked = "", False
                     go = not ahead and used + self.cores <= self.capacity
                     if go:
                         try:
                             fcntl.flock(self.fh, fcntl.LOCK_SH | fcntl.LOCK_NB)
                         except BlockingIOError:             # an exclusive holder of the old kind
-                            go = False
+                            go, blocked = False, True
                             self.fh.seek(0)
                             legacy = _holder(self.fh.read())
                     if go:
@@ -873,6 +874,25 @@ class HeavyLock:
                         self.echo(f"ran: still waiting — the lock is now held by: {held_by} "
                                   f"({used} of {self.capacity} cores; this run needs {self.cores}); {place}")
                     said, first = state, False
+                if blocked:
+                    # BEHIND AN OLD-KIND HOLDER, WAIT IN THE KERNEL'S QUEUE, not by polling: old-kind waiters block
+                    # in flock and are handed the lock the instant it is freed, so a poller at the head of the queue
+                    # lost every turn to them (2026-11-02: an hour first in the queue while three went past). A
+                    # blocking shared flock takes its place among them in arrival order; admission is then re-checked.
+                    # The flock blocks in a thread so this one still re-reads the holder while it waits.
+                    got = threading.Event()
+                    threading.Thread(target=lambda: (fcntl.flock(self.fh, fcntl.LOCK_SH), got.set()),
+                                     daemon=True).start()
+                    while not got.wait(poll):
+                        self.fh.seek(0)
+                        text = self.fh.read().strip()
+                        now = _holder(text) if text else held_by
+                        if now != held_by:
+                            held_by = now
+                            self.echo(f"ran: still waiting — the lock is now held by: {now}; "
+                                      f"{_ordinal(len(ahead) + 1)} in the queue")
+                    said = None
+                    continue
                 time.sleep(poll)
         finally:
             ticket.unlink(missing_ok=True)

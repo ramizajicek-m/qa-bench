@@ -657,3 +657,31 @@ def test_heavy_declares_the_cores_it_is_given(budget, monkeypatch):
     workers, holder = seen.read_text().split("|", 1)
     assert workers == "1" and "test-unit" in holder and "(1 cores)" in holder, (workers, holder)
     assert ran.heavy(["--name", "x", "--cores", "many", "--", sys.executable, "-c", "pass"], echo=lambda *_: None) == 3
+
+
+def test_a_budget_waiter_at_the_head_keeps_its_turn_against_old_kind_waiters(budget):
+    """During a rollout an older kit waits in flock itself, and the kernel hands it the lock the moment it is free —
+    so a budget waiter that polled lost every turn to old-kind waiters that arrived after it (2026-11-02)."""
+    import fcntl
+    import subprocess
+    import sys
+    import time
+    from qabench import ran
+    first = _raw_holder(budget, ["make tier1 for proj (an older kit)"], 1.5)
+    assert first.stdout.readline().strip() == "in"
+    order = Path(budget).with_suffix(".order")
+    waiter = subprocess.Popen([sys.executable, "-c",
+                               "import sys; sys.path.insert(0, '.'); from qabench import ran\n"
+                               f"with ran.HeavyLock('budget run', path={budget!r}, cores=2, echo=lambda *_: None):\n"
+                               f"    open({str(order)!r}, 'a').write('budget\\n')"],
+                              env={**__import__('os').environ, "PYTHONPATH": ".", "QABENCH_HEAVY_CORES": "10",
+                                   "QABENCH_HEAVY_POLL": "5"})
+    time.sleep(0.5)                                       # the budget waiter is at the head, behind the old holder
+    later = subprocess.Popen([sys.executable, "-c",
+                              "import fcntl\n"
+                              f"fh = open({budget!r}, 'a+'); fcntl.flock(fh, fcntl.LOCK_EX)\n"
+                              f"open({str(order)!r}, 'a').write('old kind\\n')"])
+    first.wait(10)
+    waiter.wait(20)
+    later.wait(20)
+    assert order.read_text().split("\n")[0] == "budget", order.read_text()
