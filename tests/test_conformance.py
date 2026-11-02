@@ -110,7 +110,7 @@ COMMIT = "c" * 40
 
 
 def _repo(tmp_path, *, manifest_version="0.1.40", refs=(COMMIT,)):
-    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "init", "-q", "-b", "main"], cwd=tmp_path, check=True)
     (tmp_path / "qa").mkdir()
     (tmp_path / "qa" / "manifest.yml").write_text(yaml.safe_dump({"project": "x", "bench": {"version": manifest_version}}))
     (tmp_path / "requirements-dev.txt").write_text("".join(f"qabench @ git+https://x/qa-bench@{r}\n" for r in refs))

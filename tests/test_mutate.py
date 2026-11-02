@@ -19,7 +19,7 @@ from qabench.mutate import main
 
 
 def _repo(tmp_path: pathlib.Path) -> pathlib.Path:
-    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "init", "-q", "-b", "main"], cwd=tmp_path, check=True)
     f = tmp_path / "m.py"
     f.write_text("value = 2\n")
     subprocess.run(["git", "add", "m.py"], cwd=tmp_path, check=True)

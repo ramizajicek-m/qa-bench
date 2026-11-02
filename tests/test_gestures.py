@@ -567,7 +567,7 @@ def test_a_repo_naming_two_qa_bench_refs_is_reported(tmp_path):
     disagreement.
     """
     import subprocess
-    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "init", "-q", "-b", "main"], cwd=tmp_path, check=True)
     (tmp_path / "ci.yml").write_text("pip install qa-bench@aaaa111\n")
     (tmp_path / "requirements-dev.txt").write_text("qabench @ git+x/qa-bench@bbbb222\n")
     (tmp_path / "doc.md").write_text("example: qa-bench@v0.1.10\n")

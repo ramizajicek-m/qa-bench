@@ -54,6 +54,6 @@ def test_a_diff_that_cannot_run_is_did_not_run_not_clean(tmp_path):
     """A shallow checkout has no origin/main~20; the first version read the failed
     diff's empty output as «no migration changed» — clean, having checked nothing."""
     import subprocess
-    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    subprocess.run(["git", "init", "-q", "-b", "main", str(tmp_path)], check=True)
     r = scans.run_squawk(tmp_path, "migrations/*.sql", "origin/main~20")
     assert r["ran"] is False and "cannot diff" in r["why"]

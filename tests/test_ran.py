@@ -267,7 +267,7 @@ def test_an_artefact_stamps_the_commit_it_decided_about(repo, tmp_path):
     is a PREVIOUS RUN'S verdict, readable before the next run clears it —
     well-formed, and about different code."""
     root = repo()
-    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+    subprocess.run(["git", "init", "-q", "-b", "main"], cwd=root, check=True)
     (root / "x.txt").write_text("one", encoding="utf-8")
     subprocess.run(["git", "add", "."], cwd=root, check=True)
     subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "one"],

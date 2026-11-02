@@ -50,7 +50,7 @@ bench:
   shots: {tmp_path / 'shots'}
 {explore_block}
 """, encoding="utf-8")
-    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    subprocess.run(["git", "init", "-q", "-b", "main", str(repo)], check=True)
     subprocess.run(["git", "-C", str(repo), "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q",
                     "--allow-empty", "-m", "Orders: a double tap no longer saves twice"], check=True)
     (repo / "app.py").write_text("x = 1\n")

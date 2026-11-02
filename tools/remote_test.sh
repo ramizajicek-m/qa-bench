@@ -1,0 +1,79 @@
+#!/bin/sh
+# The kit's own tests, on the gate host, under that machine's heavy-run lock.
+#
+# WHY. The tests drive real browsers, and a verdict that depends on how loaded
+# the machine was is not a verdict: on 2026-11-02 a release failed one
+# sideways-scroll test on the working laptop at load 53-64 and passed it 3 of 3
+# when rerun, with no output kept to say which. So the release check runs on
+# the gate host (KIT_TEST_HOST, default new-laptop), one heavy run at a time,
+# with -rA so every test's outcome is in the log.
+#
+#   tools/remote_test.sh [pytest args]       # the committed HEAD; uncommitted work is not sent
+#
+# The commit travels as a git bundle (the host's keychain cannot be read over
+# ssh, so it cannot fetch the private remote). Its venv is the kit's own,
+# ~/.qabench/kit-venv-<kit>, with playwright pinned to a build whose browsers
+# the host already has (KIT_TEST_PLAYWRIGHT): a browser the host lacks is a
+# skip the test names, never a download from here. Exit code: pytest's.
+#
+# The run is DETACHED on the host and its whole output kept there
+# (~/.qabench/kit-test-<kit>.log): on 2026-11-02 the first run lost its last
+# 5% and every -rA line when the ssh link dropped, and the run died with it.
+# This side follows the log, reconnects when the link drops, and exits with
+# the status the run wrote — never with ssh's own 255.
+set -eu
+HOST="${KIT_TEST_HOST:-new-laptop}"
+TOP="$(git rev-parse --show-toplevel)"
+KIT="$(basename "$(git -C "$TOP" rev-parse --path-format=absolute --git-common-dir | sed 's#/\.git$##')")"
+SHA="$(git -C "$TOP" rev-parse HEAD)"
+BUNDLE="$(mktemp -d)/kit.bundle"
+git -C "$TOP" bundle create -q "$BUNDLE" HEAD
+# The link to the host drops now and then (2026-11-02, twice in an hour): retried, then refused.
+sent=""
+for attempt in 1 2 3; do
+  scp -q -o BatchMode=yes -o ConnectTimeout=20 "$BUNDLE" "$HOST:/tmp/$KIT-kit-test.bundle" && { sent=1; break; }
+  sleep 15
+done
+[ -n "$sent" ] || { echo "kit tests DID NOT RUN: could not copy the commit to $HOST" >&2; exit 3; }
+rm -rf "$(dirname "$BUNDLE")"
+echo "kit tests: $KIT at $SHA on $HOST"
+SSH="ssh -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=4"
+# ssh joins its arguments into one remote command line, so each is quoted here: `-k "a or b"` stays one word.
+q=""
+for a in "$KIT" "$SHA" "${KIT_TEST_PLAYWRIGHT:-1.64.1}" "${LAND_SESSION:-kit-test}" "$@"; do
+  q="$q '$(printf '%s' "$a" | sed "s/'/'\\\\''/g")'"
+done
+$SSH "$HOST" "sh -s --$q" <<'REMOTE'
+set -eu
+export PATH="/opt/homebrew/bin:$PATH"
+kit=$1 sha=$2 pw=$3 who=$4; shift 4
+bundle=/tmp/$kit-kit-test.bundle
+dir="$HOME/Projects/worktrees/$kit-kit-test"
+log="$HOME/.qabench/kit-test-$kit.log"; status="$log.status"
+mkdir -p "$HOME/.qabench"; rm -f "$status"
+[ -d "$dir/.git" ] || git clone -q "$bundle" "$dir"
+cd "$dir"
+git fetch -q "$bundle" HEAD
+git -c advice.detachedHead=false checkout -q --force "$sha"
+git clean -qfdx
+venv="$HOME/.qabench/kit-venv-$kit"
+[ -x "$venv/bin/python" ] || python3.13 -m venv "$venv"
+"$venv/bin/pip" install -q --disable-pip-version-check ".[dev,print]" "playwright==$pw"
+echo "kit tests: $(git rev-parse --short HEAD) in $dir, playwright $pw, load $(uptime | sed 's/.*load averages*: //')" > "$log"
+# The session name is for the holder line of the lock only: the tests read those variables themselves.
+nohup sh -c 'who=$1 venv=$2 kit=$3 status=$4; shift 4
+env PYTHONPATH=. QABENCH_SESSION="$who" "$venv/bin/python" -m qabench heavy --name "kit tests $kit" -- \
+    env -u QABENCH_SESSION -u LAND_SESSION "$venv/bin/python" -m pytest tests -rA -q -p no:cacheprovider "$@"
+echo $? > "$status"' \
+    kit-test "$who" "$venv" "$kit" "$status" "$@" >> "$log" 2>&1 < /dev/null &
+REMOTE
+# Follow the log until the run writes its status. A dropped link reconnects and prints the log again
+# from its start, so nothing is lost between the drop and the reconnect.
+for attempt in 1 2 3 4 5 6 7 8 9 10; do
+  $SSH "$HOST" "log=\$HOME/.qabench/kit-test-$KIT.log; tail -n +1 -f \"\$log\" & t=\$!; while [ ! -s \"\$log.status\" ]; do sleep 5; done; sleep 1; kill \$t" && break
+  echo "kit tests: lost the link to $HOST (attempt $attempt); the run goes on there — reconnecting, the log again from its start" >&2
+  sleep 15
+done
+rc=$($SSH "$HOST" "cat \$HOME/.qabench/kit-test-$KIT.log.status" 2>/dev/null || echo "")
+[ -n "$rc" ] || { echo "kit tests DID NOT finish as far as this side can see — the log is $HOST:~/.qabench/kit-test-$KIT.log" >&2; exit 3; }
+exit "$rc"
