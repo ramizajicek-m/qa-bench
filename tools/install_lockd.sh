@@ -53,11 +53,29 @@ cat > "$plist" <<PLIST
   <key>StandardErrorPath</key><string>$HOME/.qabench/lockd.log</string>
 </dict></plist>
 PLIST
-launchctl bootout "gui/$(id -u)/com.qabench.lockd" 2>/dev/null || true
-launchctl bootstrap "gui/$(id -u)" "$plist"
-for i in 1 2 3 4 5 6 7 8 9 10; do lsof -nP -iTCP:7461 -sTCP:LISTEN >/dev/null 2>&1 && break; sleep 1; done
-lsof -nP -iTCP:7461 -sTCP:LISTEN >/dev/null 2>&1 || { echo "lockd DID NOT START — $HOME/.qabench/lockd.log:"; tail -n 50 "$HOME/.qabench/lockd.log"; exit 3; }
-echo "lockd: serving at $(git -C "$src" rev-parse --short HEAD) on 127.0.0.1:7461"
+svc="gui/$(id -u)/com.qabench.lockd"
+old=$(lsof -nP -t -iTCP:7461 -sTCP:LISTEN 2>/dev/null | head -1 || true)
+# BOOTOUT IS ASYNCHRONOUS. On 2026-11-02 bootstrap ran while the old job was still being torn down, failed with
+# "Bootstrap failed: 5: Input/output error", and left lockd DOWN on the gate host. Wait until launchd no longer
+# knows the label, then bootstrap, retrying, and refuse unless a NEW process answers on 7461.
+launchctl bootout "$svc" 2>/dev/null || true
+for i in $(seq 1 30); do launchctl print "$svc" >/dev/null 2>&1 || break; sleep 1; done
+launchctl print "$svc" >/dev/null 2>&1 && { echo "lockd: $svc still loaded 30s after bootout — NOT INSTALLED"; exit 3; }
+ok=
+for i in 1 2 3; do
+  launchctl bootstrap "gui/$(id -u)" "$plist" && { ok=1; break; }
+  echo "lockd: bootstrap attempt $i failed; retrying in $((i * 2))s"; sleep $((i * 2))
+done
+[ -n "$ok" ] || { echo "lockd: bootstrap failed 3 times — lockd is DOWN on this host, every wrapped container job is DID NOT RUN until it is up"; exit 3; }
+new=
+for i in $(seq 1 20); do new=$(lsof -nP -t -iTCP:7461 -sTCP:LISTEN 2>/dev/null | head -1 || true); [ -n "$new" ] && [ "$new" != "$old" ] && break; sleep 1; done
+[ -n "$new" ] && [ "$new" != "$old" ] || { echo "lockd DID NOT START (listener: ${new:-none}, before: ${old:-none}) — $HOME/.qabench/lockd.log:"; tail -n 50 "$HOME/.qabench/lockd.log"; exit 3; }
+# THE LISTENER IS THIS JOB: launchd's pid for the label is the one on 7461, and it started after the source link
+# moved, so it imported $src. (ps shows the framework binary, not the venv path, so it is matched by launchd's pid.)
+lpid=$(launchctl print "$svc" 2>/dev/null | sed -nE 's/^[[:space:]]*pid = ([0-9]+)$/\1/p' | head -1)
+[ "$lpid" = "$new" ] || { echo "lockd: 7461 is held by pid $new but launchd runs $svc as pid ${lpid:-none}: $(ps -o command= -p "$new")"; exit 3; }
+want=$(sed -nE 's/^__version__ = "([^"]+)"$/\1/p' "$src/qabench/__init__.py")
+echo "lockd: serving at $(git -C "$src" rev-parse --short HEAD) (qabench $want) on 127.0.0.1:7461, pid $new (was ${old:-none})"
 # The proof that matters: a container's `qabench heavy` gets the host's lock through it.
 img=$(docker ps --format '{{.Image}}' | grep -m1 estate-runner || true)
 [ -n "$img" ] || { echo "lockd: no estate-runner container running to prove it from — DID NOT VERIFY"; exit 3; }
