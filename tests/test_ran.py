@@ -687,11 +687,12 @@ def test_a_budget_waiter_at_the_head_keeps_its_turn_against_old_kind_waiters(bud
     assert order.read_text().split("\n")[0] == "budget", order.read_text()
 
 
-def test_the_claim_is_read_from_the_command_when_nothing_is_declared():
+def test_the_claim_is_read_from_the_command_when_nothing_is_declared(monkeypatch):
     """2026-11-03: every serial suite claimed a whole container (8 of 10 cores) at load 2.6, and a night's QA suite
     timed out queued behind two of them. The argv says what a pytest or a qabench nightly uses."""
     from qabench import ran
     S = ran.SERIAL_CLAIM
+    monkeypatch.delenv("PYTEST_ADDOPTS", raising=False)
     assert ran.claim_from_command(["python", "-m", "pytest", "tests/pg", "-q"]) == S
     assert ran.claim_from_command(["pytest", "-n", "4", "tests"]) == 4
     assert ran.claim_from_command(["pytest", "-n4"]) == 4
@@ -703,6 +704,42 @@ def test_the_claim_is_read_from_the_command_when_nothing_is_declared():
     assert ran.claim_from_command(["python", "-m", "qabench", "scans"]) is None
     assert ran.claim_from_command(["make", "test-unit"]) is None
     assert ran.claim_from_command(["sh", "-c", "pytest -q"]) is None          # a shell string is not read
+
+
+@pytest.mark.parametrize("name,text", [
+    ("pytest.ini", "[pytest]\naddopts = -q -n auto\n"),
+    (".pytest.ini", "[pytest]\naddopts = -n auto\n"),
+    ("pyproject.toml", "[tool.pytest.ini_options]\naddopts = \"-n auto -q\"\n"),
+    ("pyproject.toml", "[tool.pytest.ini_options]\naddopts = [\"-n\", \"auto\"]\n"),
+    ("tox.ini", "[pytest]\naddopts = --numprocesses=auto\n"),
+    ("setup.cfg", "[tool:pytest]\naddopts = -n auto\n"),
+])
+def test_a_pytest_whose_config_says_n_auto_is_not_claimed_serial(tmp_path, monkeypatch, name, text):
+    """A bare `pytest` in a project whose config says `addopts = -n auto` runs parallel; reading only the argv would
+    claim it 2 cores and let it take the machine. pytest's order: the config, then PYTEST_ADDOPTS, then the argv."""
+    from qabench import ran
+    monkeypatch.delenv("PYTEST_ADDOPTS", raising=False)
+    (tmp_path / name).write_text(text)
+    sub = tmp_path / "tests"
+    sub.mkdir()
+    assert ran.claim_from_command(["pytest", "tests"], cwd=sub) is None, "found from a subdirectory too"
+    assert ran.claim_from_command(["pytest", "-n", "3"], cwd=tmp_path) == 3, "the argv wins over the config"
+    monkeypatch.setenv("PYTEST_ADDOPTS", "-n 4")
+    assert ran.claim_from_command(["pytest"], cwd=tmp_path) == 4, "PYTEST_ADDOPTS wins over the config"
+
+
+def test_a_pytest_whose_config_says_nothing_of_n_is_serial(tmp_path, monkeypatch):
+    from qabench import ran
+    monkeypatch.delenv("PYTEST_ADDOPTS", raising=False)
+    assert ran.claim_from_command(["pytest"], cwd=tmp_path) == ran.SERIAL_CLAIM
+    (tmp_path / "pyproject.toml").write_text("[tool.ruff]\nline-length = 1\n")    # no pytest section: not the config
+    (tmp_path / "tox.ini").write_text("[pytest]\naddopts = -q\n")
+    assert ran.claim_from_command(["pytest"], cwd=tmp_path) == ran.SERIAL_CLAIM
+    (tmp_path / "pytest.ini").write_text("[pytest]\naddopts = -q\n")         # pytest.ini outranks a -n elsewhere
+    (tmp_path / "setup.cfg").write_text("[tool:pytest]\naddopts = -n auto\n")
+    assert ran.claim_from_command(["pytest"], cwd=tmp_path) == ran.SERIAL_CLAIM
+    (tmp_path / "pytest.ini").write_text("not an ini [[")
+    assert ran.claim_from_command(["pytest"], cwd=tmp_path) == ran.SERIAL_CLAIM, "an unreadable config reads as none"
 
 
 def test_heavy_claims_what_a_serial_pytest_uses_and_never_more_than_the_default(budget, monkeypatch):

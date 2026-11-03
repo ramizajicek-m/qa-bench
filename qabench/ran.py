@@ -988,23 +988,67 @@ def _arg(argv, flag, default=None):
 SERIAL_CLAIM = 2
 
 
-def claim_from_command(cmd: list[str]) -> int | None:
+def _numprocesses(tokens: list[str]) -> str | None:
+    """The last -n / --numprocesses value in a pytest argument list, as pytest reads it (the last one wins)."""
+    n = None
+    for j, r in enumerate(tokens):
+        if r in ("-n", "--numprocesses") and j + 1 < len(tokens):
+            n = tokens[j + 1]
+        elif r.startswith("--numprocesses="):
+            n = r.split("=", 1)[1]
+        elif r.startswith("-n") and r[2:].isdigit():
+            n = r[2:]
+    return n
+
+
+def _ini_addopts(cwd: Path) -> list[str]:
+    """The addopts of the pytest config pytest would pick from cwd upwards: in each directory pytest.ini,
+    .pytest.ini, pyproject.toml's [tool.pytest.ini_options], tox.ini's [pytest], setup.cfg's [tool:pytest]."""
+    import configparser
+    import shlex
+    import tomllib
+    for d in (cwd, *cwd.parents):
+        for name, section in (("pytest.ini", "pytest"), (".pytest.ini", "pytest"), ("pyproject.toml", None),
+                              ("tox.ini", "pytest"), ("setup.cfg", "tool:pytest")):
+            f = d / name
+            if not f.is_file():
+                continue
+            try:
+                if section is None:
+                    ini = tomllib.loads(f.read_text()).get("tool", {}).get("pytest", {}).get("ini_options")
+                    if ini is None:
+                        continue
+                    opts = ini.get("addopts", "")
+                    return list(opts) if isinstance(opts, list) else shlex.split(opts)
+                cp = configparser.ConfigParser(interpolation=None)
+                cp.read_string(f.read_text())
+                if cp.has_section(section):
+                    return shlex.split(cp.get(section, "addopts", fallback=""))
+                if name in ("pytest.ini", ".pytest.ini"):
+                    return []                                  # pytest.ini is the config even without [pytest]
+            except (OSError, ValueError, configparser.Error, tomllib.TOMLDecodeError):
+                return []
+    return []
+
+
+def claim_from_command(cmd: list[str], cwd: Path | None = None) -> int | None:
     """The cores a command visibly uses, read from its argv; None when the argv cannot say (a make target, a
     script). pytest without -n is serial; `-n N` is N; `-n auto` is the machine's to decide. qabench's own
-    `nightly` and `stage` run their suites serially."""
+    `nightly` and `stage` run their suites serially.
+
+    A pytest's -n is read where pytest reads it, in its order: the config's addopts, then PYTEST_ADDOPTS, then the
+    argv. A project whose pytest.ini says `addopts = -n auto` runs parallel under a bare `pytest`, and reading only
+    the argv would have claimed it serial."""
+    import shlex
     for i, a in enumerate(cmd):
         base = Path(a).name
         after_m = i > 0 and cmd[i - 1] == "-m"
         if base in ("pytest", "py.test") and (after_m or a == base or "/" in a):
-            n = None
-            rest = cmd[i + 1:]
-            for j, r in enumerate(rest):
-                if r in ("-n", "--numprocesses") and j + 1 < len(rest):
-                    n = rest[j + 1]
-                elif r.startswith("--numprocesses="):
-                    n = r.split("=", 1)[1]
-                elif r.startswith("-n") and r[2:].isdigit():
-                    n = r[2:]
+            try:
+                env = shlex.split(os.environ.get("PYTEST_ADDOPTS", ""))
+            except ValueError:
+                env = []
+            n = _numprocesses([*_ini_addopts(cwd or Path.cwd()), *env, *cmd[i + 1:]])
             if n is None or n == "0":
                 return SERIAL_CLAIM
             return max(1, int(n)) if n.isdigit() else None
