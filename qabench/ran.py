@@ -984,6 +984,35 @@ def _arg(argv, flag, default=None):
     return argv[argv.index(flag) + 1] if flag in argv else default
 
 
+#: What a serial suite uses: the test process and the one app server or browser it drives at a time.
+SERIAL_CLAIM = 2
+
+
+def claim_from_command(cmd: list[str]) -> int | None:
+    """The cores a command visibly uses, read from its argv; None when the argv cannot say (a make target, a
+    script). pytest without -n is serial; `-n N` is N; `-n auto` is the machine's to decide. qabench's own
+    `nightly` and `stage` run their suites serially."""
+    for i, a in enumerate(cmd):
+        base = Path(a).name
+        after_m = i > 0 and cmd[i - 1] == "-m"
+        if base in ("pytest", "py.test") and (after_m or a == base or "/" in a):
+            n = None
+            rest = cmd[i + 1:]
+            for j, r in enumerate(rest):
+                if r in ("-n", "--numprocesses") and j + 1 < len(rest):
+                    n = rest[j + 1]
+                elif r.startswith("--numprocesses="):
+                    n = r.split("=", 1)[1]
+                elif r.startswith("-n") and r[2:].isdigit():
+                    n = r[2:]
+            if n is None or n == "0":
+                return SERIAL_CLAIM
+            return max(1, int(n)) if n.isdigit() else None
+        if (base == "qabench" and (after_m or a == base)) and i + 1 < len(cmd):
+            return SERIAL_CLAIM if cmd[i + 1] in ("nightly", "stage") else None
+    return None
+
+
 def heavy(argv: list[str], *, echo=print, getloadavg=os.getloadavg) -> int:
     """`python -m qabench heavy [--name N] -- COMMAND ...` — the machine-wide lock around ANY command.
 
@@ -997,7 +1026,8 @@ def heavy(argv: list[str], *, echo=print, getloadavg=os.getloadavg) -> int:
     the GitHub Actions runners on this machine, Spotlight, and anything not run through this command. A
     quiet lock is not a quiet machine."""
     if "--" not in argv:
-        print("usage: python -m qabench heavy [--name NAME] [--cores N] -- COMMAND [ARGS...]", file=sys.stderr)
+        print("usage: python -m qabench heavy [--name NAME] [--cores N] [--wait-max MINUTES] -- COMMAND [ARGS...]",
+              file=sys.stderr)
         return 3
     cut = argv.index("--")
     opts, cmd = argv[:cut], argv[cut + 1:]
@@ -1017,11 +1047,28 @@ def heavy(argv: list[str], *, echo=print, getloadavg=os.getloadavg) -> int:
     # THE CLAIM IS WHAT THE LOCK ADMITS AGAINST (HeavyLock's core budget): --cores, else QABENCH_HEAVY_CLAIM, else
     # the container's CPUs, else cores - 2 — the -n auto cap, so the default claim is what the run will use. A
     # serial suite should say --cores 1 and run beside others instead of holding the machine it does not use.
+    #
+    # AND WHEN NOTHING IS SAID, THE COMMAND IS READ (2026-11-03). Every serial suite in the estate claimed the default
+    # -- a whole container, 8 of 10 cores -- at load 2.6, and a night's QA suite timed out in the queue behind two of
+    # them. A pytest with no -n, or with -n N, says what it uses; qabench's own nightly and stages are serial. Only an
+    # argv that cannot say (a make target, a script) still takes the default, and its -n auto is capped by it.
     claim = _arg(opts, "--cores") or os.environ.get("QABENCH_HEAVY_CLAIM")
     try:
-        claim = int(claim) if claim else int(lockd.cpu_quota() or max(1, cores - 2))
+        default = int(lockd.cpu_quota() or max(1, cores - 2))
+        seen = claim_from_command(cmd)
+        claim = int(claim) if claim else (min(seen, default) if seen else default)
     except ValueError:
         print(f"heavy: --cores must be a whole number, not {claim!r} (exit 3)", file=sys.stderr)
+        return 3
+    # A WAIT THAT OUTLASTS THE JOB IS DID NOT RUN, NOT A CANCEL. A CI job's timeout-minutes cancelled a night's suite
+    # while it still queued (2026-11-03), and the night read "cancelled" as something blocking. --wait-max, else
+    # QABENCH_HEAVY_WAIT_MAX, in minutes: set it below the job's timeout and the run ends as DID NOT RUN, exit 3,
+    # naming how long it waited and behind whom (the waiting lines above it).
+    wait_max = _arg(opts, "--wait-max") or os.environ.get("QABENCH_HEAVY_WAIT_MAX")
+    try:
+        wait_max = float(wait_max) if wait_max else None
+    except ValueError:
+        print(f"heavy: --wait-max must be minutes, not {wait_max!r} (exit 3)", file=sys.stderr)
         return 3
     claim = max(1, claim)
     workers = os.environ.get("PYTEST_XDIST_AUTO_NUM_WORKERS") or str(claim)
@@ -1034,7 +1081,23 @@ def heavy(argv: list[str], *, echo=print, getloadavg=os.getloadavg) -> int:
     try:
         lock_cm = (lockd.RemoteHeavyLock(holder, addr, echo=echo, cores=claim) if addr
                    else HeavyLock(holder, echo=echo, cores=claim))
-        with lock_cm as lock:
+        give_up = None
+        if wait_max is not None:
+            def _did_not_run():
+                echo(f"heavy: {name} DID NOT RUN: waited {wait_max:g} min for the machine's heavy-run lock "
+                     f"(--wait-max / QABENCH_HEAVY_WAIT_MAX) and was not admitted; the queue and its holders are "
+                     "named above — not a red, not a cancel (exit 3)")
+                sys.stdout.flush()
+                os._exit(3)                 # the waiter's ticket names a dead pid now, and the next waiter sweeps it
+            give_up = threading.Timer(wait_max * 60, _did_not_run)
+            give_up.daemon = True
+            give_up.start()
+        try:
+            lock_cm.__enter__()
+        finally:
+            if give_up is not None:
+                give_up.cancel()
+        with _entered(lock_cm) as lock:
             start = _load(getloadavg)
             try:
                 proc = subprocess.Popen(cmd)
@@ -1068,6 +1131,18 @@ def heavy(argv: list[str], *, echo=print, getloadavg=os.getloadavg) -> int:
          + " · not covered: GitHub Actions runners' steps not wrapped in qabench heavy, Spotlight, anything not run "
            "through qabench heavy")
     return rc
+
+
+class _entered:
+    """`with` over a context manager whose __enter__ has already run (heavy times the wait around it)."""
+    def __init__(self, cm):
+        self.cm = cm
+
+    def __enter__(self):
+        return self.cm
+
+    def __exit__(self, *exc):
+        return self.cm.__exit__(*exc)
 
 
 def run(argv: list[str], *, echo=print) -> int:

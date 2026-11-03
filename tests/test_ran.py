@@ -685,3 +685,71 @@ def test_a_budget_waiter_at_the_head_keeps_its_turn_against_old_kind_waiters(bud
     waiter.wait(20)
     later.wait(20)
     assert order.read_text().split("\n")[0] == "budget", order.read_text()
+
+
+def test_the_claim_is_read_from_the_command_when_nothing_is_declared():
+    """2026-11-03: every serial suite claimed a whole container (8 of 10 cores) at load 2.6, and a night's QA suite
+    timed out queued behind two of them. The argv says what a pytest or a qabench nightly uses."""
+    from qabench import ran
+    S = ran.SERIAL_CLAIM
+    assert ran.claim_from_command(["python", "-m", "pytest", "tests/pg", "-q"]) == S
+    assert ran.claim_from_command(["pytest", "-n", "4", "tests"]) == 4
+    assert ran.claim_from_command(["pytest", "-n4"]) == 4
+    assert ran.claim_from_command(["python", "-m", "pytest", "--numprocesses=3"]) == 3
+    assert ran.claim_from_command(["pytest", "-n", "0"]) == S
+    assert ran.claim_from_command(["python", "-m", "pytest", "-n", "auto"]) is None
+    assert ran.claim_from_command(["/v/bin/pytest", "-q"]) == S
+    assert ran.claim_from_command(["python", "-m", "qabench", "nightly"]) == S
+    assert ran.claim_from_command(["python", "-m", "qabench", "scans"]) is None
+    assert ran.claim_from_command(["make", "test-unit"]) is None
+    assert ran.claim_from_command(["sh", "-c", "pytest -q"]) is None          # a shell string is not read
+
+
+def test_heavy_claims_what_a_serial_pytest_uses_and_never_more_than_the_default(budget, monkeypatch):
+    import sys
+    from pathlib import Path
+    from qabench import ran, lockd
+    monkeypatch.setenv("QABENCH_HEAVY_LOCK", budget)
+    for k in ("PYTEST_XDIST_AUTO_NUM_WORKERS", "QABENCH_HEAVY_LOCKD", "QABENCH_HEAVY_CLAIM"):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setattr(lockd, "cpu_quota", lambda: 6.0)
+    seen = Path(budget).with_suffix(".seen")
+    probe = Path(budget).with_suffix(".py")
+    probe.write_text(f"import os; open({str(seen)!r}, 'w').write(os.environ['PYTEST_XDIST_AUTO_NUM_WORKERS'])\n")
+    # The command is read, not run as pytest: a stand-in named pytest records the cap it was given.
+    bindir = Path(budget).parent / "bin"
+    bindir.mkdir(exist_ok=True)
+    fake = bindir / "pytest"
+    fake.write_text(f"#!{sys.executable}\nexec(open({str(probe)!r}).read())\n")
+    fake.chmod(0o755)
+    assert ran.heavy(["--name", "pg", "--", str(fake), "tests/pg"], echo=lambda *_: None) == 0
+    assert seen.read_text() == str(ran.SERIAL_CLAIM)
+    monkeypatch.delenv("PYTEST_XDIST_AUTO_NUM_WORKERS", raising=False)    # heavy exports it for its command
+    assert ran.heavy(["--name", "unit", "--", str(fake), "-n", "40"], echo=lambda *_: None) == 0
+    assert seen.read_text() == "6", "a declared -n above the container's share is held to the share"
+    monkeypatch.delenv("PYTEST_XDIST_AUTO_NUM_WORKERS", raising=False)    # heavy exports it for its command
+    monkeypatch.setenv("QABENCH_HEAVY_CLAIM", "5")
+    assert ran.heavy(["--name", "pg", "--", str(fake), "tests/pg"], echo=lambda *_: None) == 0
+    assert seen.read_text() == "5", "a declared claim wins over the reading"
+
+
+def test_a_wait_past_wait_max_is_did_not_run_not_a_cancel(budget, monkeypatch, tmp_path):
+    """2026-11-03: a night's QA suite was cancelled by its job timeout while still queued, and the night read the
+    cancel as something blocking. A wait past --wait-max ends the run as DID NOT RUN, exit 3, before it starts."""
+    import subprocess
+    import sys
+    holder = _budget_holder(budget, "ci-bench", 10, 60)
+    assert holder.stdout.readline().strip() == "in"
+    marker = tmp_path / "ran"
+    try:
+        p = subprocess.run([sys.executable, "-m", "qabench", "heavy", "--name", "night", "--cores", "2",
+                            "--wait-max", "0.02", "--", sys.executable, "-c", f"open({str(marker)!r}, 'w')"],
+                           capture_output=True, text=True, timeout=60,
+                           env={**__import__("os").environ, "PYTHONPATH": ".", "QABENCH_HEAVY_LOCK": budget, "QABENCH_HEAVY_CORES": "10",
+                                "QABENCH_HEAVY_POLL": "0.1"})
+    finally:
+        holder.kill()
+        holder.wait()
+    assert p.returncode == 3, p.stdout + p.stderr
+    assert "DID NOT RUN: waited 0.02 min" in p.stdout and "ci-bench" in p.stdout, p.stdout
+    assert not marker.exists(), "the command must never start"
